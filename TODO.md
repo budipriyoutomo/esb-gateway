@@ -119,49 +119,55 @@ This phase does **not** need real ESB credentials. Build and test the entire lay
 against `Http::fake()` using the response examples in the vendor documentation. Wire the
 real key into `.env` when it arrives.
 
-- [ ] `config/esb.php` — model base URLs as **named families** per ADR-010, not a single
-      URL. Families: `core`, `voucher`, `fnb_backend`, `pos`; each with per-environment
-      hosts from `docs/05-api-integration.md`. Read `env()` only inside this config file.
-- [ ] Add `.env.example` keys for the ESB. Make the auth mechanism switchable so the
-      static-key decision is a configuration change, not a rewrite:
-      `ESB_ENV`, `ESB_AUTH_MECHANISM` (`static_token` or `login`), `ESB_STATIC_TOKEN`,
-      `ESB_USERNAME`, `ESB_PASSWORD`, plus per-family base URL overrides and timeouts.
-      Placeholders only.
-- [ ] Implement the envelope parser: `path`, `timestamp`, `status`, `code`, `message`,
-      `result`, `errors`. Treat a missing or non-JSON body as malformed.
-- [ ] Implement the error classifier. **Branch on `code` only** — never on `message` or
-      `status`. Use the 29-code table in `docs/05-api-integration.md`. An unrecognised
-      code becomes `EsbUnknownException` and logs at warning level so new vendor codes
-      surface instead of being swallowed.
-- [ ] Implement the exception hierarchy: validation, authentication, authorization,
-      not-found, business rejection, timeout, connection, upstream, malformed, unknown.
-      Each carries correlation ID, operation, ESB `code`, and duration.
-- [ ] Implement the token manager (ADR-009):
-      - static-token mode reads the key from config and does nothing else;
-      - login mode calls `POST /auth/login`, caches access and refresh tokens in Redis,
-        and refreshes via `GET /auth/refresh` (token in the `Authorization` header, no
-        body);
-      - login and refresh are serialized behind a Redis lock — concurrent callers wait
-        for the result rather than logging in themselves;
-      - the cached token is invalidated immediately on `EC03100001`;
-      - `exp` from the JWT may schedule proactive refresh but is advisory only.
-- [ ] Write the test that matters most for ADR-009: **N concurrent callers with an
-      expired token trigger exactly one login/refresh call.** This is the failure mode
-      the single-session constraint creates, and it will not show up in manual testing.
-- [ ] Implement the ESB HTTP client: explicit connect and overall timeouts, family-aware
-      base URL resolution, correlation ID generation, and structured logging.
-- [ ] Implement log redaction. The login and refresh **response bodies** contain
-      `accessToken` and `refreshToken` — redact bodies, not just the `Authorization`
-      header. Add a test asserting no token string reaches the log.
-- [ ] Implement retry policy per `docs/05-api-integration.md`: `GET` retries with
-      backoff; writes never retry automatically; `EC03100001` refreshes once then retries
-      once. Add tests for each branch.
-- [ ] Add `integration_logs` migration and model with the fields in
-      `docs/11-logging-monitoring.md`; index `correlation_id`.
-- [ ] Record integration outcomes from the client, redacted.
+Built test-first throughout.
+
+- [x] `config/esb.php` — base URLs modelled as named families per ADR-010, with an
+      environment selector, switchable auth mechanism, timeouts, retry budget, and
+      per-family overrides. The only place that reads ESB environment variables.
+- [x] `.env.example` ESB keys (done in Phase 1). `ESB_AUTH_MECHANISM` switches between
+      `static_token` and `login`, so the static-key decision stays a config change.
+- [x] Envelope parser — `EsbEnvelope`, with pagination and Asia/Jakarta timestamp
+      conversion. A body with no `code` is malformed, never guessed at.
+- [x] Error classifier — branches on `code` only. All 29 documented codes are mapped
+      (`ErrorCode`), and an unrecognised code becomes `EsbUnknownException` and logs at
+      warning level so new vendor codes surface.
+- [x] Exception hierarchy — validation, authentication, authorization, not-found,
+      business rejection, timeout, connection, upstream, malformed, unknown. Each
+      carries an `EsbContext` with correlation ID, operation, family, duration, and
+      upstream status, plus a `safeMessage()` that keeps upstream detail away from
+      users.
+- [x] Token manager (ADR-009) — static-token and login modes, Redis-backed shared cache,
+      login and refresh serialized behind a bounded lock, cache re-read after acquiring
+      the lock, refresh via `GET /auth/refresh` with the token in the `Authorization`
+      header, invalidation on `EC03100001`.
+- [x] The ADR-009 test: ten callers with an empty cache produce exactly one login, and a
+      separate test proves the manager re-reads the cache after acquiring the lock —
+      the mechanism that makes that true under real concurrency.
+      **Caveat:** the suite exercises this in one process against the array cache store.
+      A genuine multi-process race against Redis is not covered; see the follow-up below.
+- [x] ESB HTTP client — family-aware base URL resolution, explicit connect and request
+      timeouts, correlation ID per call, structured logging, error normalization.
+- [x] Log redaction — no token, password, or `Authorization` header reaches the
+      application log or `integration_logs`. Asserted by reading the log file back.
+- [x] Retry policy — reads retry with exponential backoff (three attempts); writes get
+      exactly one attempt; `EC03100001` discards the token and retries once. Each branch
+      has its own test.
+- [x] `integration_logs` migration and model, indexed on `correlation_id`, plus
+      `(outcome, created_at)` and `(operation, created_at)` for the log viewer.
+- [x] Record integration outcomes from the client, redacted. A failure to write the log
+      never takes down the business operation that produced it.
 
 **Done when:** the full ESB layer is covered by tests using faked HTTP, with no
-credentials present.
+credentials present. — Met. 148 tests passing, no credentials in the repository.
+
+Follow-ups from this phase:
+
+- [ ] Run the token-manager tests against a real Redis in CI. `phpunit.xml` pins
+      `CACHE_STORE=array`, whose locks are per-process, so the distributed behaviour the
+      lock exists for is reasoned about rather than exercised.
+- [ ] Revisit the timeout values once the ESB team confirms their server-side budgets.
+- [ ] Send a correlation header if the ESB team confirms one is accepted. The client
+      deliberately sends none today, and there is a test asserting that.
 
 ---
 

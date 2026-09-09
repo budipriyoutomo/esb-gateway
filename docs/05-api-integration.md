@@ -110,11 +110,11 @@ Response:       standard envelope; result contains username, fullName, companyID
                 companyCode, companyName, accessToken, refreshToken, flagActive,
                 logInfo{logID, username, loginTime, logoutTime}
 Errors:         EC03100032 — "Invalid username or password, please check again"
-Timeout:        TBD
+Timeout:        config('esb.timeouts') -- our own budget, vendor budget TBD
 Retry Policy:   do not retry on EC03100032; retry only on transport failure
 Idempotency:    not applicable
-Laravel Adapter: TBD
-Tests:          TBD
+Laravel Adapter: App\Integrations\ESB\Auth\TokenManager
+Tests:          tests/Feature/Integrations/ESB/TokenManagerTest.php
 ```
 
 ### Refresh
@@ -131,11 +131,11 @@ Headers:        Authorization
 Body:           none
 Response:       same envelope and result shape as login
 Errors:         EC03100001 — "Invalid Token"
-Timeout:        TBD
+Timeout:        config('esb.timeouts') -- our own budget, vendor budget TBD
 Retry Policy:   do not retry on EC03100001; re-login instead
 Idempotency:    not applicable
-Laravel Adapter: TBD
-Tests:          TBD
+Laravel Adapter: App\Integrations\ESB\Auth\TokenManager
+Tests:          tests/Feature/Integrations/ESB/TokenManagerTest.php
 ```
 
 Note the refresh endpoint is a `GET` that carries the refresh token in the
@@ -319,6 +319,28 @@ stack detail.
 
 Treat an unrecognised code as `EsbUnknownException` and log it at warning level so new
 vendor codes surface rather than being silently swallowed.
+
+## Implementation
+
+The integration layer lives under `app/Integrations/ESB/`:
+
+| Class | Responsibility |
+| --- | --- |
+| `EsbFamily`, `EsbEnvironment` | The base URL families and environments |
+| `BaseUrlResolver` | Resolves a family's base URL; throws rather than guessing |
+| `Responses\EsbEnvelope` | Parses the envelope, pagination, and timestamps |
+| `ErrorCode` | The code-to-exception table transcribed from this document |
+| `ErrorClassifier` | Turns a failed envelope into an application exception |
+| `Exceptions\*` | The normalized error hierarchy |
+| `Auth\TokenManager` | Static-token and login modes, shared cache, lock (ADR-009) |
+| `Clients\EsbClient` | The single path to the ESB: routing, timeouts, retry, logging |
+| `App\Models\IntegrationLog` | Per-call operational record |
+
+Configuration is in `config/esb.php`, which is the only place that reads ESB environment
+variables.
+
+Adapters for individual ERP operations build on `EsbClient` and own their own request and
+response mapping. The client itself knows nothing about any particular operation.
 
 ## Integration Principles
 

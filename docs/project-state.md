@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-Phase 2 complete — next is Phase 3, the ESB integration foundation (see `TODO.md`)
+Phase 3 complete — next is Phase 4, the first ESB vertical slice (see `TODO.md`)
 
 ## Current Objective
 
@@ -36,6 +36,8 @@ integrating with the ERP ESB.
 - [x] Tailwind 4 + shadcn/ui in place
 - [x] Formatting, linting, static analysis, and CI configured
 - [x] Roles, permissions, policies, and an immutable audit log implemented
+- [x] ESB integration foundation implemented (config, envelope, error classification,
+      token manager, HTTP client, retry, redaction, integration logs)
 - [ ] Role set confirmed with the business
 
 ## Completed
@@ -66,13 +68,19 @@ integrating with the ERP ESB.
   hook; users administration page; immutable `audit_logs` (ADR-012);
   `php artisan user:assign-role` to bootstrap the first Super Admin
 - ADR-011 (spatie/laravel-permission) and ADR-012 (immutable audit log) recorded
-- 62 tests passing
+- Phase 3 (2026-09-09), built test-first: `config/esb.php` with base URLs as named
+  families; `EsbEnvelope` with pagination and Asia/Jakarta timestamp conversion;
+  `ErrorCode` mapping all 29 documented codes; a ten-class exception hierarchy carrying
+  `EsbContext`; `TokenManager` implementing ADR-009; `EsbClient` with family-aware
+  routing, timeouts, retry policy, correlation IDs, and redacted logging;
+  `integration_logs`
+- 148 tests passing
 
 ## In Progress
 
-- Phase 3 — ESB integration foundation
+- Phase 4 — first ESB vertical slice (`GET /product/list`)
 - Functional requirements
-- Selecting the first ESB operations to implement
+- Selecting the ESB operations that are actually in scope
 
 ## Blocked
 
@@ -87,8 +95,15 @@ Neither blocked Phase 2, and neither blocks most of Phase 3: the test suite runs
 SQLite in-memory locally, and CI exercises real PostgreSQL and Redis. Local Redis does
 become worth having for Phase 3, where the ADR-009 token lock is the thing under test.
 
-Also open: the four roles in `docs/06-authentication-authorization.md` are implemented
-but **not yet confirmed by the business**.
+Also open:
+
+- The four roles in `docs/06-authentication-authorization.md` are implemented but **not
+  yet confirmed by the business**.
+- The ESB layer is fully tested against faked HTTP, but has never spoken to a real ESB.
+  No credentials exist yet, and the entitled environment is unconfirmed.
+- The ADR-009 lock is exercised in one process against the array cache store. The
+  distributed behaviour it exists for is reasoned about, not yet exercised against Redis
+  — see the Phase 3 follow-ups in `TODO.md`.
 
 ## Next Tasks
 
@@ -152,6 +167,9 @@ Still open:
 - Write tests before implementing a module.
 - A user holds exactly one role; nobody changes their own role.
 - Audit rows are immutable — never add an update or delete path.
+- Classify ESB responses on `code` alone; never on `message` or `status`.
+- Reads may retry; writes never retry automatically (no idempotency key is documented).
+- Never send an undocumented header to the ESB.
 - Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes
