@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Authorization\Permission;
+use App\Authorization\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -11,6 +13,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Spatie\Permission\Traits\HasRoles;
 
 /**
  * @property int $id
@@ -30,7 +33,29 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable;
+    use HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
+
+    /**
+     * Permission names this user effectively holds.
+     *
+     * Super Admin carries no explicit permissions -- it is granted every
+     * ability by a Gate::before hook so that it stays correct as new
+     * permissions are added. That means its granted set has to be expanded
+     * here, or the UI would render as though a Super Admin could do nothing.
+     *
+     * @return list<string>
+     */
+    public function effectivePermissionNames(): array
+    {
+        if ($this->hasRole(Role::SuperAdmin->value)) {
+            return Permission::names();
+        }
+
+        /** @var list<string> $names */
+        $names = $this->getAllPermissions()->pluck('name')->values()->all();
+
+        return $names;
+    }
 
     /**
      * Get the attributes that should be cast.

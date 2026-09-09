@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { BookOpen, FolderGit2, LayoutGrid, Users } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -13,14 +13,25 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { usePermissions } from '@/hooks/use-permissions';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import { index as usersIndex } from '@/routes/users';
+import type { NavItem, Permission } from '@/types';
 
-const mainNavItems: NavItem[] = [
+type GatedNavItem = NavItem & { permission: Permission };
+
+const mainNavItems: GatedNavItem[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+        permission: 'dashboard.view',
+    },
+    {
+        title: 'Users',
+        href: usersIndex(),
+        icon: Users,
+        permission: 'users.view',
     },
 ];
 
@@ -38,6 +49,12 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { can } = usePermissions();
+
+    // Hiding a link the user cannot follow is a convenience only. The route
+    // itself is authorized server-side, so a hand-typed URL still gets a 403.
+    const visibleNavItems = mainNavItems.filter((item) => can(item.permission));
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -53,7 +70,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={visibleNavItems} />
             </SidebarContent>
 
             <SidebarFooter>

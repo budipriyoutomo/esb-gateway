@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-Phase 1 — Repository & Scaffold (nearly complete; see `TODO.md`)
+Phase 2 complete — next is Phase 3, the ESB integration foundation (see `TODO.md`)
 
 ## Current Objective
 
@@ -35,6 +35,8 @@ integrating with the ERP ESB.
 - [x] Laravel 13 + Inertia 3 + React 19 + TypeScript scaffolded
 - [x] Tailwind 4 + shadcn/ui in place
 - [x] Formatting, linting, static analysis, and CI configured
+- [x] Roles, permissions, policies, and an immutable audit log implemented
+- [ ] Role set confirmed with the business
 
 ## Completed
 
@@ -58,12 +60,18 @@ integrating with the ERP ESB.
 - Test framework is PHPUnit 12 (not Pest) — 26 tests passing
 - Toolchain green: `vp check`, `tsc --noEmit`, Pint, PHPStan level 7, Vite build
 - CI workflow runs the suite against real PostgreSQL 16 and Redis 7 service containers
+- Phase 2 (2026-09-09), built test-first: roles and permissions as typed PHP enums synced
+  to the database by an idempotent seeder; `UserPolicy`; permission-gated routes and
+  sidebar; `auth.role` / `auth.permissions` shared to Inertia with a `usePermissions()`
+  hook; users administration page; immutable `audit_logs` (ADR-012);
+  `php artisan user:assign-role` to bootstrap the first Super Admin
+- ADR-011 (spatie/laravel-permission) and ADR-012 (immutable audit log) recorded
+- 62 tests passing
 
 ## In Progress
 
-- Phase 1 verification, blocked on local infrastructure (see below)
+- Phase 3 — ESB integration foundation
 - Functional requirements
-- Initial domain/data model
 - Selecting the first ESB operations to implement
 
 ## Blocked
@@ -75,8 +83,12 @@ Phase 1 is complete except for two verification steps that need local services:
   this machine, but on port **5433**, not 5432.
 - Queued job round-trip against Redis — no Redis server and no Docker on this machine.
 
-Neither blocks Phase 2 or Phase 3: the test suite runs on SQLite in-memory locally, and
-CI exercises real PostgreSQL and Redis.
+Neither blocked Phase 2, and neither blocks most of Phase 3: the test suite runs on
+SQLite in-memory locally, and CI exercises real PostgreSQL and Redis. Local Redis does
+become worth having for Phase 3, where the ADR-009 token lock is the thing under test.
+
+Also open: the four roles in `docs/06-authentication-authorization.md` are implemented
+but **not yet confirmed by the business**.
 
 ## Next Tasks
 
@@ -137,6 +149,9 @@ Still open:
 - Classify ESB outcomes on the `code` field, never on `message` or `status`.
 - Never regenerate `docs/esb/*-endpoints.md` by hand; use the generator.
 - Store timestamps in UTC; parse ESB timestamps as Asia/Jakarta on ingest.
+- Write tests before implementing a module.
+- A user holds exactly one role; nobody changes their own role.
+- Audit rows are immutable — never add an update or delete path.
 - Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes

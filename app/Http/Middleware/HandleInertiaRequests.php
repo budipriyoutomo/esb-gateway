@@ -40,6 +40,11 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'role' => $request->user()?->getRoleNames()->first(),
+                // Lets the UI hide controls the user cannot use. It is an
+                // affordance, never the boundary -- every route and action is
+                // still authorized server-side.
+                'permissions' => $request->user()?->effectivePermissionNames() ?? [],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

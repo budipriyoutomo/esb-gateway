@@ -189,3 +189,60 @@ Core is `https://services.esb.co.id/core` while production FnB backend is
 - ESB connection configuration and the `esb_connections` model must accommodate multiple
   base URLs per environment.
 - Health checks and availability metrics are per family, not global.
+
+---
+
+## ADR-011 — spatie/laravel-permission for Roles and Permissions
+
+**Status:** Accepted
+
+**Decision**
+Use `spatie/laravel-permission` for the role and permission model, with
+`App\Authorization\Permission` and `App\Authorization\Role` as typed enums defining
+the application's abilities and role grants.
+
+**Reason**
+- Authorization is a place where subtle bugs are security bugs; the package is mature
+  and widely audited.
+- Permission caching, guard handling, and the pivot schema are solved problems we would
+  otherwise reimplement.
+- `AGENT.md` forbids unjustified dependencies — this ADR is the justification.
+
+**Constraints we impose on top of the package**
+- A user holds **exactly one** role. The package supports several; `AssignUserRole`
+  enforces one so the effective permission set is readable from a single value.
+- Permissions are declared as a PHP enum, not as free-form strings, and the database is
+  synced from that enum by `RolePermissionSeeder`. The enum is the source of truth.
+- Super Admin holds no explicit permissions. It is granted every ability by a
+  `Gate::before` hook so it stays correct when permissions are added later.
+- `assignRole` is excluded from that hook, so the "nobody changes their own role" rule
+  holds for everyone including Super Admin.
+
+**Note**
+The four roles come from `docs/06-authentication-authorization.md` and are still
+**unconfirmed by the business**. They are seeded data, so changing the set is a seeder
+change — but the enum cases are referenced in code, so removing one is a code change.
+
+---
+
+## ADR-012 — Immutable Audit Log
+
+**Status:** Accepted
+
+**Decision**
+Privileged changes are recorded in an `audit_logs` table whose rows cannot be updated or
+deleted. The model throws on both, and there is no `updated_at` column.
+
+**Reason**
+An audit trail that can be edited is not an audit trail. Enforcing immutability in the
+model means a stray `update()` in future code fails loudly rather than quietly rewriting
+history.
+
+**Consequences**
+- The change and its audit entry are written in one transaction, so a privileged change
+  cannot succeed without leaving a trace.
+- `actor_id` is nullable and uses `nullOnDelete`: console-initiated changes have no
+  authenticated actor, and deleting a user must not destroy the record of what they did.
+- Metadata describes the change only. Credentials, tokens, and full payloads never go in
+  it (`docs/10-security.md`).
+- Retention and archival for this table are still `TBD`.

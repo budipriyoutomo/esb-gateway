@@ -71,16 +71,24 @@ Payload storage must be carefully evaluated for privacy, volume, and retention.
 
 ### audit_logs
 
-Security/business audit events.
+**Implemented** (ADR-012). Security/business audit events, immutable.
 
-Potential fields:
+| Column | Notes |
+| --- | --- |
+| id | |
+| actor_id | Nullable FK to `users`, `nullOnDelete`. Null for console-initiated changes; nulled rather than cascaded so deleting a user never destroys the record of what they did. |
+| action | Stable identifier from `App\Audit\AuditAction`. Renaming a value rewrites history — add a new case instead. |
+| auditable_type / auditable_id | Nullable morph to the affected record. |
+| metadata | JSON describing the change itself. Never credentials, tokens, or full payloads. |
+| ip_address | 45 chars, IPv6-capable. |
+| created_at | Indexed. There is no `updated_at` — rows are immutable. |
 
-- id
-- actor/user reference
-- action
-- resource type/id
-- metadata
-- created_at
+Indexed on `created_at` and on `(action, created_at)`.
+
+The model throws on `updating` and `deleting`. The change and its audit entry are written
+in one transaction, so a privileged change cannot succeed without leaving a trace.
+
+Retention and archival for this table are `TBD`.
 
 ## Timezone Convention
 

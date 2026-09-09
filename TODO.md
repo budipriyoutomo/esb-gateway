@@ -72,22 +72,44 @@ Currently blocked only on the two verification items above.
 
 ## Phase 2 — Application Foundations
 
-- [ ] Implement application authentication (session-based) and confirm the login,
-      logout, and password flows work through Inertia.
-- [ ] Define roles and permissions. The four roles in
-      `docs/06-authentication-authorization.md` (Super Admin, IT Admin, Integration
-      Operator, Viewer) are unconfirmed starting points — confirm with the business
-      before treating them as final.
-- [ ] Add the `roles` / `permissions` schema and seeders.
-- [ ] Add Policies/Gates and a feature test proving an unauthorized user is rejected
-      server-side, not merely hidden in the UI.
-- [ ] Build the authenticated application shell: navigation, layout, and the shared
-      component set (tables, forms, dialogs, alerts, status badges, loading and empty
-      states) per `docs/08-frontend-guidelines.md`.
-- [ ] Add `audit_logs` and record privileged changes.
+Built test-first: each module's tests were written and watched fail before the
+implementation was added.
+
+- [x] Implement application authentication (session-based) and confirm the login,
+      logout, and password flows work through Inertia. Provided by Fortify in the
+      starter kit; covered by its existing tests.
+- [x] Define roles and permissions — `app/Authorization/Permission.php` and
+      `app/Authorization/Role.php`, using `spatie/laravel-permission` (ADR-011).
+      **The four roles remain unconfirmed by the business.** Confirm before treating
+      them as final.
+- [x] Add the `roles` / `permissions` schema and seeders. `RolePermissionSeeder` syncs
+      the database from the enums and is idempotent — it also deletes roles and
+      permissions no longer in the enum, so a removed ability cannot linger and keep
+      granting access.
+- [x] Add Policies/Gates and a feature test proving an unauthorized user is rejected
+      server-side, not merely hidden in the UI. `UserPolicy` plus
+      `RouteAuthorizationTest`, which posts directly to the role-assignment endpoint
+      rather than going through the UI.
+- [x] Build the authenticated application shell: permission-gated sidebar navigation,
+      a `usePermissions()` hook, a `table` UI primitive, and the users administration
+      page with empty state.
+- [x] Add `audit_logs` and record privileged changes (ADR-012). Immutable rows, written
+      in the same transaction as the change.
+- [x] Add `php artisan user:assign-role` — the bootstrap path for the first Super Admin,
+      since granting a role through the UI requires already holding `users.manage`.
+- [x] Add `PermissionTypesInSyncTest`, which fails the build when
+      `resources/js/types/permissions.ts` drifts from the PHP enums. Two lists of the
+      same strings in two languages drift silently, and the symptom would be a control
+      that never renders rather than an error.
 
 **Done when:** a user can log in, is authorized server-side, and lands on an empty but
-navigable dashboard.
+navigable dashboard. — Met. 62 tests passing.
+
+Still open from this phase:
+
+- [ ] Confirm the role set and each role's grants with the business.
+- [ ] Shared component set is partial — forms, dialogs, alerts, status badges, and
+      loading states arrive with the screens that need them rather than up front.
 
 ---
 

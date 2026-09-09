@@ -1,3 +1,5 @@
+import type { Permission, RoleName } from '@/types/permissions';
+
 export type User = {
     id: number;
     name: string;
@@ -11,7 +13,13 @@ export type User = {
 };
 
 export type Auth = {
-    user: User;
+    user: User | null;
+    role: RoleName | null;
+    /**
+     * What the current user may do. Drives which controls render; the server
+     * still authorizes every route and action.
+     */
+    permissions: Permission[];
 };
 
 export type TwoFactorSetupData = {
