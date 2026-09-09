@@ -175,20 +175,48 @@ Follow-ups from this phase:
 
 Prove the whole pattern end to end on one read-only operation before building breadth.
 
-- [ ] Implement `GET /product/list` (Core family) — the vendor's own tutorial endpoint.
-      Document it with the template in `docs/05-api-integration.md`.
-- [ ] Add the response DTO and mapper. Transcribe fields from the vendor documentation
-      for this operation only; do not bulk-import schemas for unimplemented endpoints.
-- [ ] Add the Service/Action, a thin controller, and the Inertia page with a table.
-- [ ] Handle pagination: `page` / `limit` (default 20, **maximum 100**). Re-derive
-      pagination on our side — never pass the ESB's absolute `prev` / `next` URLs to the
-      browser, they leak the ESB host.
-- [ ] Cover happy path, validation failure, authorization failure, upstream failure, and
-      timeout (`docs/12-testing.md`).
-- [ ] Review the slice as the reference pattern every later adapter copies.
+Built test-first.
+
+- [x] Implement `GET /product/list` (Core family) — the vendor's own tutorial endpoint.
+      Documented as `[ESB-001]` in `docs/05-api-integration.md`.
+- [x] Add the response DTO and mapper — `ProductSummary`, `ProductListQuery`,
+      `ProductListResult`, `ProductMapper`. Fields transcribed for this operation only.
+      The mapper reads every field defensively: ESB responses are untrusted input, and a
+      row missing a documented field must not take down a page render.
+- [x] Add a thin controller and the Inertia page with a table, search, and paging.
+      **No Service or Action layer** — this read applies no business rule of its own, and
+      `ProductClient` already satisfies AGENT.md's "isolate ESB integration behind a
+      dedicated class". Adding another pass-through would be the empty abstraction
+      `docs/02-architecture.md` warns against. Add one when a product operation gains
+      logic worth separating.
+- [x] Handle pagination: `page` / `limit` (default 20, maximum 100), re-derived on our
+      side. `EsbPagination` deliberately drops the ESB's absolute `prev` / `next` URLs,
+      and a test asserts the rendered page contains no ESB host.
+- [x] Validate before calling. The ESB answers an unsupported `sort` and a non-numeric
+      `page` with `EC03100032` "Unknown Error" — one of them carrying a raw Go
+      `strconv.ParseInt` message. `ListProductsRequest` turns those into field errors and
+      saves the round trip; tests assert nothing is sent to the ESB.
+- [x] Map ESB failures onto HTTP statuses (`EsbExceptionRenderer`): 404 not found,
+      422 validation and business rejection, 504 timeout, 502 for everything else.
+      An ESB authorization failure is **not** a 403 — the gateway's credential lacking a
+      privilege is an upstream configuration problem, and telling the signed-in user they
+      are forbidden would send them to request a role that would not help.
+- [x] Cover happy path, validation failure, authorization failure, upstream failure, and
+      timeout.
+- [x] Review the slice as the reference pattern every later adapter copies.
 
 **Done when:** a logged-in user with the right permission sees live-shaped product data,
-and the same pattern is obviously reusable.
+and the same pattern is obviously reusable. — Met against faked HTTP. 171 tests passing.
+
+Note on access: reading products requires `esb.invoke`, so only Integration Operator and
+Super Admin can reach the page. IT Admin and Viewer are refused, which is the separation
+`docs/06-authentication-authorization.md` describes.
+
+Still open from this phase:
+
+- [ ] Run this slice against a real ESB. It has only ever spoken to `Http::fake()`.
+- [ ] Surface the envelope's `errors[]` detail (attribute, code, message) on validation
+      failures. The ESB returns per-field detail that we currently discard.
 
 ---
 

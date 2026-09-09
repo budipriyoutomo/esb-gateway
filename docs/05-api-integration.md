@@ -342,6 +342,56 @@ variables.
 Adapters for individual ERP operations build on `EsbClient` and own their own request and
 response mapping. The client itself knows nothing about any particular operation.
 
+## Documented Operations
+
+Operations are transcribed here only once they are implemented. The generated catalogs
+in `docs/esb/` index all 401; this section records the decisions we made about the ones
+we actually call.
+
+```
+### [ESB-001] Product List
+
+Purpose:         Read product master data from ESB Core.
+Method:          GET
+Path:            {{base_url}}/product/list
+Family:          Core
+Authentication:  Authorization: Bearer {access token or static key}
+Request Headers: Authorization, Accept
+Request Body:    none
+Query:           page (default 1), limit (default 20, max 100), productName,
+                 productCode, categoryID, subCategoryID, categoryTypeID, bomName,
+                 sort, flagActive (0 or 1)
+Sortable:        productName, productCode, categoryID, subCategoryID, bomName,
+                 uomName, categoryTypeID, FlagActive
+Response:        paginated envelope; result.data rows carry productID, productName,
+                 productCode, categoryID, categoryName, subCategoryID,
+                 subCategoryName, bomID, bomName, categoryTypeID, categoryTypeName,
+                 flagActive
+Errors:          EC03100001 (unauthorized / invalid token),
+                 EC03100032 for an unsupported sort column and for a non-numeric
+                 page or limit
+Timeout:         config('esb.timeouts')
+Retry Policy:    read -- retried with backoff, up to three attempts
+Idempotency:     not applicable (read)
+Laravel Adapter: App\Integrations\ESB\Clients\ProductClient::list()
+DTOs:            ProductListQuery, ProductSummary, ProductListResult
+Mapper:          App\Integrations\ESB\Mappers\ProductMapper
+Tests:           tests/Feature/Products/ProductListTest.php,
+                 tests/Unit/Integrations/ESB/ProductMapperTest.php
+Docs:            https://developers.esb.co.id/esb-core/#api-Master_Product-product-list
+```
+
+Two things about this operation are worth carrying to the next adapter:
+
+- **The ESB reports bad input as `EC03100032` "Unknown Error".** An unsupported `sort`
+  value and a non-numeric `page` both come back that way, one of them carrying a raw Go
+  `strconv.ParseInt` message. Validating these in a Form Request before the call turns an
+  opaque upstream failure into a field error and saves a round trip.
+- **The vendor's field table has a typo.** It lists `result.data.categoryNameCategory`
+  with the description "Type Name". The vendor's own JSON example shows the field is
+  `categoryName`. Where the field table and the example disagree, the example is the one
+  that matches the running service.
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

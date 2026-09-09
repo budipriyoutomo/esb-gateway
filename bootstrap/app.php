@@ -1,7 +1,9 @@
 <?php
 
+use App\Exceptions\EsbExceptionRenderer;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Integrations\ESB\Exceptions\EsbException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,4 +29,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // ESB failures are already normalized and already logged by EsbClient.
+        // Render the safe message rather than letting an upstream message --
+        // which can carry internal paths and document numbers -- reach a user.
+        $exceptions->render(
+            fn (EsbException $exception, Request $request) => app(EsbExceptionRenderer::class)
+                ->render($exception, $request),
+        );
+
+        $exceptions->dontReport(EsbException::class);
     })->create();

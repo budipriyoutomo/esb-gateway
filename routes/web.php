@@ -1,6 +1,7 @@
 <?php
 
 use App\Authorization\Permission;
+use App\Http\Controllers\Products\ProductController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,8 @@ Route::middleware('auth')->group(function () {
     Route::inertia('dashboard', 'dashboard')
         ->middleware('can:'.Permission::ViewDashboard->value)
         ->name('dashboard');
+
+    Route::get('products', [ProductController::class, 'index'])->name('products.index');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
 

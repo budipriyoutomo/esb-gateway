@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-Phase 3 complete — next is Phase 4, the first ESB vertical slice (see `TODO.md`)
+Phase 4 complete — next is Phase 5, the operational modules (see `TODO.md`)
 
 ## Current Objective
 
@@ -74,11 +74,17 @@ integrating with the ERP ESB.
   `EsbContext`; `TokenManager` implementing ADR-009; `EsbClient` with family-aware
   routing, timeouts, retry policy, correlation IDs, and redacted logging;
   `integration_logs`
-- 148 tests passing
+- Phase 4 (2026-09-09), built test-first: the first ESB vertical slice —
+  `GET /product/list` via `ProductClient`, `ProductMapper`, `ProductListQuery`,
+  `ListProductsRequest`, a thin controller, and an Inertia page with search and paging;
+  `EsbExceptionRenderer` maps normalized ESB failures onto HTTP statuses
+- Documented as `[ESB-001]` in `docs/05-api-integration.md`
+- 171 tests passing
 
 ## In Progress
 
-- Phase 4 — first ESB vertical slice (`GET /product/list`)
+- Phase 5 — operational modules (ESB connections, endpoint catalog, log viewer,
+  dashboard, health checks)
 - Functional requirements
 - Selecting the ESB operations that are actually in scope
 
@@ -170,6 +176,8 @@ Still open:
 - Classify ESB responses on `code` alone; never on `message` or `status`.
 - Reads may retry; writes never retry automatically (no idempotency key is documented).
 - Never send an undocumented header to the ESB.
+- Never pass the ESB's absolute prev/next URLs to the browser.
+- Reading ERP data through the gateway requires `esb.invoke`, not a view permission.
 - Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes
