@@ -246,3 +246,72 @@ history.
 - Metadata describes the change only. Credentials, tokens, and full payloads never go in
   it (`docs/10-security.md`).
 - Retention and archival for this table are still `TBD`.
+
+---
+
+## ADR-013 — ESB Connections Are Configuration, Not Records
+
+**Status:** Accepted
+
+**Context**
+`docs/04-functional-requirements.md` lists an "ESB Connections" module that can
+"configure logical ESB connection settings", and `docs/07-database-design.md` sketches an
+`esb_connections` table holding a base URL, environment, and an auth configuration
+reference.
+
+**Decision**
+ESB base URLs and credentials live in `config/esb.php` and the environment. There is no
+`esb_connections` table and no way to edit a connection through the UI. The screen shows
+what is configured, reports which families have a documented base URL, and lets a
+permitted user probe connectivity.
+
+**Reason**
+- `docs/10-security.md` is explicit that secrets belong in environment or secret
+  management infrastructure, never in database plaintext. A connections table would push
+  ESB credentials toward the database.
+- ADR-010 already models base URLs as configuration. A second, editable source of truth
+  would let the two disagree, and the failure would be traffic going somewhere nobody
+  intended.
+- Changing which ERP environment the gateway talks to is a deployment decision with real
+  consequences. Making it a form submission puts a production/staging switch one
+  mis-click away.
+
+**Consequences**
+- Changing a base URL or credential is a deployment action.
+- The screen is read-only plus a probe action. `esb-connections.manage` currently grants
+  nothing beyond what `esb-connections.view` does; it is kept because a future
+  non-secret setting may need it.
+- The `esb_connections` sketch in `docs/07-database-design.md` is superseded.
+
+**Revisit if**
+The business needs to add ESB environments at runtime without a deploy. That would need
+encrypted-at-rest credential storage and a key management story, neither of which exists
+today.
+
+---
+
+## ADR-014 — Connectivity Probes Use a Documented Read, or Report That None Exists
+
+**Status:** Accepted
+
+**Decision**
+Each base URL family may name a documented, read-only, cheap `GET` in `esb.probes` to
+stand in for a health check. Core uses `GET /product/list?limit=1`. Families with no such
+endpoint are configured as `null`, and the UI reports that connectivity cannot be probed.
+
+A probe that fails with an authorization or validation error still reports the family as
+**reachable**: the ESB answered, so the host is up and the network is fine. What failed is
+the gateway credential's privileges.
+
+**Reason**
+The vendor documents no health endpoint. Inventing one would mean guessing at a path,
+which `AGENT.md` forbids. Showing a green light for a family we cannot actually probe
+would be worse than showing nothing, because it would be believed.
+
+Conflating "credential lacks a privilege" with "host unreachable" sends whoever is
+diagnosing it to check firewalls instead of ESB user permissions.
+
+**Consequences**
+- Probe coverage is partial and honest about it.
+- The Core probe requires the gateway credential to hold product-read access on the ESB.
+  A probe failure there means one of two things, and the reported outcome says which.

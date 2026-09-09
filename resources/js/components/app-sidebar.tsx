@@ -4,6 +4,7 @@ import {
     FolderGit2,
     LayoutGrid,
     Package,
+    PlugZap,
     ScrollText,
     Users,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/hooks/use-permissions';
 import { dashboard } from '@/routes';
+import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
 import { index as productsIndex } from '@/routes/products';
 import { index as usersIndex } from '@/routes/users';
@@ -47,6 +49,12 @@ const mainNavItems: GatedNavItem[] = [
         href: integrationLogsIndex(),
         icon: ScrollText,
         permission: 'integration-logs.view',
+    },
+    {
+        title: 'ESB connections',
+        href: esbConnectionsIndex(),
+        icon: PlugZap,
+        permission: 'esb-connections.view',
     },
     {
         title: 'Users',

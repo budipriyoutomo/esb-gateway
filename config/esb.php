@@ -133,6 +133,30 @@ return [
     |
     */
 
+    /*
+    |---------------------------------------------------------------------
+    | Connectivity probes
+    |---------------------------------------------------------------------
+    |
+    | The vendor documents no health endpoint. Rather than invent one, each
+    | family names a documented, read-only, cheap GET that stands in for a
+    | health check. A null entry means no known-safe probe exists for that
+    | family; the connections screen says so rather than showing a fake green
+    | light.
+    |
+    | A probe that fails with an authorization error means the gateway's ESB
+    | credential lacks that specific privilege -- the host is still reachable.
+    |
+    */
+
+    'probes' => [
+        'core' => ['path' => '/product/list', 'query' => ['limit' => 1]],
+        // TBD -- no documented read confirmed as safe and cheap for these.
+        'voucher' => null,
+        'fnb_backend' => null,
+        'pos' => null,
+    ],
+
     'overrides' => [
         'core' => env('ESB_BASE_URL_CORE'),
         'voucher' => env('ESB_BASE_URL_VOUCHER'),
