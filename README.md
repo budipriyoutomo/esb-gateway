@@ -1,0 +1,54 @@
+# ERP Gateway Agent Documentation
+
+This package contains the initial agent-agnostic documentation for the ERP Gateway
+project (Laravel 13 + Inertia.js + React + TypeScript + PostgreSQL + Redis, integrating
+with an ERP ESB).
+
+Copy the contents of this folder into the root of your Laravel project repository.
+
+## Files
+
+- `AGENT.md` — mandatory instructions for any AI coding agent. Read this first.
+- `TODO.md` — ordered kickoff task list, from empty repository to running application.
+- `DECISIONS.md` — durable architecture decisions (ADRs).
+- `docs/project-state.md` — current project/handoff state. Update this as work
+  progresses so any agent (or human) can pick up where the last one left off.
+- `docs/01-project-overview.md` — project purpose and scope.
+- `docs/02-architecture.md` — architecture and request flows.
+- `docs/03-technology-stack.md` — technology choices.
+- `docs/04-functional-requirements.md` — initial functional scope.
+- `docs/05-api-integration.md` — ERP ESB contract and integration rules.
+- `docs/esb/esb-core-endpoints.md` — generated catalog of all ESB Core operations.
+- `docs/esb/esb-oms-endpoints.md` — generated catalog of all ESB OMS operations.
+- `docs/esb/generate-catalog.py` — regenerates the two catalogs from the vendor apiDoc source.
+- `docs/06-authentication-authorization.md` — application and ESB auth.
+- `docs/07-database-design.md` — initial data model guidance.
+- `docs/08-frontend-guidelines.md` — React/Inertia UI rules.
+- `docs/09-backend-guidelines.md` — Laravel implementation rules.
+- `docs/10-security.md` — security requirements.
+- `docs/11-logging-monitoring.md` — observability requirements.
+- `docs/12-testing.md` — testing strategy.
+- `docs/13-deployment.md` — deployment guidance.
+- `docs/14-development-workflow.md` — agent workflow and handoff.
+
+## Why AGENT.md instead of CLAUDE.md
+
+This documentation is intentionally tool-agnostic so you can switch between Claude Code,
+Codex, Cursor, Gemini, or any other AI coding agent mid-project. Every agent should read
+`AGENT.md` → `docs/project-state.md` → relevant `docs/*.md` → `DECISIONS.md` before
+writing code, and should update `docs/project-state.md` after finishing a unit of work.
+
+## Important
+
+The ESB API contract was imported on 2026-09-09 from
+https://developers.esb.co.id/esb-core/ and https://developers.esb.co.id/esb-oms/ —
+401 operations in total. `docs/05-api-integration.md` records the authentication flow,
+response envelope, pagination, error-code catalog, and retry/idempotency rules.
+
+Two things still need answers from the ESB team before integration work can be
+finalized: which environment and credentials this project is entitled to, and whether a
+static API key is available instead of the login flow. The ESB permits only one active
+session per credential, so this choice materially affects the design — see ADR-009.
+
+Regenerate the endpoint catalogs with `docs/esb/generate-catalog.py` when the vendor
+documentation changes; do not edit them by hand.
