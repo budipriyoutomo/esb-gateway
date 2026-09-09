@@ -18,27 +18,55 @@ tracks state.
 
 ## Phase 1 — Repository and Scaffold
 
-- [ ] `git init`, set the default branch, create `.gitignore` covering `.env`,
+- [x] `git init`, set the default branch, create `.gitignore` covering `.env`,
       `/vendor`, `/node_modules`, `/public/build`, `/storage/*.key`, `__pycache__`.
-- [ ] Commit the current documentation as the first commit before any code lands.
-- [ ] Scaffold Laravel 13 into this repository.
-- [ ] Add the React + TypeScript + Inertia starter (verify the current installer flags
-      against the Laravel 13 installer — do not assume flags from an older version).
-      Confirm the result satisfies ADR-001/002/003: React under `resources/js`, no
-      Livewire, no separate frontend project.
-- [ ] Confirm Vite builds and the welcome page renders through Inertia.
-- [ ] Initialize Tailwind CSS and shadcn/ui.
-- [ ] Configure PostgreSQL as the default connection; verify `php artisan migrate` runs.
-- [ ] Configure Redis for cache, queue, and locks; verify a queued job round-trips.
-- [ ] Set `APP_TIMEZONE` explicitly and decide the storage timezone convention. ESB
-      timestamps are Asia/Jakarta with no offset — record the decision in
+- [x] Commit the current documentation as the first commit before any code lands.
+- [x] Scaffold Laravel 13 into this repository.
+      Used the `laravel/react-starter-kit` `main` branch, which targets Laravel 13.17,
+      PHP 8.3+, Inertia 3, React 19, Tailwind 4, and Vite 8. The tagged v1.0.1 release
+      on Packagist still requires Laravel 12 — take `main`, not the tag.
+- [x] Add the React + TypeScript + Inertia starter. Verified against ADR-001/002/003:
+      React lives in `resources/js`, no Livewire in `composer.json`/`package.json`, no
+      separate frontend project.
+      Auth features kept: **2FA only**. Registration, email verification, password
+      confirmation, and passkeys were removed by `install:features` — that removal
+      deletes code, so re-adding any of them later means rebuilding the Fortify routes
+      and Inertia pages by hand.
+- [x] Confirm Vite builds and the welcome page renders through Inertia.
+- [x] Initialize Tailwind CSS and shadcn/ui — both ship with the starter kit
+      (Tailwind 4 via `@tailwindcss/vite`, shadcn/ui via `components.json` and
+      `resources/js/components/ui`).
+- [x] Configure PostgreSQL as the default connection.
+- [ ] **Blocked** — verify `php artisan migrate` runs. Needs the `postgres` password;
+      `pg_hba.conf` requires `scram-sha-256`. Note this machine's PostgreSQL 16 listens
+      on port **5433**, not the default 5432.
+- [x] Configure Redis for cache, queue, and locks. `predis/predis` is installed because
+      the `phpredis` PHP extension is not present locally; CI uses `phpredis`.
+- [ ] **Blocked** — verify a queued job round-trips. No Redis server on this machine and
+      no Docker.
+- [x] Set `APP_TIMEZONE` explicitly and decide the storage timezone convention. Store
+      UTC; parse ESB timestamps as Asia/Jakarta on ingest. Recorded in
       `docs/07-database-design.md`.
-- [ ] Write `.env.example` with every key the application reads, using placeholders only.
-- [ ] Set up Pint, ESLint, Prettier, and TypeScript in strict mode.
-- [ ] Set up Pest with a passing smoke test.
-- [ ] Add a CI workflow running: install, Pint, ESLint, `tsc --noEmit`, Vite build, Pest.
+- [x] Write `.env.example` with every key the application reads, using placeholders only.
+      Includes the ESB block, so the API key has a documented home when it arrives.
+- [x] Set up Pint, ESLint, Prettier, and TypeScript in strict mode. The starter kit uses
+      `vite-plus` (`vp check`) for formatting and linting rather than standalone ESLint
+      and Prettier; Pint and PHPStan cover PHP. `tsconfig.json` already sets
+      `strict: true`.
+      Project documentation is excluded from the formatter in `vite.config.ts` — it
+      collapsed nested lists in this file and rewrote the generated ESB catalogs, which
+      would fight `docs/esb/generate-catalog.py` on every regeneration.
+- [x] ~~Set up Pest~~ — **kept PHPUnit instead.** The starter kit ships PHPUnit 12 with
+      26 passing tests covering auth, 2FA, dashboard, and settings.
+      `docs/03-technology-stack.md` permits either, and converting working tests to Pest
+      would be churn with no functional gain.
+- [x] Add a CI workflow running: install, format/lint, `tsc --noEmit`, Pint, PHPStan,
+      Vite build, and the test suite. CI runs the suite against **real PostgreSQL and
+      Redis** service containers rather than the SQLite default in `phpunit.xml`, so
+      driver differences surface in CI instead of production.
 
 **Done when:** a clean checkout can install, build, migrate, and pass CI.
+Currently blocked only on the two verification items above.
 
 ---
 

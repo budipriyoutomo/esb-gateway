@@ -1,0 +1,85 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: erp_gateway
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    # The test suite runs against PostgreSQL and Redis, not the SQLite defaults
+    # in phpunit.xml. PHPUnit's <env> entries do not overwrite variables that
+    # are already present in the environment, so these win. DB_DATABASE must be
+    # set explicitly -- phpunit.xml pins it to ":memory:" for local runs.
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: erp_gateway
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pinned to the minimum version composer.json supports, so that syntax
+      # only available in a newer PHP fails here rather than in production.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, pgsql, redis
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # composer setup installs PHP and Node dependencies, creates .env,
+      # generates the app key, migrates, and builds the frontend assets.
+      - name: Setup Application
+        run: composer setup
+
+      # composer ci:check runs the formatter and linter (vp check), the
+      # TypeScript type check (tsc --noEmit), Pint, PHPStan, and the test suite.
+      - name: Run CI Checks
+        run: composer ci:check

@@ -2,10 +2,14 @@
 /bootstrap/ssr
 /node_modules
 /public/build
+/public/fonts-manifest.dev.json
 /public/hot
 /public/storage
 /storage/*.key
 /storage/pail
+/resources/js/actions
+/resources/js/routes
+/resources/js/wayfinder
 /vendor
 .env
 .env.backup
@@ -17,6 +21,7 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+/auth.json
 
 # Editors / OS
 /.fleet

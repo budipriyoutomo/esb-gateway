@@ -82,6 +82,26 @@ Potential fields:
 - metadata
 - created_at
 
+## Timezone Convention
+
+`APP_TIMEZONE` is set explicitly to `UTC`. All timestamps are stored in UTC.
+
+The ESB is the reason this needs stating rather than being left to the framework
+default. ESB responses carry a `timestamp` formatted `Y-m-d H:i:s` with **no offset**,
+and the vendor's `logInfo.loginTime` examples carry `+07:00` — the ESB reports
+Asia/Jakarta wall-clock time. A bare ESB timestamp parsed without an explicit timezone
+would silently be interpreted as UTC and land seven hours off.
+
+Rules:
+
+- Parse every ESB timestamp as `Asia/Jakarta`, then convert to UTC before persisting.
+- Never let an ESB timestamp adopt the application default implicitly.
+- Date-only parameters sent to the ESB use `Y-m-d`; the ESB rejects other formats with
+  `EC03100036`.
+- Present times to users in Asia/Jakarta.
+
+See `docs/05-api-integration.md` for the envelope details.
+
 ## General Rules
 
 - Use UUIDs only if the project confirms that choice; otherwise use Laravel's standard

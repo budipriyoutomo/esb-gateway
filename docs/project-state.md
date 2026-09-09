@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-Phase 0 — Architecture & Documentation
+Phase 1 — Repository & Scaffold (nearly complete; see `TODO.md`)
 
 ## Current Objective
 
@@ -32,6 +32,9 @@ integrating with the ERP ESB.
 - [ ] Authentication flow finalized against ESB
 - [ ] Initial database schema finalized
 - [ ] Deployment topology finalized
+- [x] Laravel 13 + Inertia 3 + React 19 + TypeScript scaffolded
+- [x] Tailwind 4 + shadcn/ui in place
+- [x] Formatting, linting, static analysis, and CI configured
 
 ## Completed
 
@@ -48,12 +51,32 @@ integrating with the ERP ESB.
   `docs/esb/generate-catalog.py`
 - ADR-009 (shared ESB token in Redis behind a lock) and ADR-010 (base URLs as named
   families) recorded
+- Phase 1 scaffold (2026-09-09): Laravel 13.17, Inertia 3, React 19, TypeScript strict,
+  Tailwind 4, shadcn/ui, Vite 8, from `laravel/react-starter-kit` `main`
+- Auth features: 2FA kept; registration, email verification, password confirmation, and
+  passkeys removed at scaffold time
+- Test framework is PHPUnit 12 (not Pest) — 26 tests passing
+- Toolchain green: `vp check`, `tsc --noEmit`, Pint, PHPStan level 7, Vite build
+- CI workflow runs the suite against real PostgreSQL 16 and Redis 7 service containers
 
 ## In Progress
 
+- Phase 1 verification, blocked on local infrastructure (see below)
 - Functional requirements
 - Initial domain/data model
 - Selecting the first ESB operations to implement
+
+## Blocked
+
+Phase 1 is complete except for two verification steps that need local services:
+
+- `php artisan migrate` against PostgreSQL — needs the `postgres` role password
+  (`pg_hba.conf` requires `scram-sha-256`). PostgreSQL 16 is installed and running on
+  this machine, but on port **5433**, not 5432.
+- Queued job round-trip against Redis — no Redis server and no Docker on this machine.
+
+Neither blocks Phase 2 or Phase 3: the test suite runs on SQLite in-memory locally, and
+CI exercises real PostgreSQL and Redis.
 
 ## Next Tasks
 
@@ -113,6 +136,8 @@ Still open:
   credential (ADR-009).
 - Classify ESB outcomes on the `code` field, never on `message` or `status`.
 - Never regenerate `docs/esb/*-endpoints.md` by hand; use the generator.
+- Store timestamps in UTC; parse ESB timestamps as Asia/Jakarta on ingest.
+- Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes
 
