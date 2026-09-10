@@ -3,9 +3,11 @@
 use App\Providers\AppServiceProvider;
 use App\Providers\AuthorizationServiceProvider;
 use App\Providers\FortifyServiceProvider;
+use App\Providers\RateLimitServiceProvider;
 
 return [
     AppServiceProvider::class,
     AuthorizationServiceProvider::class,
     FortifyServiceProvider::class,
+    RateLimitServiceProvider::class,
 ];

@@ -65,6 +65,7 @@
             "Composer\\Config::disableProcessTimeout",
             "npm run check",
             "npm run types:check",
+            "@php artisan app:check-production-readiness",
             "@test"
         ],
         "types:check": [
@@ -99,8 +100,7 @@
         "laravel": {
             "dont-discover": [],
             "installer": {
-                "post-create-project": [
-                ]
+                "post-create-project": []
             }
         }
     },

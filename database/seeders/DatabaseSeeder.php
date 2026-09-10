@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
 
 class DatabaseSeeder extends Seeder
 {
@@ -24,6 +25,10 @@ class DatabaseSeeder extends Seeder
         // The endpoint catalog is imported from the generated files in
         // docs/esb/ rather than seeded inline, so there is one source of truth
         // for what the ESB offers.
-        $this->callSilent('esb:import-catalog');
+        //
+        // Artisan::call, not $this->call: Seeder::call expects a seeder class,
+        // and passing a command name to it fails at runtime rather than at
+        // compile time.
+        Artisan::call('esb:import-catalog');
     }
 }

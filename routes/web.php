@@ -23,7 +23,15 @@ Route::middleware('auth')->group(function () {
         ->middleware('can:'.Permission::ViewDashboard->value)
         ->name('dashboard');
 
-    Route::get('products', [ProductController::class, 'index'])->name('products.index');
+    // Routes below reach the ESB, so they share a per-user budget. The
+    // vendor's own rate limits are undocumented, and the gateway must not let
+    // its users discover them the hard way (config/esb.php).
+    Route::middleware('throttle:esb')->group(function () {
+        Route::get('products', [ProductController::class, 'index'])->name('products.index');
+
+        Route::post('esb-connections/{family}/test', [EsbConnectionProbeController::class, 'store'])
+            ->name('esb-connections.test');
+    });
 
     Route::get('integration-logs', [IntegrationLogController::class, 'index'])
         ->name('integration-logs.index');
@@ -32,14 +40,12 @@ Route::middleware('auth')->group(function () {
     Route::get('endpoints', [EndpointCatalogController::class, 'index'])
         ->name('endpoints.index');
 
+    // Read-only. There is deliberately no update route: base URLs and
+    // credentials are configuration (ADR-010, ADR-013), so changing one is a
+    // deployment action rather than a form submission. The probe action is
+    // rate limited with the other ESB-reaching routes above.
     Route::get('esb-connections', [EsbConnectionController::class, 'index'])
         ->name('esb-connections.index');
-
-    // Probing only. There is deliberately no update route: base URLs and
-    // credentials are configuration (ADR-010, ADR-013), so changing one is a
-    // deployment action rather than a form submission.
-    Route::post('esb-connections/{family}/test', [EsbConnectionProbeController::class, 'store'])
-        ->name('esb-connections.test');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
 

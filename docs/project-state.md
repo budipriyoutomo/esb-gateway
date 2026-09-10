@@ -8,7 +8,8 @@
 
 ## Current Phase
 
-Phase 5 complete — next is Phase 6, hardening and deployment (see `TODO.md`)
+Phase 6 complete for everything checkable in code. Remaining work needs real
+infrastructure or business decisions — see `TODO.md`.
 
 ## Current Objective
 
@@ -85,22 +86,33 @@ integrating with the ERP ESB.
   `GET /health` for application, database, cache, and queue
 - ADR-013 (ESB connections are configuration, not records) and ADR-014 (probes use a
   documented read, or report that none exists) recorded
-- 241 tests passing
+- Phase 6 (2026-09-10), built test-first: per-user rate limiting on ESB-reaching routes;
+  secure headers and production HTTPS enforcement;
+  `php artisan app:check-production-readiness` automating the security checklist and
+  wired into `composer ci:check`; `php artisan integration-logs:prune` with a
+  disabled-safe retention window, scheduled daily; `docs/13-deployment.md` written
+  concretely
+- 268 tests passing
 
 ## In Progress
 
-- Phase 6 — hardening and deployment
+- Nothing in code. The build is feature-complete against `TODO.md` and waiting on
+  external inputs: ESB credentials, business confirmation of the role set, and
+  infrastructure decisions.
 - Functional requirements
 - Selecting the ESB operations that are actually in scope
 
 ## Blocked
 
-Phase 1 is complete except for two verification steps that need local services:
+One local verification step remains:
 
-- `php artisan migrate` against PostgreSQL — needs the `postgres` role password
-  (`pg_hba.conf` requires `scram-sha-256`). PostgreSQL 16 is installed and running on
-  this machine, but on port **5433**, not 5432.
-- Queued job round-trip against Redis — no Redis server and no Docker on this machine.
+- ~~`php artisan migrate` against PostgreSQL~~ — **done 2026-09-10.** All migrations
+  applied and `db:seed` verified against the local PostgreSQL 16 on port **5433**
+  (17 tables, 4 roles, 14 permissions, 401 catalog endpoints). Needs
+  `CACHE_STORE=array` locally, because spatie's permission migration touches the cache
+  and Redis is unavailable here.
+- Queued job round-trip against Redis — still blocked. No Redis server and no Docker on
+  this machine.
 
 Neither blocked Phase 2, and neither blocks most of Phase 3: the test suite runs on
 SQLite in-memory locally, and CI exercises real PostgreSQL and Redis. Local Redis does
@@ -186,6 +198,9 @@ Still open:
 - ESB connections and the endpoint catalog are read-only; both mirror a source of truth
   that lives outside the database.
 - `/health` must never call the ESB.
+- A zero retention window keeps logs; it must never be read as "delete everything".
+- Never point a non-production install at the production ESB — the readiness check fails
+  on this deliberately.
 - Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes

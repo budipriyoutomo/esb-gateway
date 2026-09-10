@@ -135,6 +135,47 @@ return [
 
     /*
     |---------------------------------------------------------------------
+    | Retention
+    |---------------------------------------------------------------------
+    |
+    | Days to keep integration_logs rows. Pruned by
+    | `php artisan integration-logs:prune`, scheduled daily.
+    |
+    | Zero disables pruning: a misconfigured or unset retention must not be
+    | read as "delete everything". The actual period is still an open business
+    | decision (TBD in docs/11-logging-monitoring.md); 90 days is a starting
+    | point, not a decision.
+    |
+    | Audit logs are deliberately not covered here. They are immutable by
+    | design (ADR-012) and their retention is a compliance question rather than
+    | a volume one.
+    |
+    */
+
+    'retention' => [
+        'integration_logs_days' => (int) env('ESB_INTEGRATION_LOG_RETENTION_DAYS', 90),
+    ],
+
+    /*
+    |---------------------------------------------------------------------
+    | Rate limit
+    |---------------------------------------------------------------------
+    |
+    | Per-user requests per minute on routes that reach the ESB.
+    |
+    | This is our own limit, not the vendor's: the ESB's rate limits are
+    | undocumented (TBD in docs/05-api-integration.md), so the gateway must not
+    | let its own users discover them the hard way. Revisit once the ESB team
+    | confirms their actual throttling.
+    |
+    */
+
+    'rate_limit' => [
+        'per_minute' => (int) env('ESB_RATE_LIMIT_PER_MINUTE', 60),
+    ],
+
+    /*
+    |---------------------------------------------------------------------
     | Connectivity probes
     |---------------------------------------------------------------------
     |

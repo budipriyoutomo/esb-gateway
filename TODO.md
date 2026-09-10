@@ -37,13 +37,19 @@ tracks state.
       (Tailwind 4 via `@tailwindcss/vite`, shadcn/ui via `components.json` and
       `resources/js/components/ui`).
 - [x] Configure PostgreSQL as the default connection.
-- [ ] **Blocked** — verify `php artisan migrate` runs. Needs the `postgres` password;
-      `pg_hba.conf` requires `scram-sha-256`. Note this machine's PostgreSQL 16 listens
-      on port **5433**, not the default 5432.
+- [x] Verify `php artisan migrate` runs — **done 2026-09-10** against the local
+      PostgreSQL 16 (port **5433**, not the default 5432). All migrations applied and
+      `db:seed` verified: 17 tables, 4 roles, 14 permissions, 401 catalog endpoints.
+      Note: had to run with `CACHE_STORE=array`, because spatie's permission migration
+      calls `forgetCachedPermissions()` and Redis is not available on this machine. The
+      cache store is not part of the schema, so this is a local workaround, not a
+      deployment requirement.
 - [x] Configure Redis for cache, queue, and locks. `predis/predis` is installed because
       the `phpredis` PHP extension is not present locally; CI uses `phpredis`.
 - [ ] **Blocked** — verify a queued job round-trips. No Redis server on this machine and
-      no Docker.
+      no Docker. This is now the only outstanding Phase 1 item; CI exercises Redis, but
+      the ADR-009 lock's distributed behaviour is still untested (see the Phase 3
+      follow-ups).
 - [x] Set `APP_TIMEZONE` explicitly and decide the storage timezone convention. Store
       UTC; parse ESB timestamps as Asia/Jakarta on ingest. Recorded in
       `docs/07-database-design.md`.
@@ -65,8 +71,8 @@ tracks state.
       Redis** service containers rather than the SQLite default in `phpunit.xml`, so
       driver differences surface in CI instead of production.
 
-**Done when:** a clean checkout can install, build, migrate, and pass CI.
-Currently blocked only on the two verification items above.
+**Done when:** a clean checkout can install, build, migrate, and pass CI. — Met except
+for the queued-job round-trip, which needs a local Redis.
 
 ---
 
@@ -285,12 +291,51 @@ Still open from this phase:
 
 ## Phase 6 — Hardening and Deployment
 
-- [ ] Apply rate limiting on ESB-invoking routes.
-- [ ] Work through the security checklist in `docs/10-security.md`.
-- [ ] Define integration log retention and archival.
-- [ ] Finalize deployment topology (`docs/13-deployment.md`); configure queue worker
-      supervision and restart-on-deploy.
-- [ ] Verify backup and rollback.
+Built test-first.
+
+- [x] Apply rate limiting on ESB-invoking routes — a per-user budget
+      (`config/esb.rate_limit`), keyed per user so one runaway script does not lock out
+      the team. The limit is **ours, not the vendor's**: the ESB's own limits are
+      undocumented, so the gateway must not let its users discover them the hard way.
+      Gateway-owned screens are outside the budget, so being over it does not stop
+      someone diagnosing why.
+- [x] Work through the security checklist in `docs/10-security.md`. The configuration
+      half is now automated by `php artisan app:check-production-readiness`, which runs
+      in `composer ci:check`; the rest is covered by tests. Both are marked up in that
+      document.
+      The check that earns its keep: a non-production install pointed at the
+      **production ESB** fails. A staging install wired to production writes to real ERP
+      data, and nothing in the application would look wrong until it did.
+- [x] Secure headers on every response including `/health`, HSTS in production over TLS
+      only, `URL::forceScheme('https')` in production, and no `X-Powered-By` or `Server`
+      header.
+- [x] Define integration log retention and archival — `php artisan integration-logs:prune`
+      with a configurable window, scheduled daily, deleting in batches.
+      A zero or unset window **keeps** everything rather than deleting it: a
+      misconfiguration must not read as "delete everything", and the period is still an
+      open business decision. Audit logs are deliberately out of scope — immutable by
+      design (ADR-012), and their retention is a compliance question, not a volume one.
+- [x] Document deployment concretely (`docs/13-deployment.md`): what the application
+      requires of any topology, build and deploy sequence, queue worker supervision with
+      `stopwaitsecs` above the longest job, the single-instance scheduler, and why Redis
+      is not optional (web and workers must share the ESB token cache, or they invalidate
+      each other's tokens — ADR-009).
+
+**Done when:** the application is safe to point at a real ESB and a release can be
+verified rather than hoped about. — Met for everything checkable in code. 268 tests
+passing.
+
+Still open, and **not** claimable from this machine:
+
+- [ ] Finalize deployment topology — instance counts, hosting, and network boundaries are
+      business/infrastructure decisions, not code ones.
+- [ ] Verify backup and recovery against real infrastructure.
+- [ ] Rehearse a rollback. Migrations are the real constraint: a release with a
+      destructive migration cannot be rolled back by redeploying code alone.
+- [ ] Decide the integration log retention period. The mechanism exists; 90 days is a
+      placeholder, not a decision.
+- [ ] Alert thresholds and delivery (`docs/11-logging-monitoring.md` leaves them `TBD`).
+- [ ] `composer audit` / `npm audit` review pass.
 
 ---
 
