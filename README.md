@@ -1,8 +1,13 @@
 # ERP Gateway Agent Documentation
 
-This package contains the initial agent-agnostic documentation for the ERP Gateway
-project (Laravel 13 + Inertia.js + React + TypeScript + PostgreSQL + Redis, integrating
-with an ERP ESB).
+This package contains the agent-agnostic documentation for the ERP Gateway project
+(Laravel 13 + Inertia.js + React + TypeScript + PostgreSQL + Redis). The gateway is an
+**integration hub with its own database and its own authentication**, connecting
+internal applications/users to the ERP ESB and, over time, to other external systems
+that act as additional data sources or destinations. The ESB is the first connected
+system and the reference implementation of how any provider is integrated — it is not
+the only one this project is designed for. See `docs/01-project-overview.md` and
+`DECISIONS.md` (ADR-015, ADR-016) for the multi-provider concept.
 
 Copy the contents of this folder into the root of your Laravel project repository.
 
@@ -13,16 +18,22 @@ Copy the contents of this folder into the root of your Laravel project repositor
 - `DECISIONS.md` — durable architecture decisions (ADRs).
 - `docs/project-state.md` — current project/handoff state. Update this as work
   progresses so any agent (or human) can pick up where the last one left off.
-- `docs/01-project-overview.md` — project purpose and scope.
-- `docs/02-architecture.md` — architecture and request flows.
+- `docs/01-project-overview.md` — project purpose and scope (multi-provider integration
+  hub; ESB is the first provider).
+- `docs/02-architecture.md` — architecture, request flows, and the provider/adapter/
+  canonical-model shape used for every integration, ESB included.
 - `docs/03-technology-stack.md` — technology choices.
-- `docs/04-functional-requirements.md` — initial functional scope.
-- `docs/05-api-integration.md` — ERP ESB contract and integration rules.
+- `docs/04-functional-requirements.md` — functional scope.
+- `docs/05-api-integration.md` — ERP ESB contract and integration rules (the first
+  provider's contract; a future provider gets its own equivalent document).
 - `docs/esb/esb-core-endpoints.md` — generated catalog of all ESB Core operations.
 - `docs/esb/esb-oms-endpoints.md` — generated catalog of all ESB OMS operations.
 - `docs/esb/generate-catalog.py` — regenerates the two catalogs from the vendor apiDoc source.
-- `docs/06-authentication-authorization.md` — application and ESB auth.
-- `docs/07-database-design.md` — initial data model guidance.
+- `docs/06-authentication-authorization.md` — application user auth, and (going forward)
+  machine-to-machine auth for external providers calling into the gateway.
+- `docs/07-database-design.md` — data model, including the provider-agnostic
+  `integration_providers` and `sync_transactions` tables alongside the ESB-specific
+  tables.
 - `docs/08-frontend-guidelines.md` — React/Inertia UI rules.
 - `docs/09-backend-guidelines.md` — Laravel implementation rules.
 - `docs/10-security.md` — security requirements.
@@ -45,10 +56,16 @@ https://developers.esb.co.id/esb-core/ and https://developers.esb.co.id/esb-oms/
 401 operations in total. `docs/05-api-integration.md` records the authentication flow,
 response envelope, pagination, error-code catalog, and retry/idempotency rules.
 
-Two things still need answers from the ESB team before integration work can be
+Two things still need answers from the ESB team before ESB integration work can be
 finalized: which environment and credentials this project is entitled to, and whether a
 static API key is available instead of the login flow. The ESB permits only one active
 session per credential, so this choice materially affects the design — see ADR-009.
 
 Regenerate the endpoint catalogs with `docs/esb/generate-catalog.py` when the vendor
 documentation changes; do not edit them by hand.
+
+**Scope note (2026-09-10):** the project's foundational concept was widened from
+"ESB gateway" to "multi-provider integration hub" — see ADR-015 and ADR-016. This is a
+documentation/architecture decision recorded ahead of any second provider being named;
+nothing about the existing ESB implementation changes as a result, and no new provider
+should be scaffolded speculatively until one is actually contracted.

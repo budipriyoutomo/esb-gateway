@@ -15,32 +15,24 @@ Show operational summaries such as:
 - recent errors;
 - integration activity.
 
+As additional providers are connected, this should extend to per-provider health rather
+than assuming ESB is the only source of activity.
+
 ### 2. ESB Connections
 
-**Superseded by ADR-013 — this module is read-only plus a probe action.**
+Capabilities:
 
-There is no `esb_connections` table and no edit route. ESB base URLs and credentials
-live in `config/esb.php` and the environment (ADR-010, ADR-013); changing one is a
-deployment action, not a form submission.
+- configure logical ESB connection settings;
+- test connectivity;
+- display health/status;
+- protect secrets;
+- maintain audit trail.
 
-Implemented capabilities:
+Secret values must never be displayed in plaintext after storage.
 
-- display which base URL families are configured, for the current environment;
-- probe connectivity via a documented, read-only, cheap request per family (ADR-014),
-  where one exists;
-- report "cannot be probed" honestly for families with no documented health/read
-  endpoint, rather than showing a fake status.
-
-Explicitly out of scope:
-
-- editing a base URL or credential through the UI;
-- storing credentials in the database, in any form;
-- a dedicated "esb_connections" audit trail — there is nothing to audit because there
-  is nothing to change here. The probe action itself is covered by the existing
-  permission check and `integration_logs`, not a separate audit trail.
-
-See `docs/07-database-design.md` (`esb_connections` — superseded) and `DECISIONS.md`
-(ADR-013, ADR-014).
+This is the first, concrete instance of what ADR-015/ADR-016 generalize as
+**provider connections**: read-only configuration display plus a probe action, per
+provider. A future provider gets the same shape, not a bespoke screen.
 
 ### 3. API/Endpoint Catalog
 
@@ -86,6 +78,11 @@ Record useful metadata:
 
 Sensitive payload fields must be redacted.
 
+This is per-HTTP-call operational history. It answers "did this call to the ESB
+succeed?" It does not answer "did this business record get from system A to system B?"
+— that is the `sync_transactions` concern, see item 7 below and
+`docs/07-database-design.md`.
+
 ### 5. User & Access Management
 
 Initial capabilities:
@@ -103,7 +100,26 @@ Configuration should distinguish:
 - application configuration;
 - environment secrets;
 - business configuration;
-- ESB integration configuration.
+- integration configuration, per provider (ESB today, others later).
+
+### 7. Provider & Sync Management (foundational, not yet implemented)
+
+As soon as a second external system is contracted, this module governs it:
+
+- registry of connected providers (`integration_providers`), their direction
+  (inbound/outbound/bidirectional), and auth strategy;
+- machine-to-machine credentials for providers that call into the gateway, separate
+  from user authentication;
+- visibility into in-flight and completed data flows between providers
+  (`sync_transactions`): which record moved from where to where, its status, and
+  whether it needs a manual replay;
+- per-provider rate limiting and circuit-breaker state, mirroring the per-user ESB rate
+  limit already in place.
+
+Do not build the generic pieces of this module (registry table, canonical DTOs, adapter
+contracts) speculatively before a second provider is actually contracted — see ADR-015.
+Recording the concept now is so the *first* real second-provider integration follows this
+shape from day one, instead of being bolted onto ESB-specific code.
 
 ## Future Integrations
 
@@ -114,7 +130,11 @@ Potential integration areas include:
 - inventory;
 - sales;
 - master data;
+- marketplaces or other external APIs that either supply data to be pushed into the ESB,
+  or need data pushed to them from the ESB or other connected systems;
 - other internal applications.
 
-Do not implement future modules until their requirements and ESB contracts are
-documented.
+Do not implement future modules until their requirements and contracts are documented.
+When one is, integrate it as a new provider (adapter pair + canonical mapping) per
+`docs/02-architecture.md`, not as a special case inside the existing ESB integration
+code.

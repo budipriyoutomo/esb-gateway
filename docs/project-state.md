@@ -14,7 +14,10 @@ infrastructure or business decisions — see `TODO.md`.
 ## Current Objective
 
 Prepare the foundation and documentation for an ERP Gateway & Middleware application
-integrating with the ERP ESB.
+that functions as a multi-provider integration hub (ADR-015, ADR-016). The ERP ESB is
+the first connected provider and the current implementation focus; the architecture is
+recorded so a second provider, when contracted, is integrated as an adapter against the
+canonical model rather than bolted onto ESB-specific code.
 
 ## Architecture Status
 
@@ -29,6 +32,10 @@ integrating with the ERP ESB.
 - [x] PostgreSQL selected
 - [x] Redis selected
 - [x] ESB API contract imported/documented
+- [x] Multi-provider integration concept recorded (ADR-016, ADR-017) — ESB is the
+      reference provider; generic infrastructure (`integration_providers`,
+      `sync_transactions`, adapter contracts, canonical DTOs) intentionally not yet built
+      pending a real second provider
 - [ ] ESB credentials, environment, and auth mechanism confirmed with ESB team
 - [ ] Authentication flow finalized against ESB
 - [ ] Initial database schema finalized
@@ -151,6 +158,9 @@ The detailed, ordered kickoff checklist is in `TODO.md`. Summary:
 10. Implement the first read-only ESB adapter end to end as a reference pattern —
     `GET /product/list` is the vendor's own tutorial endpoint and a good candidate.
 11. Build initial dashboard.
+12. When a second external system is contracted: generalize the existing ESB client into
+  the `OutboundAdapter`/`InboundAdapter` contracts described in `docs/02-architecture.md`
+  before writing the second provider's adapter, so both fit the same shape from day one.
 
 ## Known Unknowns / TBD
 

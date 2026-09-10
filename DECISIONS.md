@@ -354,3 +354,96 @@ pre-built ahead of a second consumer.
   enforce.
 - Do not treat "the docs told me to use a base class" as license to wrap a
   pass-through read or a single-use controller action in an unnecessary layer.
+
+  ---
+
+## ADR-016 — Multi-Provider Integration Model (Adapters + Canonical DTOs)
+
+**Status:** Accepted
+
+**Context**
+The gateway was originally scoped around a single upstream, the ERP ESB. The project's
+scope has been widened: the gateway will also connect to other external APIs, acting as
+a source, a destination, or both, with data flowing in either direction between them and
+the ESB. Integrating each new system directly against ESB-specific classes would make
+every additional system's cost grow with the number of systems already connected
+(a mapping to every other system), not with the complexity of that one system.
+
+**Decision**
+Every external system the gateway connects to, including the ESB, is modeled as a
+**provider**. Each provider is integrated through:
+
+- an `OutboundAdapter` and/or `InboundAdapter` (per `docs/02-architecture.md`) that
+  knows only that provider's contract;
+- a small set of internal **canonical DTOs** (`App\Domain\Canonical\...`) representing
+  the business entities that actually move between systems;
+- orchestration in Services/Actions (ADR-007) that reads/writes canonical DTOs and never
+  contains a specific provider's request/response shape.
+
+No adapter calls another adapter directly, and no adapter contains another provider's
+contract.
+
+**Reason**
+- Keeps the cost of adding a provider linear (one adapter pair) instead of quadratic
+  (a mapping to every already-connected system).
+- Matches the isolation principle already in AGENT.md ("external ESB integration must be
+  isolated behind dedicated integration classes") — this generalizes that principle
+  rather than replacing it.
+- Keeps ESB-specific knowledge (envelope format, error codes, token lifecycle) out of
+  code that has nothing to do with ESB.
+
+**Rejected**
+- Point-to-point mapping between each pair of systems as they are added — simplest for
+  exactly two systems, but does not scale past that, and was the situation this ADR
+  exists to avoid.
+- A fully generic, runtime-configurable "any API" mapping engine — over-engineered for a
+  small, deliberately integrated set of systems; each provider still gets an explicit,
+  reviewed adapter (see ADR-016 on sequencing).
+
+**Consequences**
+- `docs/02-architecture.md`'s directory structure gains `Integrations/Contracts/` and
+  `Domain/Canonical/`.
+- The existing ESB integration code (`App\Integrations\Esb\...` or equivalent) becomes
+  the reference implementation of this shape; it does not need to be renamed or
+  restructured until it stops satisfying the contract.
+- A new table, `integration_providers`, replaces "ESB families" as the top-level registry
+  concept; ESB's existing family model (ADR-010) becomes one provider's internal detail,
+  not the top-level concept. ADR-010 is not superseded — it still governs how ESB's own
+  base URLs are structured.
+- A new table, `sync_transactions`, tracks business-record-level flow between providers,
+  distinct from `integration_logs` (which stays a per-HTTP-call log). See
+  `docs/07-database-design.md`.
+
+---
+
+## ADR-017 — Do Not Scaffold a Second Provider Speculatively
+
+**Status:** Accepted
+
+**Context**
+ADR-015 establishes the shape future integrations should take. Without a real second
+provider under contract, building `integration_providers`, `sync_transactions`, the
+`Integrations/Contracts` interfaces, and `Domain/Canonical` DTOs now would be
+abstraction built against a guess of what a second provider will need.
+
+**Decision**
+The provider/adapter/canonical-model shape in ADR-015 is the target architecture and
+governs how any new integration is built. The generic infrastructure itself
+(`integration_providers` table, `sync_transactions` table, `Contracts` interfaces,
+`Domain/Canonical` namespace) is built when the first real second provider is
+integrated — extracted from that concrete need — not ahead of it.
+
+**Reason**
+- Matches the existing project norm ("do not create empty abstraction layers just in
+  case", `docs/02-architecture.md`).
+- A contract designed against one real example (ESB) and speculation is more likely to
+  need rework than one designed against two real examples.
+
+**Consequences**
+- `docs/04-functional-requirements.md` module 7 ("Provider & Sync Management") is marked
+  foundational/not yet implemented, not a current build target.
+- `docs/project-state.md` and `TODO.md` should not carry tasks to build this
+  infrastructure until a second provider is named.
+- When a second provider is named, the first task is generalizing the ESB adapter to fit
+  the `OutboundAdapter`/`InboundAdapter` contracts, not building the contracts in the
+  abstract first.

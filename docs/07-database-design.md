@@ -77,6 +77,41 @@ Indexed on `correlation_id`, `operation`, `outcome`, `esb_code`, plus
 financial data, and retention for this table is still `TBD`. Revisit payload storage only
 with a documented retention and privacy decision.
 
+### integration_providers
+
+**Not yet implemented — build when the first real second provider is contracted**
+(ADR-016). Registry of every external system the gateway connects to, including ESB.
+
+| Column | Notes |
+| --- | --- |
+| id | |
+| code | unique, e.g. `esb`, `pos`, `marketplace_x` |
+| type | e.g. `rest_api`, `webhook_source` |
+| direction | `inbound`, `outbound`, or `bidirectional` |
+| auth_strategy | e.g. `oauth_password`, `api_key`, `hmac_signature` |
+| status | active/inactive per environment |
+
+Credentials themselves stay in config/environment/secret management, consistent with
+ADR-013 — this table is metadata/registry only, never a place credentials are written.
+
+### sync_transactions
+
+**Not yet implemented — build when the first real second provider is contracted**
+(ADR-016). Business-record-level trace of data moving between providers, distinct from
+`integration_logs` (which is a per-HTTP-call log and stays that way).
+
+| Column | Notes |
+| --- | --- |
+| id | |
+| correlation_id | same pattern as `integration_logs.correlation_id` |
+| entity_type | e.g. `product`, `order` |
+| source_provider_id / destination_provider_id | FK to `integration_providers` |
+| source_ref_id / destination_ref_id | the record's ID in each system |
+| idempotency_key | unique; prevents duplicate writes on retry |
+| status | `received`, `transformed`, `pushed`, `failed`, `dead_letter` |
+| canonical_payload | snapshot, redacted per `docs/10-security.md` |
+| attempt_count | |
+
 ### audit_logs
 
 **Implemented** (ADR-012). Security/business audit events, immutable.

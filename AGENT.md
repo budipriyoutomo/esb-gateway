@@ -19,12 +19,22 @@ Read these in order before making non-trivial changes:
 
 If documentation conflicts with the actual code, inspect the code and tests first, then
 update the documentation to match reality (or flag the conflict if it looks like a bug).
-
+ 
 ## Project Summary
 
 ERP Gateway is a single Laravel application that provides a secure web interface and
-middleware layer between internal applications/users and the ERP ESB (Enterprise Service
-Bus) REST APIs.
+middleware/integration-hub layer between internal applications/users and multiple
+external systems. The ERP ESB (Enterprise Service Bus) REST APIs are the first and
+currently only connected system, but the project's foundational concept — recorded in
+`docs/01-project-overview.md` and ADR-015/ADR-016 — is a gateway that can connect
+additional external systems (as data sources, destinations, or both) without rewriting
+ESB-specific code. The application has its own database and its own
+authentication/authorization; it is not a thin proxy.
+
+Do not build speculative infrastructure for a second provider before one is actually
+contracted (ADR-015). What this concept changes today is naming and structure: new
+integration code should assume "a provider" rather than hard-coding "the ESB" where the
+distinction matters (see Mandatory Architecture Rules below).
 
 The application is intentionally a single repository and deployment unit:
 
@@ -74,6 +84,19 @@ whether the work is done by a human or an AI agent. Concretely:
   (not scattered across controllers or models).
 - Do not introduce a new framework or major dependency without documenting the reason.
 - Prefer existing project patterns over introducing a new pattern for a single feature.
+- Any new external system integration is a **provider**: it gets its own adapter
+  (`App\Integrations\<Provider>\...`) implementing the shared `OutboundAdapter` and/or
+  `InboundAdapter` contracts (`docs/02-architecture.md`). It must not be wired directly
+  into ESB-specific classes.
+- Data that needs to move between two providers is translated through the canonical
+  model (`App\Domain\Canonical\...`), never mapped directly from one provider's shape to
+  another's.
+- An adapter knows exactly one external system. It must never call another adapter.
+  Cross-provider orchestration belongs in a Service/Action (ADR-007), consistent with
+  the existing rule that controllers stay thin.
+- Do not scaffold `Integrations/Contracts`, `Domain/Canonical`, `integration_providers`,
+  or `sync_transactions` speculatively. Build them when a second provider is actually
+  being integrated, using the first provider (ESB) as the pattern to generalize from.
 
 ## Backend Rules
 
