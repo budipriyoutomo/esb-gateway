@@ -21,12 +21,34 @@ keep granting access. A user holds exactly one role.
 
 ### esb_connections
 
-**Superseded by ADR-013 — this table does not exist.**
+**Specified by ADR-018 — not yet implemented.** ADR-013 previously rejected this table;
+ADR-018 supersedes it, because the business needs ESB environments manageable at runtime
+without a deploy — the exact condition ADR-013 named for revisiting itself.
 
-ESB base URLs and credentials live in `config/esb.php` and the environment. A table would
-push credentials toward the database, which `docs/10-security.md` forbids, and would give
-`config/esb.php` a rival source of truth. The connections screen reads configuration and
-offers a probe action only.
+Editable through the UI under `esb-connections.manage`. Credential columns are encrypted
+at rest and write-only: after storage nothing returns the value, only a masked presence
+indicator. Every change writes an immutable `audit_logs` row in the same transaction
+(ADR-012), recording which field changed, never the value.
+
+| Column | Notes |
+| --- | --- |
+| id | |
+| family | Base URL family per ADR-010, e.g. `core`, `oms`. Unique with `environment`. |
+| environment | e.g. `sandbox`, `production`. |
+| base_url | |
+| auth_mechanism | `static_token` or `login`, mirroring `ESB_AUTH_MECHANISM`. |
+| credentials | Encrypted at rest (Laravel `encrypted` cast, keyed by `APP_KEY`). Never plaintext, never returned after storage. |
+| is_active | Only an active row overrides configuration. |
+| timestamps | |
+
+`config/esb.php` stays the bootstrap source and the fallback. An active row for a family
+wins over configuration; precedence is one-directional and resolved in exactly one place,
+and nothing writes back into config. `app:check-production-readiness` evaluates the
+**effective** connection after precedence, so a database row cannot be used to point a
+non-production install at the production ESB.
+
+Encrypted columns cannot be searched or indexed by value, and a database backup now
+carries credential material — protected, but present.
 
 ### integration_endpoints
 

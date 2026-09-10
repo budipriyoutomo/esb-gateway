@@ -7,7 +7,7 @@ internal applications/users to the ERP ESB and, over time, to other external sys
 that act as additional data sources or destinations. The ESB is the first connected
 system and the reference implementation of how any provider is integrated — it is not
 the only one this project is designed for. See `docs/01-project-overview.md` and
-`DECISIONS.md` (ADR-015, ADR-016) for the multi-provider concept.
+`DECISIONS.md` (ADR-016, ADR-017) for the multi-provider concept.
 
 Copy the contents of this folder into the root of your Laravel project repository.
 
@@ -29,8 +29,9 @@ Copy the contents of this folder into the root of your Laravel project repositor
 - `docs/esb/esb-core-endpoints.md` — generated catalog of all ESB Core operations.
 - `docs/esb/esb-oms-endpoints.md` — generated catalog of all ESB OMS operations.
 - `docs/esb/generate-catalog.py` — regenerates the two catalogs from the vendor apiDoc source.
-- `docs/06-authentication-authorization.md` — application user auth, and (going forward)
-  machine-to-machine auth for external providers calling into the gateway.
+- `docs/06-authentication-authorization.md` — application user authentication and
+  authorization. Machine-to-machine auth for external providers calling into the gateway
+  is not written yet; it arrives with the first inbound provider (ADR-017).
 - `docs/07-database-design.md` — data model, including the provider-agnostic
   `integration_providers` and `sync_transactions` tables alongside the ESB-specific
   tables.
@@ -65,7 +66,7 @@ Regenerate the endpoint catalogs with `docs/esb/generate-catalog.py` when the ve
 documentation changes; do not edit them by hand.
 
 **Scope note (2026-09-10):** the project's foundational concept was widened from
-"ESB gateway" to "multi-provider integration hub" — see ADR-015 and ADR-016. This is a
+"ESB gateway" to "multi-provider integration hub" — see ADR-016 and ADR-017. This is a
 documentation/architecture decision recorded ahead of any second provider being named;
 nothing about the existing ESB implementation changes as a result, and no new provider
 should be scaffolded speculatively until one is actually contracted.

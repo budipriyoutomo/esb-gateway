@@ -251,7 +251,7 @@ history.
 
 ## ADR-013 — ESB Connections Are Configuration, Not Records
 
-**Status:** Accepted
+**Status:** Superseded by ADR-018
 
 **Context**
 `docs/04-functional-requirements.md` lists an "ESB Connections" module that can
@@ -287,6 +287,10 @@ permitted user probe connectivity.
 The business needs to add ESB environments at runtime without a deploy. That would need
 encrypted-at-rest credential storage and a key management story, neither of which exists
 today.
+
+**Revisited 2026-09-10** — the business does need exactly that. See ADR-018, which
+supersedes this decision and supplies the encryption and audit story this section says is
+missing.
 
 ---
 
@@ -398,12 +402,12 @@ contract.
   exists to avoid.
 - A fully generic, runtime-configurable "any API" mapping engine — over-engineered for a
   small, deliberately integrated set of systems; each provider still gets an explicit,
-  reviewed adapter (see ADR-016 on sequencing).
+  reviewed adapter (see ADR-017 on sequencing).
 
 **Consequences**
 - `docs/02-architecture.md`'s directory structure gains `Integrations/Contracts/` and
   `Domain/Canonical/`.
-- The existing ESB integration code (`App\Integrations\Esb\...` or equivalent) becomes
+- The existing ESB integration code (`App\Integrations\ESB\...` or equivalent) becomes
   the reference implementation of this shape; it does not need to be renamed or
   restructured until it stops satisfying the contract.
 - A new table, `integration_providers`, replaces "ESB families" as the top-level registry
@@ -421,13 +425,13 @@ contract.
 **Status:** Accepted
 
 **Context**
-ADR-015 establishes the shape future integrations should take. Without a real second
+ADR-016 establishes the shape future integrations should take. Without a real second
 provider under contract, building `integration_providers`, `sync_transactions`, the
 `Integrations/Contracts` interfaces, and `Domain/Canonical` DTOs now would be
 abstraction built against a guess of what a second provider will need.
 
 **Decision**
-The provider/adapter/canonical-model shape in ADR-015 is the target architecture and
+The provider/adapter/canonical-model shape in ADR-016 is the target architecture and
 governs how any new integration is built. The generic infrastructure itself
 (`integration_providers` table, `sync_transactions` table, `Contracts` interfaces,
 `Domain/Canonical` namespace) is built when the first real second provider is
@@ -447,3 +451,89 @@ integrated — extracted from that concrete need — not ahead of it.
 - When a second provider is named, the first task is generalizing the ESB adapter to fit
   the `OutboundAdapter`/`InboundAdapter` contracts, not building the contracts in the
   abstract first.
+
+---
+
+## ADR-018 — ESB Connections Are Editable Records, With Credentials Encrypted at Rest
+
+**Status:** Accepted — supersedes ADR-013
+
+**Context**
+ADR-013 decided that ESB connections are configuration only, and closed with an explicit
+condition: *"Revisit if the business needs to add ESB environments at runtime without a
+deploy. That would need encrypted-at-rest credential storage and a key management story,
+neither of which exists today."* That condition has now been met — the business does need
+connections to be manageable at runtime (confirmed 2026-09-10).
+
+`docs/04-functional-requirements.md` §2 describes the intended module: configure logical
+ESB connection settings, test connectivity, display health/status, protect secrets, and
+maintain an audit trail, with secret values never displayed in plaintext after storage.
+
+`docs/10-security.md` forbids secrets in "database plaintext **unless explicitly required
+and protected**". This ADR is that explicit requirement, and it defines the protection.
+
+**Decision**
+An `esb_connections` table exists and is editable through the UI, under these rules:
+
+- The table holds, per base URL family: environment, base URL, auth mechanism, credential
+  material, and an active flag.
+- Credential columns are **encrypted at rest** using Laravel's `encrypted` cast, keyed by
+  `APP_KEY` which stays in environment/secret management. No credential is ever written
+  to the database in plaintext.
+- Credentials are **write-only through the interface**. After storage, no route, page
+  prop, API response, log line, or export returns the value. Reads return a masked
+  presence indicator ("configured" / "not configured") only.
+- Editing requires `esb-connections.manage`. That permission already exists and, until
+  now, granted nothing beyond `esb-connections.view`; this is what it was reserved for.
+- Every create, update, and delete writes an immutable `audit_logs` row in the same
+  transaction (ADR-012), recording **which** field changed and by whom — never the value.
+- `config/esb.php` remains the bootstrap source and the fallback. Where an active
+  database row exists for a family, it wins. Precedence is one-directional and resolved
+  in exactly one place; nothing ever writes back into config.
+- Connectivity probing is unchanged and still governed by ADR-014.
+- The production guard in `app:check-production-readiness` stays, and is evaluated
+  against the **effective** connection after precedence is applied, not against
+  `config/esb.php` alone. A non-production install pointed at the production ESB must
+  still fail the check — a database row must not be a way around it.
+
+**Reason**
+- ADR-013 anticipated this exact revisit and named its two preconditions. Encryption at
+  rest plus `APP_KEY` in secret management satisfies both.
+- Encryption, write-only reads, and an audit row answer the three objections ADR-013
+  raised: credentials are not in plaintext, the two sources of truth cannot silently
+  disagree because precedence is explicit and one-directional, and a production/staging
+  switch is no longer one mis-click away because it is audited, permission-gated, and
+  still caught by the readiness check.
+- Runtime configuration is a real operational need: adding an ESB environment should not
+  require a deploy window.
+
+**Consequences**
+- The `esb_connections` section in `docs/07-database-design.md` returns from "superseded"
+  to a specification to build.
+- The existing test asserting that no `esb-connections.update` route exists is
+  **inverted**: it becomes a test that the route exists and rejects a user without
+  `esb-connections.manage`. Deleting that test outright would lose the authorization
+  guarantee it was really protecting.
+- `APP_KEY` becomes a data-loss risk. Losing it, or rotating it without re-encrypting,
+  makes every stored credential unrecoverable. Key rotation needs a documented
+  re-encryption path before this ships.
+- Encrypted columns cannot be searched, indexed, or compared by value in SQL.
+- A database backup now carries credential material, encrypted. Backup handling inherits
+  the same protection requirements as the application.
+
+**Rejected**
+- Keeping ADR-013 as-is — rejected because the business need it named as its revisit
+  condition has actually arrived.
+- Storing only *references* to keys in an external secret manager — architecturally
+  cleaner and the preferred end state, but no secret manager is provisioned for this
+  project. Revisit when one exists; it would supersede the encryption approach here
+  rather than the editability decision.
+- Plaintext columns protected by permissions alone — rejected. A database backup, a
+  read-only replica, or a stray query log would expose every credential, and none of
+  those paths pass through the permission check.
+
+**Open**
+- Rotation and retention policy for stored credentials.
+- Whether an external secret manager will be provisioned, which would change *how*
+  credentials are stored but not *that* connections are editable.
+

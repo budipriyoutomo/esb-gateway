@@ -24,7 +24,7 @@
 The gateway connects to more than one external system over its lifetime — the ERP ESB
 today, others later. The integration layer is therefore structured around **providers**
 and **adapters**, not around ESB specifically. ESB's own client/adapter code
-(`App\Integrations\Esb\...`) is the first, reference implementation of this shape — it is
+(`App\Integrations\ESB\...`) is the first, reference implementation of this shape — it is
 not special-cased in the layer's design.
 
 **Provider**
@@ -158,7 +158,7 @@ app/
     Contracts/
       OutboundAdapter.php
       InboundAdapter.php
-    Esb/                   # first provider, reference implementation
+    ESB/                   # first provider, reference implementation
       Clients/
       DTOs/
       Exceptions/
@@ -177,18 +177,26 @@ app/
   Support/
 
 resources/js/
-  Components/
-  Layouts/
-  Pages/
-  Hooks/
-  Lib/
-  Types/
+  components/
+  layouts/
+  pages/
+  hooks/
+  lib/
+  types/
   app.tsx
 
+Lowercase — matches the Laravel/Inertia React starter kit this project scaffolded from
+and the actual `resources/js` tree. Do not create capitalized duplicates (`Pages/`,
+`Components/`, etc.); Linux filesystems are case-sensitive, and a duplicate folder would
+silently diverge from the real one instead of erroring.
+
 routes/
+  console.php
+  settings.php
   web.php
-  api.php               # inbound endpoints for external providers live here,
-                         # separate from user-facing web routes
+  api.php               # NOT YET CREATED. Target home for inbound provider
+                         # endpoints, kept separate from user-facing web routes.
+                         # Create it with the first inbound provider (ADR-017).
 
 tests/
   Feature/
@@ -198,4 +206,4 @@ tests/
 Use the exact project conventions once a given piece is implemented; do not create empty
 abstraction layers "just in case." A second provider is what proves the
 `Integrations/Contracts` abstraction earns its place — do not build it speculatively
-ahead of a real second provider if the team decides to defer that (see ADR-015).
+ahead of a real second provider if the team decides to defer that (see ADR-017).

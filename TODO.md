@@ -230,7 +230,12 @@ Still open from this phase:
 
 Built test-first.
 
-- [x] ESB Connections — **read-only plus a probe action (ADR-013).** Base URLs and
+- [x] ESB Connections — **read-only plus a probe action (ADR-013).**
+      **Superseded 2026-09-10 by ADR-018**, which makes connections editable with
+      credentials encrypted at rest. What shipped in this phase is still what runs today;
+      the editable version is Phase 8. The reasoning below is preserved because ADR-018
+      has to keep answering it.
+ Base URLs and
       credentials stay in config and the environment; there is no `esb_connections`
       table and no edit route. `docs/10-security.md` is explicit that secrets belong in
       environment or secret management rather than database plaintext, and a second
@@ -322,8 +327,8 @@ Built test-first.
       each other's tokens — ADR-009).
 
 **Done when:** the application is safe to point at a real ESB and a release can be
-verified rather than hoped about. — Met for everything checkable in code. 268 tests
-passing.
+verified rather than hoped about. — Met for everything checkable in code. 272 tests
+passing (verified 2026-09-10).
 
 Still open, and **not** claimable from this machine:
 
@@ -336,6 +341,154 @@ Still open, and **not** claimable from this machine:
       placeholder, not a decision.
 - [ ] Alert thresholds and delivery (`docs/11-logging-monitoring.md` leaves them `TBD`).
 - [ ] `composer audit` / `npm audit` review pass.
+
+---
+
+## Phase 7 — Documentation Consistency — **done 2026-09-10**
+
+Raised by cross-checking the 2026-09-10 documentation update (`51e803c`) against the
+code, and resolved with the author the same day. Each item was a place where a document
+and the repository disagreed.
+
+- [x] **Fixed the ADR cross-references — they were off by one.** `DECISIONS.md` numbers
+      the multi-provider ADR **016** and the do-not-scaffold ADR **017**, but ADR-015 is
+      "Base Classes on Proven Duplication", so every "ADR-015/ADR-016" reference pointed
+      at the wrong decision. Corrected in `AGENT.md` (2), `DECISIONS.md` (3 self-
+      references), `docs/01`, `docs/02`, `docs/04` (2), `docs/project-state.md`, and
+      `README.md` (2).
+- [x] **ESB Connections — resolved as a deliberate scope change, not a revert.** The
+      2026-09-10 wording in `docs/04-functional-requirements.md` §2 was intentional: the
+      business wants connections editable at runtime. ADR-013 rejected that, so
+      **ADR-018 was written to supersede it**, and ADR-013 is now marked
+      `Superseded by ADR-018`. ADR-013's own "Revisit if" named this exact condition.
+      §2 now marks which capabilities ship today and which are planned;
+      `docs/07-database-design.md` carries the table specification. The build itself is
+      Phase 8 below.
+- [x] **Restored the lowercase `resources/js` convention in `docs/02-architecture.md`,**
+      together with the warning against capitalized duplicates that had been deleted. The
+      real tree is lowercase, and `docs/08-frontend-guidelines.md` still carried the same
+      warning.
+- [x] **Corrected the `README.md` file list.** It described
+      `docs/06-authentication-authorization.md` as covering machine-to-machine provider
+      auth; that section does not exist. It now says user auth only, with M2M noted as
+      arriving with the first inbound provider (ADR-017).
+- [x] **Aligned the ESB namespace casing.** Documents said `App\Integrations\Esb\...`;
+      the directory is `app/Integrations/ESB`. The documents now match the code.
+- [x] **Marked `routes/api.php` as not yet created** in `docs/02-architecture.md`, and
+      listed the files that actually exist alongside it.
+- [x] **Refreshed the test count.** `docs/project-state.md` said 268; the suite is at
+      **272 passing, 949 assertions** (2026-09-10).
+
+**Done when:** no document in this repository asserts something the code contradicts. —
+Met.
+
+---
+
+## Phase 8 — Editable ESB Connections (ADR-018)
+
+ADR-018 supersedes ADR-013: connections become editable records so an ESB environment can
+be added or repointed without a deploy. Nothing here is built yet. Build test-first, as
+every phase before it.
+
+The security posture is the whole point of this phase, not a detail bolted on at the end.
+ADR-013 refused this feature for three concrete reasons, and each one has to stay refused
+in the implementation:
+
+- [ ] `esb_connections` migration — `family` + `environment` unique, `base_url`,
+      `auth_mechanism`, `credentials`, `is_active`, timestamps. Write the test that
+      asserts the constraint before the migration.
+- [ ] Encrypt credentials at rest with Laravel's `encrypted` cast. Test by reading the
+      raw column back through the query builder and asserting the plaintext is absent —
+      asserting through the model would only prove the cast round-trips.
+- [ ] Make credentials **write-only**. No route, page prop, JSON response, log line, or
+      export returns the value; reads expose a masked presence indicator only. Assert on
+      the rendered Inertia props and by reading the log file back, the way
+      `TokenManagerTest` and `EsbClientTest` already assert redaction.
+- [ ] One resolver, one place — configuration is the bootstrap source and fallback, an
+      active row wins, and nothing writes back into config. A second place applying
+      precedence is how the two sources start disagreeing, which is what ADR-013 warned
+      about.
+- [ ] Make `app:check-production-readiness` evaluate the **effective** connection after
+      precedence, not `config/esb.php` alone. Without this, a database row becomes a way
+      to point a staging install at the production ESB — the one failure mode the check
+      exists to catch. Write this test before the edit routes exist, not after.
+- [ ] Edit routes gated by `esb-connections.manage`, which until now granted nothing
+      beyond `view`. This is what it was reserved for.
+- [ ] **Invert** the existing test asserting that no `esb-connections.update` route
+      exists — it becomes a test that the route exists and rejects a user lacking
+      `esb-connections.manage`. Do not simply delete it; the authorization guarantee is
+      the part worth keeping.
+- [ ] Write an immutable `audit_logs` row per create/update/delete, in the same
+      transaction as the change (ADR-012), recording which field changed and by whom —
+      never the value. A credential must not reach the audit log any more than it reaches
+      the application log.
+- [ ] Inertia page: connection form, masked credential field, confirmation on a change of
+      environment or base URL.
+- [ ] Document the `APP_KEY` re-encryption path **before this ships**. Rotating or losing
+      the key makes every stored credential unrecoverable, and that is a new operational
+      risk this phase introduces. `docs/13-deployment.md` is its home.
+- [ ] Update `docs/10-security.md`: the secrets section permits database storage "unless
+      explicitly required and protected" — record that ADR-018 is that explicit
+      requirement, and add the encrypted-at-rest and write-only items to the checklist.
+- [ ] Note in `docs/13-deployment.md` that a database backup now carries credential
+      material, encrypted, and inherits the application's protection requirements.
+
+**Done when:** an operator with `esb-connections.manage` can add and repoint an ESB
+connection through the UI, no credential is readable anywhere after storage, every change
+is audited, and a non-production install still cannot reach the production ESB.
+
+---
+
+## Phase 9 — Multi-Provider Generalization (deferred — do not start yet)
+
+ADR-016 sets the target architecture: every external system, ESB included, is a
+**provider** integrated through an adapter pair against a canonical model. ADR-017 is
+equally binding: **none of the generic infrastructure below is built until a real second
+provider is contracted.** These items are recorded so the first second-provider
+integration follows the shape from day one, not so anyone starts them now.
+
+**Gate:** a second external system is named and its contract is documented. Until then
+every box here stays unchecked deliberately, and that is the correct state.
+
+Ordered, once the gate opens:
+
+- [ ] Name the second provider and document its contract the way
+      `docs/05-api-integration.md` documents the ESB's — auth, envelope, error catalog,
+      pagination, rate limits. Do not start code before this exists.
+- [ ] Extract `Integrations/Contracts/OutboundAdapter.php` and `InboundAdapter.php`
+      **from the existing ESB client**, not from a guess. ADR-017 is explicit that
+      generalizing the working implementation comes before writing the new provider's
+      adapter.
+- [ ] Introduce `App\Domain\Canonical\...` DTOs for the entities that actually move
+      between the two systems, and only those. `ProductSummary` is the candidate to
+      promote first, since it already exists.
+- [ ] Add the `integration_providers` registry table per `docs/07-database-design.md`.
+      Metadata only — credentials stay in config/environment/secret management, per
+      ADR-013.
+- [ ] Add the `sync_transactions` table per `docs/07-database-design.md`, with the
+      `idempotency_key` unique constraint. This is a business-record-level trace and
+      must stay distinct from `integration_logs`, which remains a per-HTTP-call log.
+- [ ] Add machine-to-machine authentication for providers calling **into** the gateway,
+      separate from user authentication, and write the missing section in
+      `docs/06-authentication-authorization.md`.
+- [ ] Create `routes/api.php` for inbound provider endpoints, kept separate from
+      user-facing web routes, with per-provider credential or signature verification.
+- [ ] Add `SyncOrchestrator` under `app/Services/Sync/`. Orchestration lives in a
+      Service (ADR-007); an adapter must never call another adapter.
+- [ ] Give each provider its own queue so a degraded provider cannot block work destined
+      for another (`docs/02-architecture.md`).
+- [ ] Extend the dashboard and the ESB Connections screen to per-provider health rather
+      than assuming ESB is the only source of activity
+      (`docs/04-functional-requirements.md` §1).
+- [ ] Add per-provider rate limiting and circuit-breaker state, mirroring the per-user
+      ESB rate limit already in place.
+- [ ] Build the replay/dead-letter path for `sync_transactions` rows that need manual
+      intervention.
+
+Every item is built test-first, like the six phases before it.
+
+**Done when:** a second provider is integrated end to end, and the ESB integration fits
+the same contracts without being a special case.
 
 ---
 

@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-09-09
+2026-09-10
 
 ## Current Phase
 
@@ -14,7 +14,7 @@ infrastructure or business decisions — see `TODO.md`.
 ## Current Objective
 
 Prepare the foundation and documentation for an ERP Gateway & Middleware application
-that functions as a multi-provider integration hub (ADR-015, ADR-016). The ERP ESB is
+that functions as a multi-provider integration hub (ADR-016, ADR-017). The ERP ESB is
 the first connected provider and the current implementation focus; the architecture is
 recorded so a second provider, when contracted, is integrated as an adapter against the
 canonical model rather than bolted onto ESB-specific code.
@@ -51,6 +51,12 @@ canonical model rather than bolted onto ESB-specific code.
 ## Completed
 
 Adopted mandatory TDD workflow and base-class conventions (ADR-015).
+ADR-018 (2026-09-10) supersedes ADR-013: ESB connections become editable records with
+credentials encrypted at rest, write-only after storage, and every change audited. The
+table and the edit path are specified but **not yet built** — see `TODO.md` Phase 8.
+Corrected the ADR cross-references in the 2026-09-10 documentation update, which cited
+ADR-015/ADR-016 for the multi-provider concept; the correct numbers are ADR-016 and
+ADR-017.
 Synced docs/04, docs/02, docs/08, docs/11 with ADR-013 and actual resources/js layout.
 
 - Architecture direction agreed
@@ -102,7 +108,7 @@ Synced docs/04, docs/02, docs/08, docs/11 with ADR-013 and actual resources/js l
   wired into `composer ci:check`; `php artisan integration-logs:prune` with a
   disabled-safe retention window, scheduled daily; `docs/13-deployment.md` written
   concretely
-- 268 tests passing
+- 272 tests passing (949 assertions, verified 2026-09-10)
 
 ## In Progress
 
@@ -208,8 +214,12 @@ Still open:
 - Never send an undocumented header to the ESB.
 - Never pass the ESB's absolute prev/next URLs to the browser.
 - Reading ERP data through the gateway requires `esb.invoke`, not a view permission.
-- ESB connections and the endpoint catalog are read-only; both mirror a source of truth
-  that lives outside the database.
+- The endpoint catalog is read-only; it mirrors `docs/esb/`, which lives outside the
+  database.
+- ESB connections are read-only **as shipped today**. ADR-018 supersedes ADR-013 and
+  makes them editable; until that is built, the screen has no edit route and there is no
+  `esb_connections` table. When it is built, credentials are encrypted at rest and
+  write-only — never returned after storage, never logged.
 - `/health` must never call the ESB.
 - A zero retention window keeps logs; it must never be read as "delete everything".
 - Never point a non-production install at the production ESB — the readiness check fails

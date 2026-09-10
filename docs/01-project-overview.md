@@ -97,5 +97,5 @@ Destination Provider API
 ```
 
 See `docs/02-architecture.md` for how the integration layer is structured to support
-more than one provider, and `DECISIONS.md` (ADR-015, ADR-016) for why this shape was
+more than one provider, and `DECISIONS.md` (ADR-016, ADR-017) for why this shape was
 chosen over integrating each new system directly against ESB-specific code.

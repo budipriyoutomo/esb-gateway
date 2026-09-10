@@ -26,13 +26,13 @@ ERP Gateway is a single Laravel application that provides a secure web interface
 middleware/integration-hub layer between internal applications/users and multiple
 external systems. The ERP ESB (Enterprise Service Bus) REST APIs are the first and
 currently only connected system, but the project's foundational concept — recorded in
-`docs/01-project-overview.md` and ADR-015/ADR-016 — is a gateway that can connect
+`docs/01-project-overview.md` and ADR-016/ADR-017 — is a gateway that can connect
 additional external systems (as data sources, destinations, or both) without rewriting
 ESB-specific code. The application has its own database and its own
 authentication/authorization; it is not a thin proxy.
 
 Do not build speculative infrastructure for a second provider before one is actually
-contracted (ADR-015). What this concept changes today is naming and structure: new
+contracted (ADR-017). What this concept changes today is naming and structure: new
 integration code should assume "a provider" rather than hard-coding "the ESB" where the
 distinction matters (see Mandatory Architecture Rules below).
 
