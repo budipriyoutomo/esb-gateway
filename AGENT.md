@@ -38,6 +38,26 @@ The application is intentionally a single repository and deployment unit:
 - Redis
 - ERP ESB REST APIs (external)
 
+## Engineering Standard
+
+Work this codebase the way a senior full-stack Laravel + React engineer would —
+whether the work is done by a human or an AI agent. Concretely:
+
+- Understand the business reason for a change before writing code, not just the
+  literal request. If the reason is unclear, ask or mark it `TBD` (see "Handling
+  Ambiguity") rather than guessing.
+- Favor boring, explicit, testable code over clever code. Optimize for the next
+  person — human or agent — who reads this without any memory of this conversation.
+- Think about failure modes, not just the happy path: timeouts, duplicate
+  submissions, concurrent requests, malformed upstream responses, a user with the
+  wrong permission.
+- Leave the codebase slightly more consistent than you found it — but never as a
+  side-effect of an unrelated task (see "Git Rules": no mixing refactors with
+  feature work).
+- A task is not complete because it compiles and the happy-path test passes. It is
+  complete when a senior reviewer would approve the diff without asking "but what
+  about X?" for an X that was foreseeable.
+
 ## Mandatory Architecture Rules
 
 - React lives inside the Laravel repository under `resources/js`.
@@ -104,6 +124,43 @@ The application is intentionally a single repository and deployment unit:
 - Log metadata needed for troubleshooting while redacting secrets and sensitive data.
 - External API changes must be reflected in documentation and tests.
 
+## Base Class Conventions
+
+Shared base classes remove *proven* duplication — they are not pre-built for
+hypothetical future use. This still follows `docs/02-architecture.md`: "do not
+create empty abstraction layers 'just in case.'" A base class earns its place when
+either (a) at least two real consumers already share the behavior, or (b) the
+behavior is a cross-cutting concern every consumer of that type must get right
+(authorization, transaction safety, response shape, redaction).
+
+Default expectation for new work — check whether one of these already fits before
+writing a one-off class:
+
+- `App\Http\Controllers\Controller` — base for all controllers. Add a shared helper
+  here (e.g. a standard Inertia-props pagination shape) once two controllers have
+  hand-rolled the same shape; retrofit the first when the second is built.
+- `App\Http\Requests\BaseFormRequest` — shared query-to-DTO helpers
+  (`validatedString()`, `validatedInt()`, etc.), currently duplicated in
+  `ListProductsRequest`. Extract this the moment a second Form Request needs the
+  same helpers — the duplication is already real, not speculative.
+- `App\Services\BaseService` / the Service-Action pattern from ADR-007 — a thin base
+  providing a DB-transaction helper and a consistent logging hook, for business
+  operations that coordinate more than one model or wrap an ESB write. **Do not**
+  wrap a pure pass-through read behind a Service just to extend this base —
+  `ProductClient` deliberately has none, and that reasoning still holds. Extend the
+  base only when the operation has an actual business rule to enforce.
+- `App\Integrations\ESB\Clients\EsbClient` — already the shared transport for every
+  ESB adapter (ADR-006). New adapters build on this; they do not reimplement
+  retry/auth/logging.
+- React: shared hooks in `resources/js/hooks`, shared UI in `resources/js/components`
+  (`docs/08-frontend-guidelines.md`). Extract a hook/component once a second page
+  needs the same behavior, not preemptively.
+
+When a new base class changes how future features are structured project-wide, it
+is ADR-worthy — record it in `DECISIONS.md`. A small extraction like
+`BaseFormRequest` is a normal refactor and only needs a note in
+`docs/project-state.md`.
+
 ## Security Rules
 
 - Follow least privilege.
@@ -115,10 +172,33 @@ The application is intentionally a single repository and deployment unit:
   intended and reviewed.
 - Apply rate limiting where appropriate.
 - Treat ESB responses as untrusted external data.
+## Testing Rules — Test-Driven Development (Mandatory)
 
-## Testing Rules
+This project is built test-first (`TODO.md` — "Built test-first throughout").
+Continue that discipline for every new class, method, or bug fix:
 
-Every meaningful feature should include appropriate automated tests:
+1. **Red** — write a failing test that expresses the requirement or reproduces the
+   bug, before writing the implementation. For a bug fix, the failing test must
+   reproduce the bug against the current code first.
+2. **Green** — write the smallest implementation that makes the test pass. Resist
+   adding behavior the test doesn't demand yet.
+3. **Refactor** — clean up implementation and test alike once green, without
+   changing behavior. Re-run tests after every refactor step.
+
+Rules:
+
+- Do not write production code for which no test failed first. If a test genuinely
+  cannot precede the implementation (rare — e.g. pure visual layout), say so
+  explicitly in the task plan instead of silently skipping TDD.
+- A diff that adds behavior with no corresponding new or updated test is incomplete,
+  full stop.
+- Follow the test pyramid already established: Unit for isolated logic (mappers,
+  classifiers, DTOs), Feature for HTTP/Inertia behavior, ESB integration tests
+  against `Http::fake()` — see `docs/12-testing.md`.
+- A regression test for a fixed bug stays in the suite permanently, even after the
+  fix — do not delete it once green.
+
+Test types:
 
 - Unit tests for isolated business logic.
 - Feature tests for Laravel application behavior.
@@ -128,10 +208,12 @@ Every meaningful feature should include appropriate automated tests:
 
 Before considering a task complete:
 
-1. Run relevant tests.
-2. Run formatting/linting checks.
-3. Inspect the diff.
-4. Update documentation/state if architecture or project progress changed.
+1. Confirm the test existed and failed before the implementation (state this in the
+   task plan/handoff, don't just assert it).
+2. Run relevant tests.
+3. Run formatting/linting checks.
+4. Inspect the diff.
+5. Update documentation/state if architecture or project progress changed.
 
 ## Git Rules
 

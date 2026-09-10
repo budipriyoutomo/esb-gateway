@@ -315,3 +315,42 @@ diagnosing it to check firewalls instead of ESB user permissions.
 - Probe coverage is partial and honest about it.
 - The Core probe requires the gateway credential to hold product-read access on the ESB.
   A probe failure there means one of two things, and the reported outcome says which.
+
+
+---
+
+## ADR-015 — Base Classes on Proven Duplication, Not Speculatively
+
+**Status:** Accepted
+
+**Context**
+The project needs a consistent default so both AI agents and human developers reach for
+the same shared building blocks (controller, request, service/action bases) instead of
+reinventing them per feature — while `docs/02-architecture.md` already establishes that
+empty, speculative abstraction layers are worse than none. `ProductClient` is the
+existing example: it deliberately has no Service wrapper because the read it performs
+enforces no business rule of its own.
+
+**Decision**
+Base classes (`BaseFormRequest`, a Service/Action base, controller helpers) are
+introduced when either a second real consumer already shares the behavior, or the
+behavior is a cross-cutting concern every consumer of that type must get right
+(authorization, transaction safety, response shape, redaction). They are not
+pre-built ahead of a second consumer.
+
+**Reason**
+- Matches the senior-engineer instinct: abstract from real duplication, not from
+  anticipated duplication that may never arrive.
+- Keeps `ProductClient`'s existing reasoning intact instead of forcing a retrofit.
+- Still gives agents and developers a consistent place to put shared logic once it
+  is warranted, rather than leaving every future feature to decide from scratch.
+
+**Consequences**
+- Introducing `App\Http\Requests\BaseFormRequest` is authorized now, since
+  `ListProductsRequest`'s helpers are the first of at least two known upcoming
+  consumers (Purchase Request, etc.).
+- A Service/Action base is deferred until the first write adapter (e.g. Purchase
+  Request) is built — that is the first operation with an actual business rule to
+  enforce.
+- Do not treat "the docs told me to use a base class" as license to wrap a
+  pass-through read or a single-use controller action in an unnecessary layer.

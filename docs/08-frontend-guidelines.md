@@ -8,13 +8,17 @@ React + TypeScript inside Laravel, delivered through Inertia.js.
 
 ```
 resources/js/
-  Components/
-  Layouts/
-  Pages/
-  Hooks/
-  Lib/
-  Types/
+  components/
+  layouts/
+  pages/
+  hooks/
+  lib/
+  types/
 ```
+Lowercase — matches the Laravel/Inertia React starter kit this project scaffolded from
+and the actual `resources/js` tree. Do not create capitalized duplicates (`Pages/`,
+`Components/`, etc.); Linux filesystems are case-sensitive, and a duplicate folder would
+silently diverge from the real one instead of erroring.
 
 ## Page Rules
 

@@ -14,8 +14,14 @@ Propagate it to:
 
 - application logs;
 - integration logs;
-- ESB request headers when supported;
 - queue jobs.
+
+**Do not send it to the ESB as a request header.** The vendor documents no
+correlation/request-ID header, and `EsbClient` deliberately sends none — an undocumented
+header is guesswork (`AGENT.md`, "Do not invent ESB contracts"). Whether the ESB accepts
+a caller-supplied ID is an open question tracked in `TODO.md` ("Blocked — needs answers
+from the ESB team"). Revisit this section only once that is confirmed by the ESB team,
+and record the decision as an ADR in `DECISIONS.md` if it changes the request shape.
 
 ## Integration Log Fields
 

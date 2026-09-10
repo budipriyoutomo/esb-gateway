@@ -17,15 +17,30 @@ Show operational summaries such as:
 
 ### 2. ESB Connections
 
-Capabilities:
+**Superseded by ADR-013 — this module is read-only plus a probe action.**
 
-- configure logical ESB connection settings;
-- test connectivity;
-- display health/status;
-- protect secrets;
-- maintain audit trail.
+There is no `esb_connections` table and no edit route. ESB base URLs and credentials
+live in `config/esb.php` and the environment (ADR-010, ADR-013); changing one is a
+deployment action, not a form submission.
 
-Secret values must never be displayed in plaintext after storage.
+Implemented capabilities:
+
+- display which base URL families are configured, for the current environment;
+- probe connectivity via a documented, read-only, cheap request per family (ADR-014),
+  where one exists;
+- report "cannot be probed" honestly for families with no documented health/read
+  endpoint, rather than showing a fake status.
+
+Explicitly out of scope:
+
+- editing a base URL or credential through the UI;
+- storing credentials in the database, in any form;
+- a dedicated "esb_connections" audit trail — there is nothing to audit because there
+  is nothing to change here. The probe action itself is covered by the existing
+  permission check and `integration_logs`, not a separate audit trail.
+
+See `docs/07-database-design.md` (`esb_connections` — superseded) and `DECISIONS.md`
+(ADR-013, ADR-014).
 
 ### 3. API/Endpoint Catalog
 

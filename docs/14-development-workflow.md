@@ -17,11 +17,13 @@ For non-trivial work, produce a concise plan before implementation:
 - integration changes;
 - tests;
 - documentation.
-
 ## Implementation
 
+- Write the failing test first (see `AGENT.md` — Testing Rules / TDD). Confirm it
+  fails for the expected reason before writing implementation code.
 - Prefer small changes.
-- Reuse established patterns.
+- Reuse established patterns — check `AGENT.md` "Base Class Conventions" before
+  writing a one-off class.
 - Avoid unrelated refactoring.
 - Keep architecture constraints intact.
 

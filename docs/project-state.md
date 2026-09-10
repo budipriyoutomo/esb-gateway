@@ -43,6 +43,9 @@ integrating with the ERP ESB.
 
 ## Completed
 
+Adopted mandatory TDD workflow and base-class conventions (ADR-015).
+Synced docs/04, docs/02, docs/08, docs/11 with ADR-013 and actual resources/js layout.
+
 - Architecture direction agreed
 - Agent-agnostic documentation structure defined
 - Initial architectural decisions recorded
