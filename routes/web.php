@@ -40,12 +40,21 @@ Route::middleware('auth')->group(function () {
     Route::get('endpoints', [EndpointCatalogController::class, 'index'])
         ->name('endpoints.index');
 
-    // Read-only. There is deliberately no update route: base URLs and
-    // credentials are configuration (ADR-010, ADR-013), so changing one is a
-    // deployment action rather than a form submission. The probe action is
-    // rate limited with the other ESB-reaching routes above.
+    // Editable under esb-connections.manage (ADR-018, superseding ADR-013): an
+    // ESB environment has to be repointable without a deploy. Credentials are
+    // encrypted at rest and write-only, every change is audited, and the
+    // production guard in app:check-production-readiness runs against the
+    // effective connection so a row here is not a way around it. The probe
+    // action is rate limited with the other ESB-reaching routes above.
     Route::get('esb-connections', [EsbConnectionController::class, 'index'])
         ->name('esb-connections.index');
+
+    Route::put('esb-connections/{family}', [EsbConnectionController::class, 'update'])
+        ->name('esb-connections.update');
+
+    // Reverting drops the row and hands the family back to config/esb.php.
+    Route::delete('esb-connections/{family}', [EsbConnectionController::class, 'destroy'])
+        ->name('esb-connections.destroy');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
 

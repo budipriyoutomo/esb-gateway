@@ -2,6 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Integrations\ESB\EsbConnectionResolver;
+use App\Integrations\ESB\EsbFamily;
+use App\Integrations\ESB\Exceptions\EsbConfigurationException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -43,6 +46,7 @@ class CheckProductionReadinessCommand extends Command
         $this->checkApplicationKey();
         $this->checkEsbCredentials($isProduction);
         $this->checkEsbEnvironmentMatchesApp($isProduction);
+        $this->checkEffectiveConnections($isProduction);
 
         foreach ($this->warnings as $warning) {
             $this->warn('WARN  '.$warning);
@@ -150,6 +154,63 @@ class CheckProductionReadinessCommand extends Command
             'ESB_AUTH_MECHANISM is "%s". Expected "static_token" or "login".',
             is_scalar($mechanism) ? (string) $mechanism : gettype($mechanism),
         );
+    }
+
+    /**
+     * The environment selector is not the only way to reach production.
+     *
+     * ADR-018 made connections editable, and an ESB_BASE_URL_* override was
+     * always there. Either can point a staging install at a production host
+     * while ESB_ENV still reads "staging_int", so the check that matters most
+     * has to run against the effective base URL, not the selector alone.
+     */
+    private function checkEffectiveConnections(bool $isProduction): void
+    {
+        if ($isProduction) {
+            return;
+        }
+
+        $resolver = app(EsbConnectionResolver::class);
+
+        foreach (EsbFamily::cases() as $family) {
+            $productionUrl = $this->config("esb.families.{$family->value}.production");
+
+            if ($productionUrl === null) {
+                continue;
+            }
+
+            try {
+                $effective = $resolver->resolve($family);
+            } catch (EsbConfigurationException) {
+                // Nothing resolves for this family here, so nothing can reach
+                // production through it.
+                continue;
+            }
+
+            if (rtrim($effective, '/') !== rtrim($productionUrl, '/')) {
+                continue;
+            }
+
+            $this->problems[] = sprintf(
+                'APP_ENV is "%s" but the effective "%s" connection is the production ESB (%s), '
+                .'set by %s. This install would write to real ERP data.',
+                (string) config('app.env'),
+                $family->value,
+                $effective,
+                match ($resolver->source($family)) {
+                    'database' => 'an esb_connections row',
+                    'override' => 'an ESB_BASE_URL_* override',
+                    default => 'config/esb.php',
+                },
+            );
+        }
+    }
+
+    private function config(string $key): ?string
+    {
+        $value = config($key);
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     private function checkEsbEnvironmentMatchesApp(bool $isProduction): void

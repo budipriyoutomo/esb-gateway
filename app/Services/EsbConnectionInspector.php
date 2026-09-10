@@ -2,24 +2,26 @@
 
 namespace App\Services;
 
-use App\Integrations\ESB\BaseUrlResolver;
 use App\Integrations\ESB\Clients\EsbClient;
+use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbFamily;
 use App\Integrations\ESB\Exceptions\EsbConfigurationException;
 use App\Integrations\ESB\Exceptions\EsbException;
 use Illuminate\Contracts\Config\Repository as Config;
 
 /**
- * Reports what ESB connectivity is configured, and probes it on request.
+ * Reports which ESB each family currently reaches, and probes it on request.
  *
- * ESB connections are configuration, not database records (ADR-013). This
- * reads config/esb.php and never exposes a credential.
+ * A connection can now come from a database row, an environment override, or
+ * config/esb.php (ADR-018), so every row says which of the three won. A
+ * credential is never exposed either way: the most this reports is whether one
+ * is stored.
  */
 class EsbConnectionInspector
 {
     public function __construct(
         private readonly Config $config,
-        private readonly BaseUrlResolver $baseUrlResolver,
+        private readonly EsbConnectionResolver $resolver,
         private readonly EsbClient $client,
     ) {}
 
@@ -31,6 +33,8 @@ class EsbConnectionInspector
      *     baseUrl: string|null,
      *     configured: bool,
      *     probeAvailable: bool,
+     *     source: string,
+     *     hasCredential: bool,
      *     note: string|null
      * }>
      */
@@ -43,7 +47,7 @@ class EsbConnectionInspector
             $note = null;
 
             try {
-                $baseUrl = $this->baseUrlResolver->resolve($family);
+                $baseUrl = $this->resolver->resolve($family);
             } catch (EsbConfigurationException) {
                 // The vendor documents no host for this family in the current
                 // environment. Saying so beats showing a plausible-looking URL
@@ -58,6 +62,11 @@ class EsbConnectionInspector
                 'baseUrl' => $baseUrl,
                 'configured' => $baseUrl !== null,
                 'probeAvailable' => $probe !== null,
+                // Which layer won. An operator who sets an override and sees
+                // no effect needs to be able to find out why without reading
+                // the source.
+                'source' => $this->resolver->source($family),
+                'hasCredential' => $this->resolver->connectionFor($family)?->hasCredential() ?? false,
                 'note' => $note ?? ($probe === null
                     ? 'The vendor documents no health endpoint for this family, so connectivity cannot be probed.'
                     : null),

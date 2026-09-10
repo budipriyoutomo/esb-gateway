@@ -12,4 +12,13 @@ namespace App\Audit;
 enum AuditAction: string
 {
     case RoleAssigned = 'user.role.assigned';
+
+    /**
+     * An ESB connection was repointed or its credential replaced (ADR-018).
+     * The metadata names which fields changed; it never carries a value.
+     */
+    case EsbConnectionUpdated = 'esb-connection.updated';
+
+    /** An ESB connection override was dropped, handing the family back to configuration. */
+    case EsbConnectionReverted = 'esb-connection.reverted';
 }

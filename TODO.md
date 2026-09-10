@@ -384,58 +384,63 @@ Met.
 
 ---
 
-## Phase 8 — Editable ESB Connections (ADR-018)
+## Phase 8 — Editable ESB Connections (ADR-018) — **done 2026-09-10**
 
-ADR-018 supersedes ADR-013: connections become editable records so an ESB environment can
-be added or repointed without a deploy. Nothing here is built yet. Build test-first, as
-every phase before it.
+ADR-018 supersedes ADR-013: connections are editable records, so an ESB environment can
+be added or repointed without a deploy. Built test-first, as every phase before it.
 
 The security posture is the whole point of this phase, not a detail bolted on at the end.
-ADR-013 refused this feature for three concrete reasons, and each one has to stay refused
-in the implementation:
+ADR-013 refused this feature for three concrete reasons, and each one stayed refused in
+the implementation.
 
-- [ ] `esb_connections` migration — `family` + `environment` unique, `base_url`,
-      `auth_mechanism`, `credentials`, `is_active`, timestamps. Write the test that
-      asserts the constraint before the migration.
-- [ ] Encrypt credentials at rest with Laravel's `encrypted` cast. Test by reading the
-      raw column back through the query builder and asserting the plaintext is absent —
-      asserting through the model would only prove the cast round-trips.
-- [ ] Make credentials **write-only**. No route, page prop, JSON response, log line, or
-      export returns the value; reads expose a masked presence indicator only. Assert on
-      the rendered Inertia props and by reading the log file back, the way
-      `TokenManagerTest` and `EsbClientTest` already assert redaction.
-- [ ] One resolver, one place — configuration is the bootstrap source and fallback, an
-      active row wins, and nothing writes back into config. A second place applying
-      precedence is how the two sources start disagreeing, which is what ADR-013 warned
-      about.
-- [ ] Make `app:check-production-readiness` evaluate the **effective** connection after
-      precedence, not `config/esb.php` alone. Without this, a database row becomes a way
-      to point a staging install at the production ESB — the one failure mode the check
-      exists to catch. Write this test before the edit routes exist, not after.
-- [ ] Edit routes gated by `esb-connections.manage`, which until now granted nothing
-      beyond `view`. This is what it was reserved for.
-- [ ] **Invert** the existing test asserting that no `esb-connections.update` route
-      exists — it becomes a test that the route exists and rejects a user lacking
-      `esb-connections.manage`. Do not simply delete it; the authorization guarantee is
-      the part worth keeping.
-- [ ] Write an immutable `audit_logs` row per create/update/delete, in the same
-      transaction as the change (ADR-012), recording which field changed and by whom —
-      never the value. A credential must not reach the audit log any more than it reaches
-      the application log.
-- [ ] Inertia page: connection form, masked credential field, confirmation on a change of
-      environment or base URL.
-- [ ] Document the `APP_KEY` re-encryption path **before this ships**. Rotating or losing
-      the key makes every stored credential unrecoverable, and that is a new operational
-      risk this phase introduces. `docs/13-deployment.md` is its home.
-- [ ] Update `docs/10-security.md`: the secrets section permits database storage "unless
-      explicitly required and protected" — record that ADR-018 is that explicit
-      requirement, and add the encrypted-at-rest and write-only items to the checklist.
-- [ ] Note in `docs/13-deployment.md` that a database backup now carries credential
+- [x] `esb_connections` migration — `family` + `environment` unique, `base_url`,
+      `auth_mechanism`, `credentials`, `is_active`, timestamps. Verified against the
+      local PostgreSQL 16 as well as the SQLite suite.
+- [x] Credentials encrypted at rest with Laravel's `encrypted:array` cast. The test reads
+      the raw column back through the query builder: asserting through the model would
+      only prove the cast round-trips, which is true of a plaintext column too.
+- [x] Credentials are **write-only**. `credentials` is in the model's `$hidden`, so no
+      array, JSON, log line, job payload, or Inertia prop can carry one by accident.
+      Asserted on the rendered props, on `toJson()`, and on the audit row.
+- [x] One resolver, one place — `EsbConnectionResolver` applies precedence: active row,
+      then `ESB_BASE_URL_*` override, then the family table. Nothing writes back into
+      config. A row whose environment is not the configured one is a record, not a route,
+      and is ignored.
+- [x] `app:check-production-readiness` evaluates the **effective** base URL per family.
+      Written before the edit routes existed. Both levers are covered: a database row and
+      an environment override pointing a non-production install at the production ESB
+      each fail the check, and an inactive row does not.
+- [x] Edit and revert routes gated by `esb-connections.manage`, which until now granted
+      nothing beyond `view`. This is what it was reserved for.
+- [x] **Inverted** the old "no update route exists" test into
+      `editing_a_connection_requires_the_manage_permission`. The route is gone as a
+      guarantee; the authorization it was really protecting is not.
+- [x] An immutable `audit_logs` row per update and revert, written in the same
+      transaction as the change (ADR-012), naming which fields moved and never their
+      values.
+- [x] Inertia page: per-family edit dialog, masked credential fields, a "revert to
+      configuration" action, and a Source column naming which layer won.
+- [x] `APP_KEY` re-encryption path documented in `docs/13-deployment.md` before this
+      shipped, along with the fact that losing the key loses every stored credential.
+- [x] `docs/10-security.md` records ADR-018 as the "explicitly required and protected"
+      exception its Secrets section allows, with the four protections that make it one.
+- [x] `docs/13-deployment.md` notes that a database backup now carries credential
       material, encrypted, and inherits the application's protection requirements.
 
 **Done when:** an operator with `esb-connections.manage` can add and repoint an ESB
 connection through the UI, no credential is readable anywhere after storage, every change
-is audited, and a non-production install still cannot reach the production ESB.
+is audited, and a non-production install still cannot reach the production ESB. — Met.
+302 tests passing, 1027 assertions.
+
+Still open from this phase:
+
+- [ ] Rehearse an `APP_KEY` rotation against real infrastructure. The path is written;
+      it has never been walked.
+- [ ] Decide a rotation and retention policy for stored ESB credentials (ADR-018 leaves
+      this open).
+- [ ] Revisit storage if a secret manager is ever provisioned — references to managed
+      keys would supersede encryption-in-column, without changing that connections are
+      editable.
 
 ---
 

@@ -2,8 +2,8 @@
 
 namespace App\Integrations\ESB\Auth;
 
-use App\Integrations\ESB\BaseUrlResolver;
 use App\Integrations\ESB\ErrorClassifier;
+use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbContext;
 use App\Integrations\ESB\EsbFamily;
 use App\Integrations\ESB\Exceptions\EsbAuthenticationException;
@@ -58,7 +58,7 @@ class TokenManager
 
     public function __construct(
         private readonly Config $config,
-        private readonly BaseUrlResolver $baseUrlResolver,
+        private readonly EsbConnectionResolver $connectionResolver,
         private readonly ErrorClassifier $errorClassifier,
     ) {}
 
@@ -111,14 +111,15 @@ class TokenManager
 
     private function mechanism(): string
     {
-        $mechanism = $this->config->get('esb.auth.mechanism');
-
-        return is_string($mechanism) ? $mechanism : '';
+        return $this->connectionResolver->auth()['mechanism'];
     }
 
     private function staticToken(): string
     {
-        $token = $this->config->get('esb.auth.static_token');
+        // Credentials come from the effective connection, which may be a
+        // runtime row rather than the environment (ADR-018). Resolving them in
+        // one place is what keeps the two from disagreeing.
+        $token = $this->connectionResolver->auth()['static_token'];
 
         if (! is_string($token) || trim($token) === '') {
             throw new EsbConfigurationException(
@@ -227,8 +228,8 @@ class TokenManager
             '/auth/login',
             operation: 'auth.login',
             body: [
-                'username' => (string) $this->config->get('esb.auth.username'),
-                'password' => (string) $this->config->get('esb.auth.password'),
+                'username' => (string) $this->connectionResolver->auth()['username'],
+                'password' => (string) $this->connectionResolver->auth()['password'],
             ],
         );
 
@@ -278,7 +279,7 @@ class TokenManager
             path: $path,
         );
 
-        $url = $this->baseUrlResolver->resolve($this->authFamily()).$path;
+        $url = $this->connectionResolver->resolve($this->authFamily()).$path;
 
         try {
             $response = Http::withHeaders($headers)
@@ -333,8 +334,9 @@ class TokenManager
 
     private function assertCredentialsConfigured(): void
     {
-        $username = $this->config->get('esb.auth.username');
-        $password = $this->config->get('esb.auth.password');
+        $auth = $this->connectionResolver->auth();
+        $username = $auth['username'];
+        $password = $auth['password'];
 
         if (! is_string($username) || trim($username) === '' || ! is_string($password) || $password === '') {
             throw new EsbConfigurationException(

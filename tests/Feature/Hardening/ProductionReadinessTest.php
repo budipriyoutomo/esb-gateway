@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Hardening;
 
+use App\Models\EsbConnection;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -14,6 +16,8 @@ use Tests\TestCase;
  */
 class ProductionReadinessTest extends TestCase
 {
+    use RefreshDatabase;
+
     private function configureSafeProduction(): void
     {
         config()->set('app.env', 'production');
@@ -121,6 +125,67 @@ class ProductionReadinessTest extends TestCase
         $this->artisan('app:check-production-readiness')
             ->expectsOutputToContain('staging_int')
             ->assertSuccessful();
+    }
+
+    #[Test]
+    public function a_database_row_pointing_at_the_production_esb_fails_the_check(): void
+    {
+        $this->configureSafeProduction();
+        config()->set('app.env', 'staging');
+        config()->set('esb.environment', 'staging_int');
+
+        EsbConnection::query()->create([
+            'family' => 'core',
+            'environment' => 'staging_int',
+            'base_url' => 'https://services.esb.co.id/core',
+            'auth_mechanism' => 'static_token',
+            'credentials' => null,
+            'is_active' => true,
+        ]);
+
+        // ADR-018 makes connections editable, so the check has to run against
+        // the effective connection rather than config/esb.php alone. Otherwise
+        // a database row becomes a way around the one check that exists to
+        // stop a staging install writing to real ERP data.
+        $this->artisan('app:check-production-readiness')
+            ->expectsOutputToContain('production ESB')
+            ->assertFailed();
+    }
+
+    #[Test]
+    public function an_inactive_row_pointing_at_production_does_not_fail_the_check(): void
+    {
+        $this->configureSafeProduction();
+        config()->set('app.env', 'staging');
+        config()->set('esb.environment', 'staging_int');
+
+        EsbConnection::query()->create([
+            'family' => 'core',
+            'environment' => 'staging_int',
+            'base_url' => 'https://services.esb.co.id/core',
+            'auth_mechanism' => 'static_token',
+            'credentials' => null,
+            'is_active' => false,
+        ]);
+
+        // An inactive row is a record, not a route. Failing on it would train
+        // people to ignore the check.
+        $this->artisan('app:check-production-readiness')->assertSuccessful();
+    }
+
+    #[Test]
+    public function an_env_override_pointing_at_production_fails_the_check(): void
+    {
+        $this->configureSafeProduction();
+        config()->set('app.env', 'staging');
+        config()->set('esb.environment', 'staging_int');
+        config()->set('esb.overrides.core', 'https://services.esb.co.id/core');
+
+        // Same hole, different lever. The override is checked for the same
+        // reason the database row is.
+        $this->artisan('app:check-production-readiness')
+            ->expectsOutputToContain('production ESB')
+            ->assertFailed();
     }
 
     #[Test]

@@ -21,7 +21,7 @@ keep granting access. A user holds exactly one role.
 
 ### esb_connections
 
-**Specified by ADR-018 — not yet implemented.** ADR-013 previously rejected this table;
+**Implemented** (ADR-018). ADR-013 previously rejected this table;
 ADR-018 supersedes it, because the business needs ESB environments manageable at runtime
 without a deploy — the exact condition ADR-013 named for revisiting itself.
 

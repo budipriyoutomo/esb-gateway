@@ -136,6 +136,34 @@ Never commit a production `.env`.
   `db:wipe`, and similar are blocked there.
 - Monitor long-running migrations; `integration_logs` and `integration_endpoints` are the
   tables that will grow.
+- **A backup now carries ESB credential material**, encrypted (ADR-018). It inherits the
+  same handling requirements as the application's own secrets: restricted access,
+  encrypted transport and storage, and no copies on developer machines.
+
+### `APP_KEY` and stored ESB credentials
+
+`esb_connections.credentials` is encrypted with `APP_KEY`. Two consequences follow, and
+both are operational rather than theoretical:
+
+- **Losing `APP_KEY` loses every stored ESB credential.** They cannot be recovered from a
+  backup of the database alone. Back up the key with the same care as the database, and
+  separately from it.
+- **Rotating `APP_KEY` requires re-encrypting first.** The rotation sequence is:
+
+  1. put the application in maintenance mode, so nothing writes a credential mid-rotation;
+  2. with the **old** key still active, read every `esb_connections` row and hold its
+     decrypted credentials;
+  3. set the new key as `APP_KEY`, keeping the old one in `APP_PREVIOUS_KEYS` so existing
+     sessions and cookies still decrypt;
+  4. re-save each row, which re-encrypts it under the new key;
+  5. run `php artisan app:check-production-readiness`, then take the application out of
+     maintenance mode;
+  6. run one ESB probe per family from the connections screen before removing the old key
+     from `APP_PREVIOUS_KEYS`.
+
+  Skipping step 2 does not fail loudly. The rows stay readable as ciphertext and only
+  fail when something tries to decrypt them, which is the next ESB call — in other words,
+  in production, under load, rather than during the rotation.
 
 ## Health checks
 

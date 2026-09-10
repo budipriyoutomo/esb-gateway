@@ -16,11 +16,11 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * ESB connections are configuration, not database records (ADR-013).
+ * The ESB connections screen: what is configured, and probing it.
  *
- * This screen shows what is configured and lets an operator probe it. It never
- * exposes a credential, and it never offers to edit one -- secrets belong in
- * environment/secret management, not in a table
+ * Editing is covered by EsbConnectionManagementTest (ADR-018). What this file
+ * holds is the part that did not change when connections became editable: the
+ * screen reports configuration honestly, and never exposes a credential
  * (docs/10-security.md).
  */
 class EsbConnectionTest extends TestCase
@@ -106,15 +106,19 @@ class EsbConnectionTest extends TestCase
     }
 
     #[Test]
-    public function it_offers_no_way_to_edit_a_connection(): void
+    public function editing_a_connection_requires_the_manage_permission(): void
     {
-        // Deliberate: there is no update route. Base URLs and credentials are
-        // configuration (ADR-010, ADR-013), so changing one is a deployment
-        // action, not a form submission.
-        $this->assertFalse(
-            app('router')->has('esb-connections.update'),
-            'ESB connections are configuration and must not be editable through the UI.',
-        );
+        // This test used to assert that no update route existed at all
+        // (ADR-013). ADR-018 supersedes that, but the guarantee the old test
+        // was really protecting -- that a viewer cannot repoint the gateway --
+        // is kept here rather than deleted along with it.
+        $this->actingAs($this->userWithRole(Role::Viewer))
+            ->put(route('esb-connections.update', ['family' => 'core']), [
+                'base_url' => 'https://esb.example.test/core',
+                'auth_mechanism' => 'static_token',
+                'is_active' => true,
+            ])
+            ->assertForbidden();
     }
 
     // ------------------------------------------------------------ base URLs

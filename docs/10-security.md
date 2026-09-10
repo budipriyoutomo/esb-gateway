@@ -44,6 +44,29 @@ Secrets belong in environment/secret management infrastructure, never:
 - logs;
 - screenshots or documentation examples.
 
+### The one explicit exception: stored ESB connection credentials
+
+ADR-018 is the "explicitly required and protected" case above. ESB connections are
+editable at runtime, so a credential can be stored in `esb_connections`. The protection
+that makes this acceptable is not optional, and all of it is asserted by tests:
+
+- **Encrypted at rest.** `EsbConnection` casts `credentials` with Laravel's
+  `encrypted:array`, keyed by `APP_KEY`, which stays in environment/secret management.
+  The test reads the raw column through the query builder rather than the model, because
+  asserting through the model would pass against a plaintext column too.
+- **Write-only.** `credentials` is in the model's `$hidden`, so no array, JSON, log line,
+  job payload, or Inertia prop can carry one by accident. The screen shows whether a
+  credential is stored, never what it is.
+- **Audited.** Every change writes an immutable audit row naming which fields moved, and
+  never their values.
+- **Not a way around the environment guard.**
+  `php artisan app:check-production-readiness` resolves the *effective* base URL per
+  family, so a database row or an `ESB_BASE_URL_*` override pointing a non-production
+  install at the production ESB fails the check.
+
+Consequence to plan for: a database backup now carries credential material, encrypted,
+and `APP_KEY` becomes a data-loss risk. See `docs/13-deployment.md`.
+
 Use placeholders in documentation.
 
 ## Logging Redaction
@@ -78,7 +101,9 @@ Automated:
 - [x] ESB credential present for the configured mechanism — checked
 - [x] non-production install is not pointed at the production ESB — checked, and this is
       the one worth having: a staging install wired to the production ESB writes to real
-      ERP data, and nothing would look wrong until it did
+      ERP data, and nothing would look wrong until it did. Checked against the
+      **effective** connection, so neither an `esb_connections` row nor an
+      `ESB_BASE_URL_*` override can slip past it (ADR-018)
 
 Covered by tests:
 
@@ -92,12 +117,18 @@ Covered by tests:
       response, and `/health` never reveals why a dependency failed
 - [x] logs redact secrets — `TokenManagerTest` and `EsbClientTest` assert by reading the
       log file back that no token, password, or API key reaches it
+- [x] stored ESB credentials are encrypted at rest and never read back —
+      `EsbConnectionManagementTest` asserts the raw column, the model's serialization,
+      the page props, and the audit row
 - [x] rate limits reviewed — a per-user budget on every ESB-reaching route, because the
       vendor's own limits are undocumented
 - [x] secure headers applied — `SecurityHeadersTest`
 
 Still manual, before production:
 
+- [ ] `APP_KEY` rotation rehearsed with the re-encryption path in
+      `docs/13-deployment.md`. Rotating the key without re-encrypting makes every stored
+      ESB credential unrecoverable
 - [ ] dependencies reviewed (`composer audit`, `npm audit`)
 - [ ] backup and recovery process verified against real infrastructure
 - [ ] rollback rehearsed (`docs/13-deployment.md`)

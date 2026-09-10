@@ -3,8 +3,8 @@
 namespace App\Integrations\ESB\Clients;
 
 use App\Integrations\ESB\Auth\TokenManager;
-use App\Integrations\ESB\BaseUrlResolver;
 use App\Integrations\ESB\ErrorClassifier;
+use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbContext;
 use App\Integrations\ESB\EsbFamily;
 use App\Integrations\ESB\Exceptions\EsbConnectionException;
@@ -40,7 +40,7 @@ class EsbClient
 
     public function __construct(
         private readonly Config $config,
-        private readonly BaseUrlResolver $baseUrlResolver,
+        private readonly EsbConnectionResolver $connectionResolver,
         private readonly TokenManager $tokenManager,
         private readonly ErrorClassifier $errorClassifier,
     ) {}
@@ -229,7 +229,7 @@ class EsbClient
      */
     private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body): Response
     {
-        $url = $this->baseUrlResolver->resolve($family).'/'.ltrim($path, '/');
+        $url = $this->connectionResolver->resolve($family).'/'.ltrim($path, '/');
 
         $request = Http::withToken($this->tokenManager->token())
             ->acceptJson()

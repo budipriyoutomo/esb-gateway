@@ -8,8 +8,10 @@
 
 ## Current Phase
 
-Phase 6 complete for everything checkable in code. Remaining work needs real
-infrastructure or business decisions — see `TODO.md`.
+Phase 8 complete. Phases 1-8 are done for everything checkable in code; Phase 9
+(multi-provider generalization) is deliberately not started and is gated on a second
+provider being contracted (ADR-017). Remaining work needs real infrastructure or business
+decisions — see `TODO.md`.
 
 ## Current Objective
 
@@ -51,9 +53,9 @@ canonical model rather than bolted onto ESB-specific code.
 ## Completed
 
 Adopted mandatory TDD workflow and base-class conventions (ADR-015).
-ADR-018 (2026-09-10) supersedes ADR-013: ESB connections become editable records with
-credentials encrypted at rest, write-only after storage, and every change audited. The
-table and the edit path are specified but **not yet built** — see `TODO.md` Phase 8.
+ADR-018 (2026-09-10) supersedes ADR-013: ESB connections are editable records with
+credentials encrypted at rest, write-only after storage, and every change audited. Built
+in Phase 8 the same day.
 Corrected the ADR cross-references in the 2026-09-10 documentation update, which cited
 ADR-015/ADR-016 for the multi-provider concept; the correct numbers are ADR-016 and
 ADR-017.
@@ -109,12 +111,24 @@ Synced docs/04, docs/02, docs/08, docs/11 with ADR-013 and actual resources/js l
   disabled-safe retention window, scheduled daily; `docs/13-deployment.md` written
   concretely
 - 272 tests passing (949 assertions, verified 2026-09-10)
+- Phase 8 (2026-09-10), built test-first: editable ESB connections per ADR-018 —
+  `esb_connections` table, `EsbConnection` model with credentials encrypted at rest and
+  hidden from every serialization, `EsbConnectionResolver` as the single place applying
+  precedence (active row, then `ESB_BASE_URL_*` override, then `config/esb.php`),
+  `SaveEsbConnection` and `RevertEsbConnection` actions writing immutable audit rows and
+  discarding the cached ESB token when a credential changes, `UpdateEsbConnectionRequest`
+  (HTTPS-only base URL), edit/revert routes gated by `esb-connections.manage`, and a
+  connections screen with an edit dialog, masked credential fields and a Source column.
+  `app:check-production-readiness` now resolves the effective base URL per family, so
+  neither a row nor an override can point a non-production install at the production ESB.
+  `TokenManager` and `EsbClient` resolve base URLs and credentials through the resolver.
+- 302 tests passing (1027 assertions, verified 2026-09-10)
 
 ## In Progress
 
-- Nothing in code. The build is feature-complete against `TODO.md` and waiting on
-  external inputs: ESB credentials, business confirmation of the role set, and
-  infrastructure decisions.
+- Nothing in code. The build is feature-complete against `TODO.md` Phases 1-8 and waiting
+  on external inputs: ESB credentials, business confirmation of the role set, and
+  infrastructure decisions. Phase 9 is deliberately not started (ADR-017).
 - Functional requirements
 - Selecting the ESB operations that are actually in scope
 
@@ -168,6 +182,72 @@ The detailed, ordered kickoff checklist is in `TODO.md`. Summary:
   the `OutboundAdapter`/`InboundAdapter` contracts described in `docs/02-architecture.md`
   before writing the second provider's adapter, so both fit the same shape from day one.
 
+## Update 2026-09-10 — Phase 8: editable ESB connections (ADR-018)
+
+**Selesai**
+
+- `database/migrations/2026_09_10_090000_create_esb_connections_table.php` — unique on
+  `(family, environment)`.
+- `app/Models/EsbConnection.php` — `credentials` cast `encrypted:array` and listed in
+  `$hidden`, plus `hasCredential()` as the only credential-shaped thing ever shown.
+- `app/Integrations/ESB/EsbConnectionResolver.php` — the single place applying
+  precedence, plus `source()` and `auth()`.
+- `app/Actions/EsbConnections/SaveEsbConnection.php` and `RevertEsbConnection.php` —
+  audited in the same transaction; `TokenManager::forget()` on a credential change.
+- `app/Http/Requests/UpdateEsbConnectionRequest.php` — HTTPS-only base URL; a blank
+  credential field means "keep what is stored", never "clear it".
+- `app/Http/Controllers/EsbConnections/EsbConnectionController.php` — `update` and
+  `destroy`; unknown family is a 404, not a validation error.
+- `app/Console/Commands/CheckProductionReadinessCommand.php` — new
+  `checkEffectiveConnections()`.
+- `app/Integrations/ESB/Clients/EsbClient.php`, `app/Integrations/ESB/Auth/TokenManager.php`,
+  `app/Services/EsbConnectionInspector.php` — moved from `BaseUrlResolver` to
+  `EsbConnectionResolver`. `BaseUrlResolver` is unchanged and still the configuration-only
+  layer underneath.
+- `resources/js/pages/esb-connections/index.tsx` — edit dialog, Source and Credential
+  columns, revert action.
+- `AuditAction::EsbConnectionUpdated` / `EsbConnectionReverted`.
+- Docs: ADR-018 in `DECISIONS.md`, `docs/04`, `docs/07`, `docs/10` (the "explicitly
+  required and protected" exception), `docs/13` (`APP_KEY` rotation and backups).
+
+**Tersisa**
+
+- `APP_KEY` rotation rehearsal against real infrastructure — the path in `docs/13` has
+  never been walked.
+- Rotation/retention policy for stored ESB credentials (left open by ADR-018).
+- Everything already listed under Phase 6's "not claimable from this machine".
+
+**Known issues**
+
+- `TokenManagerTest` now needs `RefreshDatabase`, because credentials resolve through the
+  effective connection. That is correct rather than incidental, but it means the ESB auth
+  tests are no longer pure unit tests.
+- `EsbConnectionResolver` memoizes per instance, not per request, so one ESB call may
+  issue one extra `esb_connections` query. Left as is: a request-scoped singleton would
+  cache a stale row across a save in the same request.
+
+**Assumptions / TBD**
+
+- A database row outranks `ESB_BASE_URL_*`. ADR-018 says an active row wins over
+  configuration, and an override is configuration. The trap this creates — setting an
+  override and seeing no effect — is answered by the Source column on the connections
+  screen rather than by changing the order.
+- The auth family is still whole-installation (`config('esb.auth.family')`, default
+  `core`). Per-family credentials are not modelled; no vendor documentation asks for
+  them.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 302 tests, 1027 assertions.
+- `npx tsc --noEmit` — pass. `npx vp check` — pass. `npm run build` — pass.
+- `./vendor/bin/pint` — pass. `phpstan analyse` (level 7) — pass, needs
+  `php -d memory_limit=1G` on this machine.
+- `php artisan migrate` against local PostgreSQL 16 (port 5433, `CACHE_STORE=array`) —
+  pass.
+- `php artisan app:check-production-readiness` — pass, one warning (no local ESB token).
+- Blocked: still no local Redis and no Docker, so the ADR-009 lock and the queued-job
+  round-trip remain untested outside CI. Unchanged by this phase.
+
 ## Known Unknowns / TBD
 
 Resolved by the 2026-09-09 contract import:
@@ -216,10 +296,16 @@ Still open:
 - Reading ERP data through the gateway requires `esb.invoke`, not a view permission.
 - The endpoint catalog is read-only; it mirrors `docs/esb/`, which lives outside the
   database.
-- ESB connections are read-only **as shipped today**. ADR-018 supersedes ADR-013 and
-  makes them editable; until that is built, the screen has no edit route and there is no
-  `esb_connections` table. When it is built, credentials are encrypted at rest and
-  write-only — never returned after storage, never logged.
+- ESB connections are editable (ADR-018). Credentials are encrypted at rest and
+  write-only: never returned after storage, never logged, never in an audit row. Only
+  `esb-connections.manage` may edit, and every change is audited.
+- Connection precedence runs one way only: an active `esb_connections` row for the
+  configured environment, then `ESB_BASE_URL_*`, then `config/esb.php`. Nothing writes
+  back into config, and precedence is resolved in exactly one class
+  (`EsbConnectionResolver`). Do not add a second place that applies it.
+- `app:check-production-readiness` must keep resolving the **effective** base URL. Making
+  it read `config/esb.php` alone would turn an `esb_connections` row into a way around
+  the one check that stops a staging install writing to real ERP data.
 - `/health` must never call the ESB.
 - A zero retention window keeps logs; it must never be read as "delete everything".
 - Never point a non-production install at the production ESB — the readiness check fails

@@ -20,23 +20,31 @@ than assuming ESB is the only source of activity.
 
 ### 2. ESB Connections
 
-**Partly implemented.** The read-only display and the probe action exist today. Editable
-connection settings are specified by ADR-018 and **not built yet** — the shipped screen
-has no edit route, and there is currently no `esb_connections` table.
+**Implemented** (ADR-018).
 
 Capabilities:
 
-- configure logical ESB connection settings — *planned, ADR-018*;
-- test connectivity — *implemented, ADR-014*;
-- display health/status — *implemented*;
-- protect secrets — *planned, ADR-018*;
-- maintain audit trail — *planned, ADR-018*.
+- configure logical ESB connection settings — editable under `esb-connections.manage`;
+- test connectivity — ADR-014;
+- display health/status;
+- protect secrets;
+- maintain audit trail.
 
 Secret values must never be displayed in plaintext after storage. ADR-018 makes this
 concrete: credentials are encrypted at rest and write-only, so after storage no route,
 page prop, log line, or export returns the value — reads show a masked presence
 indicator only. Editing requires `esb-connections.manage`, and every change writes an
 immutable audit row recording which field changed, never the value.
+
+A saved connection overrides `config/esb.php` for one family in the configured
+environment. Precedence runs one way — database row, then `ESB_BASE_URL_*` override, then
+the family table — and the screen names which layer won for each family, so an override
+that has no effect can be diagnosed rather than guessed at. Reverting drops the row and
+hands the family back to configuration.
+
+A row cannot be used to slip past the environment guard:
+`php artisan app:check-production-readiness` resolves the effective base URL, so a
+non-production install pointed at the production ESB still fails the check.
 
 Probing stays as ADR-014 defines it: a documented, read-only, cheap request per family
 where one exists, and an honest "cannot be probed" where none does — never a green light

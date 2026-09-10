@@ -5,6 +5,7 @@ namespace Tests\Feature\Integrations\ESB;
 use App\Integrations\ESB\Auth\TokenManager;
 use App\Integrations\ESB\Exceptions\EsbAuthenticationException;
 use App\Integrations\ESB\Exceptions\EsbConfigurationException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -24,6 +25,11 @@ use Tests\TestCase;
  */
 class TokenManagerTest extends TestCase
 {
+    // Credentials now resolve through the effective connection, which may be a
+    // database row rather than the environment (ADR-018), so the schema has to
+    // exist even for the tests that only ever read configuration.
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
