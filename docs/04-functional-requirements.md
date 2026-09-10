@@ -4,6 +4,8 @@
 
 ### 1. Dashboard
 
+**Implemented**, from `integration_logs` over a 24-hour window.
+
 Show operational summaries such as:
 
 - ESB availability/health;
@@ -38,10 +40,23 @@ Maintain metadata for supported integrations:
 - authentication requirement;
 - request/response documentation reference.
 
-The catalog is documentation/configuration unless a future requirement explicitly makes
-it a runtime-driven registry.
+**Implemented.** `php artisan esb:import-catalog` parses the generated files in
+`docs/esb/` into `integration_endpoints`, and the UI makes all 401 operations searchable
+by name, path, group, method, and family. The import is idempotent and prunes operations
+the vendor has withdrawn.
+
+The catalog remains documentation/configuration: nothing dispatches from the table, and
+it has no write routes. `docs/esb/` stays the source of truth, so editing a row would
+create a second one that silently disagrees.
+
+Version is part of an operation's identity, not decoration — the vendor ships two
+distinct operations at `Report`/`get-sales-information` that differ only by version,
+method, and host.
 
 ### 4. Integration Logs
+
+**Implemented.** Written by `EsbClient` on every call, with a viewer filtered by
+correlation ID, operation, outcome, family, and date range.
 
 Record useful metadata:
 

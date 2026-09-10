@@ -20,5 +20,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolePermissionSeeder::class);
+
+        // The endpoint catalog is imported from the generated files in
+        // docs/esb/ rather than seeded inline, so there is one source of truth
+        // for what the ESB offers.
+        $this->callSilent('esb:import-catalog');
     }
 }

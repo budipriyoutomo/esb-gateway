@@ -31,6 +31,22 @@ def plain(html):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def path_cell(entry):
+    """Render an entry's path for a table cell.
+
+    Four Core "Flow" entries carry a literal "|" as their url in the vendor
+    source -- they are documentation pages, not operations. Emitting that raw
+    breaks the markdown row, so anything that is not a real path renders as an
+    em dash, and pipes are escaped defensively.
+    """
+    path = (entry.get("url") or "").replace("{{base_url}}", "").strip()
+
+    if not path.startswith("/"):
+        return "—"
+
+    return path.replace("|", "\|")
+
+
 def base_urls(entry):
     """Return {environment label: url} declared in an endpoint description."""
     found = re.findall(r"Base URL ([A-Za-z ]+?)\s*:\s*(https?://[^\s<]+)",
@@ -79,14 +95,18 @@ def render(slug, meta, data, project, generated_on):
             listed = ", ".join(f"`{url}`" for url, _ in declared.most_common())
             out.append(f"Production base URL: {listed}")
             out.append("")
-        out.append("| Method | Path | Operation | Ref |")
-        out.append("| --- | --- | --- | --- |")
+        # Version is part of an operation's identity, not decoration: the
+        # vendor ships two distinct Report/get-sales-information operations
+        # that differ only by version, method, and host.
+        out.append("| Method | Path | Operation | Version | Ref |")
+        out.append("| --- | --- | --- | --- | --- |")
         for entry in sorted(groups[group], key=lambda e: (e.get("url") or "", e.get("name") or "")):
             method = (entry.get("type") or "").upper() or "—"
-            path = (entry.get("url") or "").replace("{{base_url}}", "").strip() or "—"
+            path = path_cell(entry)
             title = (entry.get("title") or entry.get("name") or "").replace("|", "\|")
+            version = entry.get("version") or "—"
             ref = f"{meta['docs']}#api-{group}-{entry.get('name')}"
-            out.append(f"| `{method}` | `{path}` | {title} | [docs]({ref}) |")
+            out.append(f"| `{method}` | `{path}` | {title} | `{version}` | [docs]({ref}) |")
         out.append("")
     return "\n".join(out) + "\n"
 

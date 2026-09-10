@@ -2,8 +2,10 @@
 
 use App\Authorization\Permission;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\Endpoints\EndpointCatalogController;
 use App\Http\Controllers\EsbConnections\EsbConnectionController;
 use App\Http\Controllers\EsbConnections\EsbConnectionProbeController;
+use App\Http\Controllers\Health\HealthController;
 use App\Http\Controllers\IntegrationLogs\IntegrationLogController;
 use App\Http\Controllers\Products\ProductController;
 use App\Http\Controllers\Users\UserController;
@@ -11,6 +13,10 @@ use App\Http\Controllers\Users\UserRoleController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+
+// Unauthenticated: a load balancer cannot log in. The body says what is broken,
+// never where or why -- see HealthController.
+Route::get('health', HealthController::class)->name('health');
 
 Route::middleware('auth')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
@@ -21,6 +27,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('integration-logs', [IntegrationLogController::class, 'index'])
         ->name('integration-logs.index');
+
+    // Read-only: the catalog mirrors docs/esb/, so it has no write actions.
+    Route::get('endpoints', [EndpointCatalogController::class, 'index'])
+        ->name('endpoints.index');
 
     Route::get('esb-connections', [EsbConnectionController::class, 'index'])
         ->name('esb-connections.index');

@@ -12,62 +12,70 @@ Application users and authentication data.
 
 ### roles / permissions
 
-Authorization model if a role-permission package/model is adopted.
+**Implemented** via `spatie/laravel-permission` (ADR-011), with its published schema.
+
+The definitions live in `app/Authorization/Role.php` and
+`app/Authorization/Permission.php`; `RolePermissionSeeder` syncs the tables from those
+enums and prunes anything no longer in them, so a withdrawn ability cannot linger and
+keep granting access. A user holds exactly one role.
 
 ### esb_connections
 
-Logical configuration for ESB connections.
+**Superseded by ADR-013 — this table does not exist.**
 
-Potential fields:
-
-- id
-- name
-- base_url
-- environment
-- auth configuration reference
-- is_active
-- created_at
-- updated_at
-
-Do not store plaintext secrets.
+ESB base URLs and credentials live in `config/esb.php` and the environment. A table would
+push credentials toward the database, which `docs/10-security.md` forbids, and would give
+`config/esb.php` a rival source of truth. The connections screen reads configuration and
+offers a probe action only.
 
 ### integration_endpoints
 
-Catalog of supported ESB operations.
+**Implemented.** Catalog of ESB operations, imported from `docs/esb/` by
+`php artisan esb:import-catalog`. Nothing dispatches from this table; it exists so
+operators can search 401 operations without reading markdown.
 
-Potential fields:
+| Column | Notes |
+| --- | --- |
+| id | |
+| code | Unique, `{product}:{group}:{vendor name}@{version}`. Version is part of the identity: the vendor ships two distinct operations sharing a group and name. |
+| product | `core` or `oms`. |
+| group | Vendor group, e.g. `Master_Product`. |
+| name | Vendor operation title. |
+| version | Vendor apiDoc version. |
+| method | Null for the vendor's narrative "Flow" pages, which document a process rather than a callable operation. |
+| path | Null for the same reason. |
+| is_operation | False for those documentation pages, so they cannot look invocable. |
+| family | Base URL family (ADR-010), derived from the production base URL each group declares. |
+| docs_url | Anchor into the vendor documentation. |
 
-- id
-- code
-- name
-- module
-- method
-- path
-- description
-- is_active
-- created_at
-- updated_at
+Indexed on `product`, `group`, `method`, `is_operation`, and `family`.
 
 ### integration_logs
 
-Operational integration history.
+**Implemented.** Operational history of every ESB call, written by `EsbClient`.
 
-Potential fields:
+| Column | Notes |
+| --- | --- |
+| id | |
+| correlation_id | Indexed. The reference printed on an error page, so a user's report can be traced. |
+| operation | Indexed, e.g. `product.list`. |
+| family | Base URL family (ADR-010). |
+| environment | Which ESB environment the call went to. |
+| method / path | Path only, never the full URL — recording the host on every row would make the log a way to discover the ESB (ADR-006). |
+| outcome | `success` or an exception kind; see `App\Support\IntegrationOutcome`. |
+| esb_code | The ESB status code, which is the only reliable discriminator. |
+| safe_error_message | The safe summary shown to users, never the upstream message. |
+| upstream_status | HTTP status. |
+| duration_ms, retry_count | |
+| user_id | Nullable, `nullOnDelete`. Null for queued or scheduled work. |
+| started_at, created_at, updated_at | |
 
-- id
-- correlation_id
-- endpoint_id
-- direction
-- status
-- upstream_status
-- duration_ms
-- error_code
-- safe_error_message
-- request_metadata
-- response_metadata
-- created_at
+Indexed on `correlation_id`, `operation`, `outcome`, `esb_code`, plus
+`(outcome, created_at)` and `(operation, created_at)` for the log viewer.
 
-Payload storage must be carefully evaluated for privacy, volume, and retention.
+**No request or response payloads are stored.** The vendor's payloads carry personal and
+financial data, and retention for this table is still `TBD`. Revisit payload storage only
+with a documented retention and privacy decision.
 
 ### audit_logs
 

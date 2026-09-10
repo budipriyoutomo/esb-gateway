@@ -3,6 +3,7 @@ import {
     BookOpen,
     FolderGit2,
     LayoutGrid,
+    ListTree,
     Package,
     PlugZap,
     ScrollText,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/hooks/use-permissions';
 import { dashboard } from '@/routes';
+import { index as endpointsIndex } from '@/routes/endpoints';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
 import { index as productsIndex } from '@/routes/products';
@@ -49,6 +51,12 @@ const mainNavItems: GatedNavItem[] = [
         href: integrationLogsIndex(),
         icon: ScrollText,
         permission: 'integration-logs.view',
+    },
+    {
+        title: 'Endpoint catalog',
+        href: endpointsIndex(),
+        icon: ListTree,
+        permission: 'endpoints.view',
     },
     {
         title: 'ESB connections',

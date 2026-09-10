@@ -8,7 +8,7 @@
 
 ## Current Phase
 
-Phase 4 complete — next is Phase 5, the operational modules (see `TODO.md`)
+Phase 5 complete — next is Phase 6, hardening and deployment (see `TODO.md`)
 
 ## Current Objective
 
@@ -79,12 +79,17 @@ integrating with the ERP ESB.
   `ListProductsRequest`, a thin controller, and an Inertia page with search and paging;
   `EsbExceptionRenderer` maps normalized ESB failures onto HTTP statuses
 - Documented as `[ESB-001]` in `docs/05-api-integration.md`
-- 171 tests passing
+- Phase 5 (2026-09-09/10), built test-first: integration log viewer; activity dashboard;
+  ESB connections screen with connectivity probing; endpoint catalog imported from
+  `docs/esb/` into `integration_endpoints` via `php artisan esb:import-catalog`;
+  `GET /health` for application, database, cache, and queue
+- ADR-013 (ESB connections are configuration, not records) and ADR-014 (probes use a
+  documented read, or report that none exists) recorded
+- 241 tests passing
 
 ## In Progress
 
-- Phase 5 — operational modules (ESB connections, endpoint catalog, log viewer,
-  dashboard, health checks)
+- Phase 6 — hardening and deployment
 - Functional requirements
 - Selecting the ESB operations that are actually in scope
 
@@ -178,6 +183,9 @@ Still open:
 - Never send an undocumented header to the ESB.
 - Never pass the ESB's absolute prev/next URLs to the browser.
 - Reading ERP data through the gateway requires `esb.invoke`, not a view permission.
+- ESB connections and the endpoint catalog are read-only; both mirror a source of truth
+  that lives outside the database.
+- `/health` must never call the ESB.
 - Project documentation is excluded from the frontend formatter — do not re-enable it.
 
 ## Handoff Notes

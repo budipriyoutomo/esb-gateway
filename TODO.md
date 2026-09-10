@@ -222,15 +222,64 @@ Still open from this phase:
 
 ## Phase 5 — Operational Modules
 
-- [ ] ESB Connections: configure per-family base URLs and environment, test
-      connectivity, show health. Secrets are never displayed in plaintext after storage
-      (`docs/04-functional-requirements.md`).
-- [ ] Endpoint catalog UI, seeded from `docs/esb/`. Keep it documentation/configuration
-      unless a requirement makes it runtime-driven.
-- [ ] Integration log viewer with filters on correlation ID, operation, status, and date.
-- [ ] Dashboard: success/failure counts, latency, queue depth, recent errors, per-family
-      ESB availability (health is per family, not global — ADR-010).
-- [ ] Health check endpoints for application, database, and Redis.
+Built test-first.
+
+- [x] ESB Connections — **read-only plus a probe action (ADR-013).** Base URLs and
+      credentials stay in config and the environment; there is no `esb_connections`
+      table and no edit route. `docs/10-security.md` is explicit that secrets belong in
+      environment or secret management rather than database plaintext, and a second
+      editable source of truth would let it disagree with `config/esb.php` — with traffic
+      going somewhere nobody intended as the failure. This supersedes the
+      `esb_connections` sketch in `docs/07-database-design.md`. A test asserts no
+      `esb-connections.update` route exists.
+- [x] Connectivity probing (ADR-014) — a documented, read-only, cheap `GET` per family;
+      Core uses `/product/list?limit=1`. The vendor documents no health endpoint, so
+      families without a known-safe read report that connectivity cannot be probed
+      rather than showing a green light nobody verified.
+      A probe that fails on authorization still reports **reachable**: the ESB answered,
+      so the host is up. Conflating that with "unreachable" would send whoever is
+      diagnosing it to check firewalls instead of ESB user permissions.
+- [x] Endpoint catalog — `php artisan esb:import-catalog` parses the generated files in
+      `docs/esb/` into `integration_endpoints`, and a read-only UI makes all 401
+      operations searchable by name, path, group, method, and family. Idempotent, and it
+      prunes operations the vendor withdrew. No write routes: the catalog mirrors
+      `docs/esb/`, and editing a row would create a source of truth that silently
+      disagrees with it.
+- [x] Integration log viewer — filters on correlation ID, operation, outcome, family, and
+      date range, all validated. Answers the question an error page creates: a user
+      reports the reference printed on it, and this is where it gets found.
+- [x] Dashboard — calls, success rate, average duration, queue depth, failures by kind,
+      availability per base URL family, and recent failures.
+      An empty window reports a **null** success rate rather than 0% or 100%; either
+      number would be a claim the data does not support, and a red 0% on a quiet morning
+      would send someone chasing an outage that is not happening.
+- [x] Health check endpoints — `GET /health` covers application, database, cache, and
+      queue, unauthenticated because a load balancer cannot log in. The body says what is
+      broken, never where or why: a database error can carry a host, port, and username,
+      and the endpoint is public. Detail goes to the application log.
+      It deliberately does **not** probe the ESB. A load balancer polling every few
+      seconds would hammer it, and a third party being down would pull our own instances
+      out of rotation.
+- [x] `IntegrationOutcome` gives the outcome list one home, guarded by a reflection test
+      that fails in both directions — an exception kind missing from the list, or a
+      listed outcome nothing can produce.
+
+**Done when:** an operator can see what is configured, what the ESB offers, what the
+gateway has been doing, and what is currently broken. — Met. 241 tests passing.
+
+Two bugs in the generated catalogs were found and fixed while building the importer:
+
+- Four Core "Flow" entries carry a literal `|` as their vendor URL, which broke the
+  markdown table row. They now render as an em dash, and pipes are escaped.
+- The vendor ships **two distinct operations** at `Report`/`get-sales-information` that
+  differ only by version, method, and host. The catalogs now carry a Version column, and
+  version is part of an endpoint's identity.
+
+Still open from this phase:
+
+- [ ] Alert thresholds (`docs/11-logging-monitoring.md` leaves them `TBD`).
+- [ ] Latency percentiles. Only the average is reported, and an average hides the tail
+      that actually annoys users.
 
 ---
 
