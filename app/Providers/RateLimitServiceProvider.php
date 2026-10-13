@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\AuthenticateApiClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -13,6 +14,27 @@ class RateLimitServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerEsbLimiter();
+        $this->registerSalesPushApiLimiter();
+    }
+
+    /**
+     * Budget for POS clients calling /api/v1/sales-data (ADR-022).
+     *
+     * Keyed per API client, so one misbehaving POS cannot starve the others.
+     * The api-client middleware runs first, so the client is always known.
+     */
+    protected function registerSalesPushApiLimiter(): void
+    {
+        RateLimiter::for('sales-push-api', function (Request $request): Limit {
+            $perMinute = (int) config('sales_push.rate_limit_per_minute', 120);
+            $client = $request->attributes->get(AuthenticateApiClient::ATTRIBUTE);
+
+            return Limit::perMinute(max(1, $perMinute))
+                ->by('api-client:'.($client?->getKey() ?? $request->ip()))
+                ->response(fn (): Response => response()->json([
+                    'message' => 'Too many requests from this client. Wait a minute and try again.',
+                ], 429));
+        });
     }
 
     /**

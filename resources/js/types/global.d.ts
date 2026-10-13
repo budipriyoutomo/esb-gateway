@@ -11,6 +11,11 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            // One-shot messages a controller flashed on redirect.
+            flash: {
+                status: string | null;
+                probe: unknown;
+            };
             sidebarOpen: boolean;
             [key: string]: unknown;
         };

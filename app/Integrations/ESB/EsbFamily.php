@@ -15,7 +15,11 @@ enum EsbFamily: string
     /** Almost all ESB Core groups. */
     case Core = 'core';
 
-    /** ESB Core's Online_Voucher group. */
+    /**
+     * Online Voucher operations. Documented as ESB Core's Online_Voucher group
+     * in the old apiDoc; absent from the Core OpenAPI document since
+     * 2026-09-30 (docs/05-api-integration.md).
+     */
     case Voucher = 'voucher';
 
     /** Most ESB OMS groups, plus a few Core operations. */

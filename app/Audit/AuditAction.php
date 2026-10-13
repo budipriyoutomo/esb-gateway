@@ -21,4 +21,73 @@ enum AuditAction: string
 
     /** An ESB connection override was dropped, handing the family back to configuration. */
     case EsbConnectionReverted = 'esb-connection.reverted';
+
+    /**
+     * A purchase request was authorized or rejected in the ERP through the
+     * gateway. The ERP records the gateway's shared service credential as the
+     * actor, so this row is the only record of which person decided.
+     */
+    case PurchaseRequestAuthorized = 'purchase-request.authorized';
+
+    case PurchaseRequestRejected = 'purchase-request.rejected';
+
+    /**
+     * A decision was sent but the ESB gave no definite answer. It may or may
+     * not have been applied; the metadata carries the correlation id needed to
+     * trace it.
+     */
+    case PurchaseRequestDecisionUnconfirmed = 'purchase-request.decision-unconfirmed';
+
+    /**
+     * A purchase request was created, replaced, or deleted in the ERP through
+     * the gateway. As with decisions, the ERP sees the shared service
+     * credential, so these rows are the record of which person did it.
+     */
+    case PurchaseRequestCreated = 'purchase-request.created';
+
+    case PurchaseRequestUpdated = 'purchase-request.updated';
+
+    case PurchaseRequestDeleted = 'purchase-request.deleted';
+
+    /**
+     * A spreadsheet of purchase requests was accepted by the ERP. The metadata
+     * carries the file's name, size and SHA-256, never its contents.
+     */
+    case PurchaseRequestsImported = 'purchase-request.imported';
+
+    /**
+     * A create, update, delete, or import was sent but the ESB gave no
+     * definite answer. The metadata names the operation and carries the
+     * correlation id needed to trace it.
+     */
+    case PurchaseRequestWriteUnconfirmed = 'purchase-request.write-unconfirmed';
+
+    /**
+     * A purchase invoice was authorized, rejected, or deleted in the ERP
+     * through the gateway. The ERP sees the shared service credential, so
+     * these rows are the record of which person did it.
+     */
+    case PurchaseInvoiceAuthorized = 'purchase-invoice.authorized';
+
+    case PurchaseInvoiceRejected = 'purchase-invoice.rejected';
+
+    case PurchaseInvoiceDeleted = 'purchase-invoice.deleted';
+
+    /**
+     * A decision or delete on a purchase invoice was sent but the ESB gave no
+     * definite answer. The metadata names the operation and carries the
+     * correlation id needed to trace it.
+     */
+    case PurchaseInvoiceWriteUnconfirmed = 'purchase-invoice.write-unconfirmed';
+
+    /**
+     * An API client (a POS) was issued a token, or had it revoked, from the
+     * console (ADR-022). The metadata names the client, never the token.
+     */
+    case ApiClientIssued = 'api-client.issued';
+
+    case ApiClientRevoked = 'api-client.revoked';
+
+    /** A failed or rejected sales push was queued again by a person. */
+    case SalesPushRetried = 'sales-push.retried';
 }

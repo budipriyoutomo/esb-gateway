@@ -2,10 +2,11 @@
 
 namespace App\Integrations\ESB\Mappers;
 
-use App\Integrations\ESB\DTOs\ProductSummary;
+use App\Domain\Canonical\Product;
+use App\Integrations\ESB\Clients\ProductClient;
 
 /**
- * Maps rows from GET /product/list onto ProductSummary.
+ * Maps rows from GET /product/list onto the canonical Product.
  *
  * ESB responses are untrusted input (docs/10-security.md), so every field is
  * read defensively even where the vendor documents it as required: a row that
@@ -16,9 +17,10 @@ class ProductMapper
     /**
      * @param  array<string, mixed>  $row
      */
-    public function fromRow(array $row): ProductSummary
+    public function fromRow(array $row): Product
     {
-        return new ProductSummary(
+        return new Product(
+            provider: ProductClient::PROVIDER,
             id: $this->intOr($row['productID'] ?? null, 0),
             name: $this->stringOr($row['productName'] ?? null, ''),
             code: $this->stringOr($row['productCode'] ?? null, ''),
@@ -37,11 +39,11 @@ class ProductMapper
 
     /**
      * @param  list<array<string, mixed>>  $rows
-     * @return list<ProductSummary>
+     * @return list<Product>
      */
     public function fromRows(array $rows): array
     {
-        return array_map(fn (array $row): ProductSummary => $this->fromRow($row), $rows);
+        return array_map(fn (array $row): Product => $this->fromRow($row), $rows);
     }
 
     private function intOr(mixed $value, int $default): int

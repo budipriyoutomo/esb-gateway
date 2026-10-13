@@ -21,4 +21,12 @@ class EsbUpstreamException extends EsbException
     {
         return 'The ERP service reported an internal error.';
     }
+
+    /**
+     * A server error does not say whether the change was committed first.
+     */
+    public function mayHaveBeenApplied(): bool
+    {
+        return true;
+    }
 }

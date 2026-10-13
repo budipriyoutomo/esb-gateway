@@ -79,7 +79,7 @@ readonly class EsbEnvelope
 
     public function isSuccessful(): bool
     {
-        return $this->code === ErrorCode::SUCCESS;
+        return ErrorCode::isSuccess($this->code);
     }
 
     /**

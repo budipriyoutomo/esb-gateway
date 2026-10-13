@@ -12,6 +12,10 @@ use Tests\TestCase;
  * themselves a mechanical transcription of the vendor documentation
  * (docs/04-functional-requirements.md keeps the catalog as
  * documentation/configuration rather than a hand-maintained registry).
+ *
+ * The two files come from different vendor formats since 2026-09-30: ESB Core
+ * from an OpenAPI description (docs links `#/paths/{slug}/{method}`), ESB OMS
+ * still from apiDoc (docs links `#api-{Group}-{name}`). Both must import.
  */
 class ImportEndpointCatalogTest extends TestCase
 {
@@ -22,28 +26,48 @@ class ImportEndpointCatalogTest extends TestCase
     {
         $this->artisan('esb:import-catalog')->assertSuccessful();
 
-        // 363 ESB Core plus 38 ESB OMS, matching the generated catalogs.
-        $this->assertSame(401, IntegrationEndpoint::query()->count());
-        $this->assertSame(363, IntegrationEndpoint::query()->where('product', 'core')->count());
+        // 1224 ESB Core plus 38 ESB OMS, matching the generated catalogs.
+        $this->assertSame(1262, IntegrationEndpoint::query()->count());
+        $this->assertSame(1224, IntegrationEndpoint::query()->where('product', 'core')->count());
         $this->assertSame(38, IntegrationEndpoint::query()->where('product', 'oms')->count());
     }
 
     #[Test]
-    public function it_captures_the_details_of_a_known_operation(): void
+    public function it_captures_the_details_of_an_openapi_operation(): void
+    {
+        $this->artisan('esb:import-catalog');
+
+        // OpenAPI identifies an operation by method and path; the vendor sets
+        // no operationId. The group (a tag) is display only, so a re-tagging
+        // upstream does not turn one operation into a removed and a new one.
+        $endpoint = IntegrationEndpoint::query()
+            ->where('code', 'core:GET /product/list')
+            ->sole();
+
+        $this->assertSame('List all products', $endpoint->name);
+        $this->assertSame('2.0.0', $endpoint->version);
+        $this->assertSame('Master Product', $endpoint->group);
+        $this->assertSame('GET', $endpoint->method);
+        $this->assertSame('/product/list', $endpoint->path);
+        $this->assertSame('core', $endpoint->family);
+        $this->assertStringEndsWith('esb-core/#/paths/product-list/get', (string) $endpoint->docs_url);
+    }
+
+    #[Test]
+    public function it_still_imports_apidoc_operations_by_their_apidoc_identity(): void
     {
         $this->artisan('esb:import-catalog');
 
         $endpoint = IntegrationEndpoint::query()
-            ->where('code', 'core:Master_Product:product-list@2.0.0')
+            ->where('code', 'oms:Master_Menu:create-menu@1.0.0')
             ->sole();
 
-        $this->assertSame('Product List', $endpoint->name);
-        $this->assertSame('2.0.0', $endpoint->version);
-        $this->assertSame('Master_Product', $endpoint->group);
-        $this->assertSame('GET', $endpoint->method);
-        $this->assertSame('/product/list', $endpoint->path);
-        $this->assertSame('core', $endpoint->family);
-        $this->assertStringContainsString('#api-Master_Product-product-list', (string) $endpoint->docs_url);
+        // The group is the section heading, spelled the same way for both
+        // products, so the group filter does not mix "Master_Menu" and
+        // "Master Product" styles.
+        $this->assertSame('Master Menu', $endpoint->group);
+        $this->assertSame('POST', $endpoint->method);
+        $this->assertSame('/corev1/master/create-menu', $endpoint->path);
     }
 
     #[Test]
@@ -51,16 +75,22 @@ class ImportEndpointCatalogTest extends TestCase
     {
         $this->artisan('esb:import-catalog');
 
-        // Online_Voucher is the one Core group the vendor puts on the voucher
-        // host rather than the core host (ADR-010).
+        // The Core OpenAPI document declares only the core host, so every Core
+        // operation is the core family. The OMS groups keep the hosts their
+        // apiDoc pages declare (ADR-010).
         $this->assertSame(
-            'voucher',
-            IntegrationEndpoint::query()->where('group', 'Online_Voucher')->value('family'),
+            ['core'],
+            IntegrationEndpoint::query()->where('product', 'core')->distinct()->pluck('family')->all(),
         );
 
         $this->assertSame(
             'fnb_backend',
-            IntegrationEndpoint::query()->where('group', 'Master_Menu')->value('family'),
+            IntegrationEndpoint::query()->where('group', 'Master Menu')->value('family'),
+        );
+
+        $this->assertSame(
+            'pos',
+            IntegrationEndpoint::query()->where('group', 'Master POS')->value('family'),
         );
     }
 
@@ -69,11 +99,11 @@ class ImportEndpointCatalogTest extends TestCase
     {
         $this->artisan('esb:import-catalog');
 
-        // Four Core "Flow" entries are narrative pages, not callable
+        // Some apiDoc entries are narrative "Flow" pages, not callable
         // operations. They belong in the catalog an operator browses, but they
         // must not look like something you can invoke.
         $flow = IntegrationEndpoint::query()
-            ->where('code', 'core:Goods_Delivery:flow-goods-delivery@1.0.0')
+            ->where('code', 'oms:Push_Sales_Data:flow-push-sales-shift-data@1.0.0')
             ->sole();
 
         $this->assertNull($flow->method);
@@ -87,7 +117,7 @@ class ImportEndpointCatalogTest extends TestCase
         $this->artisan('esb:import-catalog');
         $this->artisan('esb:import-catalog');
 
-        $this->assertSame(401, IntegrationEndpoint::query()->count());
+        $this->assertSame(1262, IntegrationEndpoint::query()->count());
     }
 
     #[Test]
@@ -120,7 +150,7 @@ class ImportEndpointCatalogTest extends TestCase
     public function it_reports_what_it_did(): void
     {
         $this->artisan('esb:import-catalog')
-            ->expectsOutputToContain('401')
+            ->expectsOutputToContain('1262')
             ->assertSuccessful();
     }
 }

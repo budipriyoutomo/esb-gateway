@@ -66,6 +66,37 @@ class EsbEnvelopeTest extends TestCase
     }
 
     #[Test]
+    public function the_fnb_backend_reports_success_as_code_200(): void
+    {
+        // Push Sales Data V2 (FnB backend family) answers with an HTTP-style
+        // code, as a string, instead of EC03100000. Its failures use the
+        // number 400 or 401 (docs/05-api-integration.md, [ESB-011]).
+        $body = [
+            'path' => 'http://stg7.esb.co.id/api-fnb-backend-int/web/extv1/push/sales-data',
+            'timestamp' => '2024-10-01 16:42:46',
+            'code' => '200',
+            'status' => 'ok',
+            'message' => null,
+            'result' => ['status' => '00', 'syncDate' => '2024-10-01 16:42:46'],
+        ];
+
+        $this->assertTrue(EsbEnvelope::fromArray($body)->isSuccessful());
+
+        $body['code'] = 200;
+        $this->assertTrue(EsbEnvelope::fromArray($body)->isSuccessful());
+
+        $body['code'] = 400;
+        $this->assertFalse(EsbEnvelope::fromArray($body)->isSuccessful());
+    }
+
+    #[Test]
+    public function the_oms_master_operations_report_success_as_ec011200(): void
+    {
+        // ESB OMS Master Menu ([ESB-013]) answers with its own success code.
+        $this->assertTrue(EsbEnvelope::fromArray(['code' => 'EC011200', 'status' => 'ok'])->isSuccessful());
+    }
+
+    #[Test]
     public function a_body_without_a_code_is_malformed(): void
     {
         $body = $this->successBody();

@@ -70,7 +70,7 @@ Maintain metadata for supported integrations:
 - request/response documentation reference.
 
 **Implemented.** `php artisan esb:import-catalog` parses the generated files in
-`docs/esb/` into `integration_endpoints`, and the UI makes all 401 operations searchable
+`docs/esb/` into `integration_endpoints`, and the UI makes all 1262 operations searchable
 by name, path, group, method, and family. The import is idempotent and prunes operations
 the vendor has withdrawn.
 

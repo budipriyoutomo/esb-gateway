@@ -1,13 +1,21 @@
 import { Link } from '@inertiajs/react';
 import {
     BookOpen,
+    ChefHat,
+    ClipboardList,
+    Database,
     FolderGit2,
     LayoutGrid,
     ListTree,
     Package,
     PlugZap,
+    ReceiptText,
     ScrollText,
+    Send,
+    ShoppingCart,
+    Store,
     Users,
+    UtensilsCrossed,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -27,13 +35,20 @@ import { dashboard } from '@/routes';
 import { index as endpointsIndex } from '@/routes/endpoints';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
+import { index as masterMenusIndex } from '@/routes/master-menus';
+import { index as menusIndex } from '@/routes/menus';
 import { index as productsIndex } from '@/routes/products';
+import { index as purchaseInvoicesIndex } from '@/routes/purchase-invoices';
+import { index as purchaseRequestsIndex } from '@/routes/purchase-requests';
+import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import { index as usersIndex } from '@/routes/users';
-import type { NavItem, Permission } from '@/types';
+import type { NavEntry, NavGroup, NavItem, Permission } from '@/types';
 
 type GatedNavItem = NavItem & { permission: Permission };
+type GatedNavGroup = Omit<NavGroup, 'items'> & { items: GatedNavItem[] };
+type GatedNavEntry = GatedNavItem | GatedNavGroup;
 
-const mainNavItems: GatedNavItem[] = [
+const mainNavItems: GatedNavEntry[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
@@ -41,10 +56,58 @@ const mainNavItems: GatedNavItem[] = [
         permission: 'dashboard.view',
     },
     {
-        title: 'Products',
-        href: productsIndex(),
-        icon: Package,
-        permission: 'esb.invoke',
+        title: 'Master data',
+        icon: Database,
+        items: [
+            {
+                title: 'Products',
+                href: productsIndex(),
+                icon: Package,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Menus',
+                href: menusIndex(),
+                icon: UtensilsCrossed,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Master menu',
+                href: masterMenusIndex(),
+                icon: ChefHat,
+                permission: 'esb.invoke',
+            },
+        ],
+    },
+    {
+        title: 'Purchase',
+        icon: ShoppingCart,
+        items: [
+            {
+                title: 'Purchase requests',
+                href: purchaseRequestsIndex(),
+                icon: ClipboardList,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Purchase invoices',
+                href: purchaseInvoicesIndex(),
+                icon: ReceiptText,
+                permission: 'esb.invoke',
+            },
+        ],
+    },
+    {
+        title: 'Sales',
+        icon: Store,
+        items: [
+            {
+                title: 'Sales pushes',
+                href: salesPushesIndex(),
+                icon: Send,
+                permission: 'sales-pushes.view',
+            },
+        ],
     },
     {
         title: 'Integration logs',
@@ -90,7 +153,17 @@ export function AppSidebar() {
 
     // Hiding a link the user cannot follow is a convenience only. The route
     // itself is authorized server-side, so a hand-typed URL still gets a 403.
-    const visibleNavItems = mainNavItems.filter((item) => can(item.permission));
+    // A group shows only the children the user may open, and disappears
+    // entirely when none are left.
+    const visibleNavItems = mainNavItems.flatMap((entry): NavEntry[] => {
+        if (!('items' in entry)) {
+            return can(entry.permission) ? [entry] : [];
+        }
+
+        const items = entry.items.filter((item) => can(item.permission));
+
+        return items.length > 0 ? [{ ...entry, items }] : [];
+    });
 
     return (
         <Sidebar collapsible="icon" variant="inset">

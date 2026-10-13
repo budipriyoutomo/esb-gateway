@@ -3,9 +3,11 @@
 namespace App\Integrations\ESB\Exceptions;
 
 /**
- * The request never reached the ESB -- DNS, TLS, or transport failure.
+ * The gateway could not complete the exchange with the ESB -- DNS, TLS, or
+ * transport failure.
  *
- * Unlike a timeout, nothing was delivered, so a read can safely be retried.
+ * Usually nothing was delivered, so a read can safely be retried. A write is
+ * treated more cautiously: see mayHaveBeenApplied().
  */
 class EsbConnectionException extends EsbException
 {
@@ -22,5 +24,15 @@ class EsbConnectionException extends EsbException
     protected function userFacingSummary(): string
     {
         return 'The gateway could not reach the ERP service.';
+    }
+
+    /**
+     * cURL reports a reset or an empty reply after the request
+     * was sent the same way as a refused connection, so a write cannot be
+     * assumed undelivered.
+     */
+    public function mayHaveBeenApplied(): bool
+    {
+        return true;
     }
 }

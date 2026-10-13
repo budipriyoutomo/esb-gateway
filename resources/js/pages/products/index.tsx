@@ -15,6 +15,9 @@ import {
 import { index as productsIndex } from '@/routes/products';
 
 type Product = {
+    // Which provider supplied the row. Two providers may reuse an id, so a
+    // canonical product is only identifiable together with its origin.
+    provider: string;
     id: number;
     name: string;
     code: string;

@@ -8,6 +8,7 @@ use App\Integrations\ESB\Exceptions\EsbAuthenticationException;
 use App\Integrations\ESB\Exceptions\EsbBusinessRejectionException;
 use App\Integrations\ESB\Exceptions\EsbConnectionException;
 use App\Integrations\ESB\Exceptions\EsbMalformedResponseException;
+use App\Integrations\ESB\Exceptions\EsbTimeoutException;
 use App\Integrations\ESB\Exceptions\EsbUpstreamException;
 use App\Integrations\ESB\Exceptions\EsbValidationException;
 use App\Models\IntegrationLog;
@@ -195,6 +196,51 @@ class EsbClientTest extends TestCase
 
         // No idempotency key is documented for any write operation, so a
         // repeated write could create a duplicate ERP document.
+        $this->assertSame(1, $attempts);
+    }
+
+    #[Test]
+    public function a_file_upload_is_sent_as_multipart_with_the_bearer_token(): void
+    {
+        Http::fake(['*' => Http::response($this->success())]);
+
+        $this->client()->upload(
+            EsbFamily::Core,
+            '/purchase/purchase-request/import',
+            field: 'file',
+            contents: 'binary-xlsx-bytes',
+            filename: 'requests.xlsx',
+            operation: 'purchase-request.import',
+        );
+
+        Http::assertSentCount(1);
+        Http::assertSent(function (Request $request): bool {
+            return $request->method() === 'POST'
+                && $request->url() === 'https://stg7.esb.co.id/core-int/purchase/purchase-request/import'
+                && $request->isMultipart()
+                && $request->hasFile('file', 'binary-xlsx-bytes', 'requests.xlsx')
+                && $request->hasHeader('Authorization', 'Bearer a-static-api-key');
+        });
+
+        $this->assertSame('purchase-request.import', IntegrationLog::query()->sole()->operation);
+    }
+
+    #[Test]
+    public function a_file_upload_is_a_write_and_is_never_retried(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+
+            throw new ConnectionException('cURL error 28: Operation timed out');
+        });
+
+        try {
+            $this->client()->upload(EsbFamily::Core, '/purchase/purchase-request/import', 'file', 'bytes', 'a.xlsx');
+        } catch (EsbTimeoutException) {
+            // expected
+        }
+
         $this->assertSame(1, $attempts);
     }
 

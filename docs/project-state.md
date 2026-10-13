@@ -4,13 +4,15 @@
 
 ## Last Updated
 
-2026-09-10
+2026-10-01
 
 ## Current Phase
 
-Phase 8 complete. Phases 1-8 are done for everything checkable in code; Phase 9
-(multi-provider generalization) is deliberately not started and is gated on a second
-provider being contracted (ADR-017). Remaining work needs real infrastructure or business
+Phase 8 complete. Phase 9 (multi-provider generalization) is **partially started**: the
+provider contracts and canonical DTOs were extracted from the working ESB implementation
+on 2026-09-10 under ADR-019, which amends ADR-017's gate for that step only. Everything
+in Phase 9 that needs a second provider's actual contract remains unbuilt and gated —
+no second provider is named. Remaining work needs real infrastructure or business
 decisions — see `TODO.md`.
 
 ## Current Objective
@@ -247,6 +249,556 @@ The detailed, ordered kickoff checklist is in `TODO.md`. Summary:
 - `php artisan app:check-production-readiness` — pass, one warning (no local ESB token).
 - Blocked: still no local Redis and no Docker, so the ADR-009 lock and the queued-job
   round-trip remain untested outside CI. Unchanged by this phase.
+
+## Update 2026-09-10 — Seeded accounts for local sign-in
+
+A fresh installation could not be signed in to at all. Three deliberate decisions
+combined into a gap nobody owned: Fortify's registration feature was removed at scaffold
+time, `DatabaseSeeder` creates no users on purpose, and `user:assign-role` only promotes
+an account that already exists. The local database held zero users, so every login
+attempt failed correctly and for a reason that was invisible from the login screen.
+
+**Selesai**
+
+- `database/seeders/DevUserSeeder.php` — one account per role
+  (`superadmin@`, `itadmin@`, `operator@`, `viewer@` `maharasa.test`), password
+  `password`, idempotent on the email address. Deliberately **not** called from
+  `DatabaseSeeder`, so `php artisan db:seed` still creates zero accounts and
+  `DatabaseSeederTest::it_creates_no_users` keeps passing. Throws in the `production`
+  environment. Roles are assigned through `AssignUserRole`, so the one-role-per-user rule
+  and the audit trail apply exactly as they do in the UI.
+- `tests/Feature/DevUserSeederTest.php` — five tests, written before the seeder.
+- `docs/06-authentication-authorization.md` — new "Seeded accounts for local and CI work"
+  section, and a note that `user:assign-role` promotes rather than creates.
+- Local PostgreSQL seeded and verified: four users, one role each.
+
+**Tersisa**
+
+- No supported way to create the **first production account**. The documented path is
+  `php artisan tinker`; a `user:create` command is now a TODO under Phase 2.
+
+**Known issues**
+
+- Redis is still absent on this machine, and `.env` sets `CACHE_STORE=redis`. This is a
+  second, independent cause of apparent login failure: authentication itself succeeds,
+  but `/dashboard` is gated on `dashboard.view`, and spatie's permission lookup hits the
+  cache, so the request fails with
+  `Predis\Connection\Resource\Exception\StreamInitException` on
+  `tcp://127.0.0.1:6379`. Any artisan command touching permissions needs
+  `CACHE_STORE=array` locally, as already noted under Blocked. `.env` was deliberately
+  left unchanged — running Redis or switching the local cache store is an environment
+  decision, not a code one.
+
+**Assumptions / TBD**
+
+- The seeded email domain (`maharasa.test`) and the shared password (`password`,
+  `DevUserSeeder::PASSWORD`) are development conventions, not requirements. The
+  production guard is what makes a known password acceptable, so it must not be relaxed
+  to make the seeder reusable elsewhere.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 307 tests, 1040 assertions (302 before this change).
+- `./vendor/bin/pint` — pass. `phpstan analyse` (level 7) — pass, needs
+  `--memory-limit=1G` on this machine; the default 128M crashes the parallel worker.
+- `php artisan migrate` — nothing to migrate. `php artisan db:seed --class=DevUserSeeder`
+  against local PostgreSQL 16 (port 5433, `CACHE_STORE=array`) — pass.
+- Not run: `npx tsc --noEmit` and `npm run build` — this change touches no frontend code.
+- Blocked: unchanged — no local Redis and no Docker, so the ADR-009 lock and the
+  queued-job round-trip remain untested outside CI.
+
+## Update 2026-09-10 — Phase 9 started: provider contracts extracted (ADR-019)
+
+Phase 9 was gated by ADR-017 until a second provider was contracted. No second provider
+is named. The project owner directed that Phase 9 begin and reaffirmed it after the gate
+was raised, so **ADR-019** records the deviation and amends the gate for the extraction
+step only. ADR-017's status line now points at it.
+
+Only the part grounded in real code was built. A second provider's auth model, envelope,
+error catalogue, and pagination style are unknown, and inventing them would be
+fabricating vendor documentation.
+
+**Selesai**
+
+- `app/Domain/Canonical/` — `Product` (promoted from `ProductSummary`, plus a `provider`
+  key so a record carries its origin), `Pagination` (page arithmetic promoted out of
+  `EsbPagination`), `ProductPage`, `ProductQuery`.
+- `app/Integrations/Contracts/` — `OutboundAdapter` (`provider()` only) and
+  `ProductSource` (`listProducts(ProductQuery): ProductPage`). Capability is declared by
+  narrow contracts, so no provider stubs out an operation it lacks.
+- `ProductClient implements ProductSource`; it now owns the translation from canonical
+  filters to the vendor's parameter spelling (`name` → `productName`, `activeOnly` →
+  `flagActive` as 1/0). `EsbPagination::toCanonical()` added.
+- `ProductController` type-hints `ProductSource`, not `ProductClient`;
+  `AppServiceProvider::register()` binds the two. Which provider answers is now one line.
+- Removed: `App\Integrations\ESB\DTOs\ProductSummary`, `ProductListResult`,
+  `ProductListQuery`. `ListProductsRequest` builds a canonical `ProductQuery` and gained
+  `validatedFilters()` so the page keeps its existing query-string spelling.
+- `resources/js/pages/products/index.tsx` — `Product` type gains `provider`.
+- Tests written first: `tests/Unit/Domain/Canonical/PaginationTest.php` and
+  `tests/Feature/Integrations/Contracts/ProductSourceTest.php` (11 tests).
+
+**Tersisa** — still gated, and correctly so
+
+- The second provider's **name and contract**. Everything below needs it.
+- `InboundAdapter` — not written. No inbound flow exists to extract it from.
+- `integration_providers` and `sync_transactions` tables, machine-to-machine inbound
+  authentication, `routes/api.php`, `SyncOrchestrator`, per-provider queues, per-provider
+  health and rate limiting, replay/dead-letter path.
+
+**Known issues**
+
+- `ProductSource::listProducts()` still declares `EsbException`. A provider-neutral
+  exception hierarchy needs a second error model to design against; `EsbExceptionRenderer`
+  maps the current hierarchy onto HTTP statuses today.
+- `EsbFamily` still appears in every `EsbClient` public method. That is ESB-internal
+  routing (ADR-010) and stays behind `ProductClient`, but it means `EsbClient` itself is
+  not yet reusable transport for another provider. Deliberately not generalized — the
+  retry, timeout, and logging machinery is the reusable part, and splitting it from
+  family routing without a second caller would be speculation.
+
+**Assumptions / TBD**
+
+- The canonical field set is the ESB's, because the ESB is the only example.
+  `bomId`/`bomName` are the likeliest fields to prove ERP-specific rather than canonical.
+  Marked TBD in `app/Domain/Canonical/Product.php`.
+- `ProductQuery::SORTABLE` holds the ESB's own column names, not a canonical sort
+  vocabulary. A second provider will not accept them. Marked TBD in
+  `app/Domain/Canonical/ProductQuery.php`.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 318 tests, 1063 assertions (307 before this change).
+- `npx tsc --noEmit` — pass. `npm run build` — pass.
+- `./vendor/bin/pint` — pass. `phpstan analyse` (level 7) — pass, with
+  `--memory-limit=1G`.
+- Blocked: unchanged — no local Redis and no Docker, so the ADR-009 lock and the
+  queued-job round-trip remain untested outside CI.
+
+## Update 2026-09-25 — Purchase Request module, slice 1 (read-only)
+
+The project owner started the Purchase Request module and chose a read-only first slice
+(list + detail). Writes follow in later slices — see `TODO.md` § Module — Purchase
+Request.
+
+**Selesai**
+
+- `app/Domain/Canonical/` — `PurchaseRequestSummary`, `PurchaseRequest`,
+  `PurchaseRequestLine`, `PurchaseRequestPage`, `PurchaseRequestQuery`.
+- `app/Integrations/Contracts/PurchaseRequestSource.php` — `listPurchaseRequests()`,
+  `findPurchaseRequest()`; bound to `PurchaseRequestClient` in `AppServiceProvider`.
+- `app/Integrations/ESB/Clients/PurchaseRequestClient.php` (Core family) and
+  `Mappers/PurchaseRequestMapper.php`.
+- `app/Http/Requests/BaseFormRequest.php` (ADR-015: second consumer arrived);
+  `ListProductsRequest` now extends it. `ListPurchaseRequestsRequest` validates dates as
+  `Y-m-d`, ranges, `branchIds.*` as positive ints, and limit ≤ 100.
+- `PurchaseRequestController` (`index`, `show`), routes `purchase-requests.index` /
+  `purchase-requests.show` under `throttle:esb` + `esb.invoke`; the document number is
+  constrained by a route regex.
+- Inertia pages `purchase-requests/index.tsx` (search, request-date range, paging) and
+  `purchase-requests/show.tsx` (header, lines, linked documents); sidebar entry.
+- Documented as `[ESB-002]` / `[ESB-003]` in `docs/05-api-integration.md`.
+- Tests written first: `tests/Unit/Integrations/ESB/PurchaseRequestMapperTest.php`,
+  `tests/Feature/PurchaseRequests/PurchaseRequestListTest.php`,
+  `tests/Feature/PurchaseRequests/PurchaseRequestDetailTest.php` (34 tests).
+
+**Finding — vendor documentation moved**
+
+- `https://developers.esb.co.id/esb-core/api_data.json` now 404s. The vendor site serves
+  an OpenAPI 3.0 document at `.../esb-core/openapi.json` with 963 paths (vs 363
+  operations imported on 2026-09-09). `docs/esb/generate-catalog.py` can no longer run,
+  and the catalog is stale. Recorded in `docs/05-api-integration.md` and `TODO.md`; the
+  catalog files were not hand-edited.
+
+**Assumptions / TBD**
+
+- `statusID` meanings, accepted `sort` columns, and the response date format are not
+  documented (vendor examples are placeholders). No status filter, no sort, dates shown
+  as raw strings.
+- `0` reference ids (`projectID`, `costCenterID`, ...) are read as "none" — inferred
+  from the placeholder example, not stated by the vendor.
+- `print` and `imageAttachments` are deliberately not carried (vendor-hosted URLs).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 352 tests.
+- `pint --test`, `phpstan analyse` — pass. `tsc --noEmit`, `vp check`, `npm run build` —
+  pass.
+- Not run against a real ESB — faked HTTP only, like every other slice.
+
+## Update 2026-09-25 — Purchase Request slice 2: authorize / reject
+
+The gateway's first ESB write. Documented as `[ESB-004]` in `docs/05-api-integration.md`.
+
+**Selesai**
+
+- `Permission::ApprovePurchaseRequests` (`purchase-requests.approve`) is mirrored in
+  `resources/js/types/permissions.ts`. No role is granted it, so only Super Admin can
+  approve, through `Gate::before`.
+- Added `AuditAction::PurchaseRequestAuthorized`, `PurchaseRequestRejected`, and
+  `PurchaseRequestDecisionUnconfirmed`.
+- Added `EsbException::mayHaveBeenApplied()`. It returns true for timeout, connection,
+  upstream, malformed, and unknown. `EsbConnectionException`'s docblock no longer claims
+  that nothing was delivered.
+- Added `App\Domain\Canonical\PurchaseRequestDecision` and
+  `PurchaseRequestSource::decidePurchaseRequest()`, implemented by
+  `PurchaseRequestClient` as a single PATCH with no body.
+- Added `App\Actions\PurchaseRequests\DecidePurchaseRequest`: a per-document cache lock,
+  an audit row on success, and an audit row with the correlation id on an unknown
+  outcome. `DecisionAlreadyInFlight` is thrown when the lock is held.
+- Added `DecidePurchaseRequestRequest` and `PurchaseRequestDecisionController`. The
+  route is `POST purchase-requests/{number}/decisions`. Every outcome redirects to the
+  detail page with an Inertia flash toast (success, warning, or error). A not-found
+  renders 404.
+- `purchase-requests/show.tsx` has Authorize/Reject buttons with a confirm dialog. The
+  buttons appear only for users holding both permissions.
+- Tests written first: `PurchaseRequestDecisionTest` (13 tests) and `WriteOutcomeTest`
+  (10 cases).
+
+**Assumptions / TBD**
+
+- Which role approves is for the business to decide.
+- Which statuses accept a decision is not documented. The buttons are always shown.
+- Reject takes no reason. The vendor documents no body.
+
+**Checks dijalankan**
+
+- `php artisan test`: pass, 375 tests, 1286 assertions.
+- `pint --test`: pass. `phpstan`: pass. `tsc --noEmit`: pass. `vp check`: pass.
+  `npm run build`: pass.
+
+## Update 2026-09-29 — ESB connections: active flag, visible Test result (ADR-020)
+
+- **ADR-020** amends ADR-018: an inactive `esb_connections` row now **disables** its
+  family (calls refused, no fallback to override/config). The edit form exposes an Active
+  checkbox and keeps the row's auth mechanism; the table shows Active/Disabled.
+- Fixed: the Test button showed nothing. The probe result was flashed to the session but
+  never shared with Inertia. `HandleInertiaRequests` now shares `flash.status` and
+  `flash.probe`.
+- Fixed: `EsbClient` wrapped `EsbConfigurationException` as an upstream error and retried
+  it. It now rethrows it unchanged.
+- Local staging finding: `ESB_STATIC_TOKEN` is rejected (`EC03100001`) on
+  `stg7.esb.co.id/core-stg` and `core-int`. The login credentials work on `core-stg`.
+  `stg-erp.esb.co.id` answers HTTP 500 to everything. Waiting on the ESB team for a
+  valid staging token.
+
+## Update 2026-09-30 — Purchase Request slice 3 (create / update / delete) and import
+
+The project owner asked to start slice 3 and add purchase request import. Contracts
+come from the vendor's OpenAPI description. `[ESB-005]` covers create/update/delete,
+`[ESB-006]` covers import, and `[ESB-007]` covers the form lookups, all in
+`docs/05-api-integration.md`. The decisions are in ADR-021.
+
+**Selesai**
+
+- Adapter: `PurchaseRequestClient` gains `createPurchaseRequest()`,
+  `updatePurchaseRequest()`, `deletePurchaseRequest()`, `importPurchaseRequests()`,
+  `listBranches()`, `listRequestTemplates()`, and `listTemplateLines()`. The
+  `PurchaseRequestSource` contract is extended to match.
+- `EsbClient::upload()` sends multipart/form-data. It is a write, so it gets exactly one
+  attempt.
+- `ErrorClassifier` now carries the envelope's `errors[]` onto every `EsbException` as
+  `fieldErrors` (`App\Integrations\ESB\Responses\EsbFieldError`), bounded and filtered.
+- New canonical DTOs: `Branch`, `RequestTemplate`, `PurchaseRequestTemplateLine`,
+  `PurchaseRequestDraft`, and `PurchaseRequestDraftLine`. `PurchaseRequestLine` gains
+  `requestProcessId`.
+- `PurchaseRequestMapper` gains `branchesFrom()`, `templatesFrom()`,
+  `templateLinesFrom()`, and `toRequestBody()`.
+- `App\Actions\Support\GuardedEsbWrite` and `WriteAlreadyInFlight` are new.
+  `DecidePurchaseRequest` was refactored onto them, and `DecisionAlreadyInFlight` was
+  removed. New Actions: `CreatePurchaseRequest`, `UpdatePurchaseRequest`,
+  `DeletePurchaseRequest`, and `ImportPurchaseRequests`, plus `PurchaseRequestLocks` and
+  `UnconfirmedWrite`.
+- `Permission::ManagePurchaseRequests` (`purchase-requests.manage`) is new and mirrored
+  in `permissions.ts`. No role holds it. New audit actions:
+  `purchase-request.created`, `.updated`, `.deleted`, `.imported`, and
+  `.write-unconfirmed`.
+- Form requests: `PurchaseRequestFormQuery`, `SavePurchaseRequestRequest`, and
+  `ImportPurchaseRequestsRequest`. The import request checks size, extension, and the
+  file's leading bytes. `BaseFormRequest::userHoldsAll()` was added, and the base
+  `Controller::toast()` was moved up.
+- Controllers: `PurchaseRequestFormController` (create, store, edit, update, destroy)
+  and `PurchaseRequestImportController` (create, store). The new routes sit under
+  `throttle:esb` plus `can:esb.invoke` and `can:purchase-requests.manage`.
+- Pages: `purchase-requests/form.tsx` (branch, then template, then quantities; edit
+  mode) and `purchase-requests/import.tsx` (upload plus a row-error table). `index.tsx`
+  has New and Import buttons. `show.tsx` has Edit and Delete with a confirm dialog.
+- Tests were written first: `PurchaseRequestFormTest`, `PurchaseRequestWriteTest`,
+  `PurchaseRequestImportTest`, and new cases in `ErrorClassifierTest`,
+  `PurchaseRequestMapperTest`, and `EsbClientTest`. `PurchaseRequestDecisionTest` now
+  uses the shared lock key.
+
+**Tersisa**
+
+- Business: which role holds `purchase-requests.manage` (and `.approve`).
+- Not built: cost center and project pickers, the `qty-suggestion` helper, attachment
+  upload/delete, and porting the catalog generator (the import and lookups are not in
+  `docs/esb/` yet).
+- Run all of the above against a real ESB. It has only been tested against
+  `Http::fake()`.
+
+**Known issues**
+
+- `vendor/bin/pint --test` fails on `app/Http/Middleware/HandleInertiaRequests.php`, and
+  `phpstan` reports two `nullsafe.neverNull` errors in
+  `app/Services/EsbConnectionInspector.php`. Both come from changes that were already
+  uncommitted before this session (ADR-020 work). They were left untouched here rather
+  than mixed into this slice.
+
+**Assumptions / TBD**
+
+- Create/update dates are sent as `YYYY-MM-DD`. The vendor only says "string".
+  Documented as TBD in `docs/05-api-integration.md` and
+  `SavePurchaseRequestRequest::rules()`.
+- `templateTypeID` is not sent to `/document-template/list`, because which id means
+  "purchase request" is TBD. The template list may include other types.
+- Which statuses accept update/delete is TBD, so the buttons are always shown.
+- The import sheet layout is undocumented. The gateway forwards the file without parsing
+  it, and the import screen tells users to use the ERP's own template.
+
+**Checks dijalankan**
+
+- `php artisan test`: pass, 441 tests.
+- `tsc --noEmit`: pass. `vp check`: pass. `npm run build`: pass.
+- `pint --test`: fails only on `HandleInertiaRequests.php` (pre-existing, see Known
+  issues).
+- `phpstan analyse`: fails only on `EsbConnectionInspector.php` (pre-existing).
+- Not run against a real ESB. Blocked on a valid staging token (see the 2026-09-29
+  entry).
+
+## Update 2026-09-30 — ESB catalog resynced (Core now from OpenAPI)
+
+The project owner asked for the endpoint documentation to be updated from the vendor.
+ESB Core's apiDoc source has returned 404 since 2026-09-25, so the generator was ported to
+OpenAPI. The full change list is "Catalog sync 2026-09-30" in
+`docs/05-api-integration.md`.
+
+**Selesai**
+
+- `docs/esb/generate-catalog.py` reads ESB Core from `openapi.json` and ESB OMS from
+  apiDoc as before. The per-operation docs link is Stoplight's `#/paths/{slug}/{method}`,
+  with the slug rule transcribed from the vendor's `stoplight-elements.js`. The OMS output
+  is byte-identical apart from the date, which checks the refactor.
+- The catalogs were regenerated. Core has 1224 operations in 116 groups (was 363). OMS is
+  unchanged at 38.
+- `esb:import-catalog`: an OpenAPI row is identified as `core:{METHOD} {path}`. apiDoc
+  rows keep `{product}:{Group}:{name}@{version}`. `group` now comes from the section
+  heading for both formats, so it is spaced ("Master Menu"), not "Master_Menu".
+- Tests were updated first: `ImportEndpointCatalogTest` (counts, OpenAPI identity, apiDoc
+  identity, families) and `EndpointCatalogTest` (totals, group/method/family filters).
+- Docs: `docs/05` (status table, sync findings, base URLs, refresh note), README,
+  `docs/04`, `docs/07`, TODO, the `EsbFamily::Voucher` docblock, and the esb-catalog-sync
+  skill.
+
+**Findings (vendor, not fixed in code)**
+
+- 22 old Core operations are no longer in the Core document, including Online Voucher
+  (the voucher family now has no documented operations) and `/corev1/*`. None is used by
+  the gateway.
+- The Core intro says the envelope `code` mirrors the HTTP status and that pagination
+  uses `dataCount`. Every operation example says `EC03100000` / `count`. The gateway is
+  unchanged; TBD with the ESB team.
+- `POST /auth/refresh-token {token}` is a new alternative to `GET /auth/refresh`. The
+  gateway still uses the GET; TBD which one is intended.
+- ADR-010's family table assumed the vendor spreads Core groups over several hosts. The
+  new Core document declares only Core hosts. No ADR change yet; revisit when a non-Core
+  family is first wired.
+
+**Tersisa**
+
+- After deploy, run `php artisan esb:import-catalog`. The Core codes changed format, so
+  it replaces the old Core rows rather than updating them.
+
+**Checks dijalankan**
+
+- `php artisan test`: pass, 442 tests. `DatabaseSeederTest` now expects 1262.
+- `python docs/esb/generate-catalog.py`: Core 1224, OMS 38.
+- `pint --test` and `phpstan` still fail only on the earlier uncommitted files
+  (`HandleInertiaRequests.php`, `EsbConnectionInspector.php`), the same as the previous
+  entry.
+
+## Update 2026-09-30 — Purchase Invoice module, slice 1
+
+Built test-first on the Purchase Request pattern. Documented as `[ESB-008]`–`[ESB-010]`
+in `docs/05-api-integration.md`, with field names transcribed from the vendor's OpenAPI
+description.
+
+**Selesai**
+
+- Read: `GET /purchase/purchase-invoices` (list with number, supplier invoice number,
+  date range, branches, and free-text filters) and
+  `GET /purchase/purchase-invoices/{purchaseInvoiceNum}` (header, lines, costs, totals).
+- Write: authorize / reject (`PATCH .../authorize|reject`) and delete. Each goes through
+  `GuardedEsbWrite` under one per-document lock, `purchase-invoice-write:{number}`.
+- `PurchaseInvoiceSource` contract bound to `PurchaseInvoiceClient` in
+  `AppServiceProvider`. Canonical DTOs: `PurchaseInvoice`, `PurchaseInvoiceSummary`,
+  `PurchaseInvoiceLine`, `PurchaseInvoiceCost`, `PurchaseInvoicePage`,
+  `PurchaseInvoiceQuery`, `PurchaseInvoiceDecision`.
+- New permissions `purchase-invoices.approve` and `purchase-invoices.manage`, mirrored in
+  `resources/js/types/permissions.ts`. No role holds them, so only Super Admin can use
+  them.
+- New audit actions `purchase-invoice.authorized` / `.rejected` / `.deleted` /
+  `.write-unconfirmed`.
+- Inertia pages `purchase-invoices/index` and `purchase-invoices/show`, and a sidebar
+  entry under `esb.invoke`.
+- Tests: `tests/Feature/PurchaseInvoices/` (List, Detail, Decision, Delete) and
+  `tests/Unit/Integrations/ESB/PurchaseInvoiceMapperTest.php`, 56 tests.
+
+**Assumptions / TBD**
+
+- The detail's status label is read from `printData.statusName`, because the detail
+  documents no top-level `statusName`.
+- Line tax amounts are not shown, because the vendor's `vat` / `vatValue` / `vatTotal`
+  naming is contradictory. Only `taxName` is carried.
+- Amounts are floats, display-only. The gateway never computes totals.
+- Create/update were left out on purpose. See TODO "Module — Purchase Invoice".
+- `PurchaseInvoiceDecision` duplicates the two-case `PurchaseRequestDecision`. Merge them
+  into one approval-decision enum when a third document type needs one.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 498 tests (1943 assertions).
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — 2 errors, both in `app/Services/EsbConnectionInspector.php`
+  (`nullsafe.neverNull`, lines 60 and 94). That file was already modified before this
+  slice and was not touched by it. None in the new code.
+- Not run against a real ESB — faked HTTP only, like every other slice.
+
+## Update 2026-10-01 — Sales push module: POS -> Push Sales Data V2 (ADR-022)
+
+Built test-first. Documented as `[ESB-011]` in `docs/05-api-integration.md`. The first
+inbound flow: a POS calls the gateway, and the gateway pushes to the ESB from the queue.
+
+**Selesai**
+
+- ESB layer: `ErrorCode::isSuccess()` accepts `EC03100000` and the FnB backend's `"200"`.
+  `ErrorCode` maps the FnB backend's `400` (validation) and `401` (authentication).
+  `ErrorClassifier` reads `data[]` strings into `EsbFieldError::fromMessage()`.
+- Adapter: `SalesDataSink` contract bound to `SalesDataClient` (family FnB backend,
+  `POST /extv1/push/sales-data`), canonical `SalesDataReceipt`.
+- API: `routes/api.php` (`/api/v1/sales-data` POST + GET status), `AuthenticateApiClient`
+  middleware (`api-client`), limiter `sales-push-api`, `PushSalesDataRequest`,
+  `SalesPushResource`, `Api\SalesDataController`. `/api/*` skips `TrimStrings` and
+  `ConvertEmptyStringsToNull` (`bootstrap/app.php`).
+- Tables `api_clients` and `sales_pushes` (payload `encrypted:array`). Models `ApiClient`,
+  `SalesPush`. Commands `api-client:create` / `api-client:revoke`. Config
+  `config/sales_push.php`.
+- Queue: `App\Jobs\PushSalesData` (bounded tries/backoff, `WithoutOverlapping` per
+  `salesNum`), Actions `ReceiveSalesData`, `SendSalesPush`, `RetrySalesPush`.
+- Web: `sales-pushes/index` and `sales-pushes/show` pages, "Send again" button, sidebar
+  group "Sales". Permissions `sales-pushes.view` (IT Admin, Integration Operator) and
+  `sales-pushes.retry` (Integration Operator), mirrored in `permissions.ts`.
+- Audit actions `api-client.issued` / `.revoked`, `sales-push.retried`.
+- Sidebar: `NavMain` supports collapsible groups (`NavGroup` in `types/navigation.ts`);
+  purchase requests and invoices now sit under "Purchase".
+- Tests: `tests/Feature/SalesPushes/` (ApiClientCommand, SalesDataApi, PushSalesDataJob,
+  SalesPushViewer), `tests/Feature/Integrations/ESB/SalesDataClientTest.php`, new cases in
+  `EsbEnvelopeTest` and `ErrorClassifierTest`. All failed before the implementation,
+  except two job tests (401 and unconfigured family) added after `SendSalesPush` was
+  written; they passed on first run.
+
+**Tersisa**
+
+- Run on ESB staging with the Core login credential and confirm the FnB backend accepts
+  that token (vendor documents a static token). Blocked on the ESB environment, not code.
+- Issue real POS tokens (`php artisan api-client:create <name>`) and run a queue worker
+  in every environment that should push sales.
+- Shift Data V2, a UI to manage API clients, retention/pruning for `sales_pushes`.
+
+**Known issues**
+
+- `WithoutOverlapping` releases a job when another push of the same `salesNum` is
+  running, and each release counts against `tries`. Many rapid pushes of one `salesNum`
+  can use up attempts; the push then shows `failed` and can be sent again by hand.
+- `pint` also reformatted `app/Http/Middleware/HandleInertiaRequests.php` (operator
+  spacing only). That file had uncommitted changes before this session.
+
+**Assumptions / TBD**
+
+- FnB backend accepts the Core login token — TBD, `[ESB-011]` and ADR-022 Open.
+- Meaning of `result.status` other than `"00"` — TBD, `[ESB-011]`.
+- Gateway validates only identity and structure; the ESB validates the rest — ADR-022.
+- Retention of `sales_pushes.payload` — TBD, `docs/07-database-design.md`.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 545 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`; none in
+  new code.
+- Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-01 — Master Menu module, slice 1 (read-only, ESB Core)
+
+Built test-first. Documented as `[ESB-012]` in `docs/05-api-integration.md`. First built
+on the OMS `GET /corev1/master/get-menu` (FnB backend), then switched the same day, at
+the owner's request, to ESB Core `GET /menu/browse`.
+
+**Selesai**
+
+- `MenuSource` contract bound to `MenuClient` (Core, `GET /menu/browse`), `MenuMapper`,
+  canonical `Menu`, `MenuQuery`, `MenuPage`.
+- `ListMenusRequest` (page, limit, menuName, menuCode, flagActive), `MenuController`
+  (`GET /menus`), permission `esb.invoke`, throttled with the other ESB routes.
+- Inertia page `menus/index`, TS type `resources/js/types/menu.ts`.
+- Sidebar: new group "Master data" holding Products and Menus.
+- Removed with the switch: the menu detail page and route, the OMS-only canonical DTOs
+  (`MenuTemplatePrice`, `MenuPackageGroup`, `MenuPackageItem`, `MenuExtra`,
+  `MenuReference`), and the `EC011200` success code. Core `/menu/browse` returns none of
+  that data.
+- Tests: `tests/Feature/Menus/MenuTest.php`, `tests/Unit/Integrations/ESB/MenuMapperTest.php`.
+  Rewritten for Core first; they failed before the switch was implemented.
+
+**Tersisa**
+
+- Nothing for the list. If prices / packages / extras are needed, the OMS operation is
+  the documented source (see `[ESB-012]`).
+
+**Assumptions / TBD**
+
+- No vendor limit cap is documented for `/menu/browse`; the gateway caps at 100.
+- The browse row has no active flag; `flagActive` is a filter only.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 554 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-01 — Master Menu (ESB OMS) added beside the Core menu list
+
+`[ESB-013]`. At the owner's request the OMS version (removed earlier the same day) is
+back as its own screen, next to the Core `/menus` list (`[ESB-012]`).
+
+**Selesai**
+
+- `MasterMenuSource` bound to `MasterMenuClient` (FnB backend, `GET
+  /corev1/master/get-menu`), `MasterMenuMapper`, canonical `MasterMenu*` DTOs.
+- `ListMasterMenusRequest`, `MasterMenuController` (`/master-menus`,
+  `/master-menus/{code}`), permission `esb.invoke`, throttled with the ESB routes.
+- Pages `master-menus/index` and `master-menus/show`, TS types
+  `resources/js/types/master-menu.ts`, sidebar entry "Master menu" under "Master data".
+- `ErrorCode::isSuccess()` accepts `EC011200` again.
+- Restored from the earlier OMS implementation with every class renamed to
+  `MasterMenu*` so it does not clash with the Core `Menu*` classes.
+- Tests: `tests/Feature/MasterMenus/MasterMenuTest.php`,
+  `tests/Unit/Integrations/ESB/MasterMenuMapperTest.php`, the `EC011200` case in
+  `EsbEnvelopeTest`. Restored and run first; they failed before the classes existed.
+
+**Assumptions / TBD**
+
+- Same as `[ESB-013]`: active menus only, exact-code detail, code pattern, static-token
+  question for the FnB backend.
+- Two canonical menu shapes exist (`Menu`, `MasterMenu`) until the business picks one
+  source.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 569 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only.
 
 ## Known Unknowns / TBD
 

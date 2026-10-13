@@ -26,4 +26,12 @@ class EsbTimeoutException extends EsbException
     {
         return 'The ERP service did not respond in time.';
     }
+
+    /**
+     * The request may have reached the ESB and been committed.
+     */
+    public function mayHaveBeenApplied(): bool
+    {
+        return true;
+    }
 }

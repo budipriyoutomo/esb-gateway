@@ -23,6 +23,18 @@ final class ErrorCode
     public const SUCCESS = 'EC03100000';
 
     /**
+     * Success as the FnB backend family reports it (Push Sales Data V2,
+     * [ESB-011]): the HTTP status, as a string, instead of an EC code.
+     */
+    public const HTTP_SUCCESS = '200';
+
+    /**
+     * Success as the ESB OMS master operations report it (Get Menu,
+     * [ESB-013]).
+     */
+    public const OMS_SUCCESS = 'EC011200';
+
+    /**
      * Code to exception class.
      *
      * @var array<string, class-string<EsbException>>
@@ -76,17 +88,39 @@ final class ErrorCode
     ];
 
     /**
+     * The FnB backend (Push Sales Data V2, [ESB-011]) answers with HTTP-style
+     * numbers instead. Only the two it documents are mapped: 400 for missing,
+     * blank, or unknown attributes, and 401 for invalid credentials. Kept
+     * apart from MAP because PHP turns numeric string keys into integers.
+     *
+     * @var array<int, class-string<EsbException>>
+     */
+    private const HTTP_STYLE_MAP = [
+        400 => EsbValidationException::class,
+        401 => EsbAuthenticationException::class,
+    ];
+
+    public static function isSuccess(string $code): bool
+    {
+        return in_array($code, [self::SUCCESS, self::HTTP_SUCCESS, self::OMS_SUCCESS], true);
+    }
+
+    /**
      * The exception class for a code, or null when the code is undocumented.
      *
      * @return class-string<EsbException>|null
      */
     public static function exceptionClassFor(string $code): ?string
     {
+        if (preg_match('/^\d{3}$/', $code) === 1) {
+            return self::HTTP_STYLE_MAP[(int) $code] ?? null;
+        }
+
         return self::MAP[$code] ?? null;
     }
 
     public static function isDocumented(string $code): bool
     {
-        return $code === self::SUCCESS || isset(self::MAP[$code]);
+        return self::isSuccess($code) || self::exceptionClassFor($code) !== null;
     }
 }

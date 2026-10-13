@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -31,14 +32,21 @@ import {
 import { usePermissions } from '@/hooks/use-permissions';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 
-type ConnectionSource = 'database' | 'override' | 'config' | 'none';
+type ConnectionSource =
+    | 'disabled'
+    | 'database'
+    | 'override'
+    | 'config'
+    | 'none';
 
 type Connection = {
     family: string;
     baseUrl: string | null;
     configured: boolean;
+    active: boolean;
     probeAvailable: boolean;
     source: ConnectionSource;
+    authMechanism: string;
     hasCredential: boolean;
     note: string | null;
 };
@@ -58,6 +66,7 @@ type Props = {
 };
 
 const SOURCE_LABEL: Record<ConnectionSource, string> = {
+    disabled: 'Edited here',
     database: 'Edited here',
     override: 'Env override',
     config: 'Configuration',
@@ -70,11 +79,24 @@ const SOURCE_LABEL: Record<ConnectionSource, string> = {
  * that has no effect by guesswork.
  */
 const SOURCE_HINT: Record<ConnectionSource, string> = {
+    disabled:
+        'A connection saved in this screen and switched off. The gateway refuses every call to this family.',
     database:
         'A connection saved in this screen, which takes precedence over the environment override and config/esb.php.',
     override: 'An ESB_BASE_URL_* environment override.',
     config: 'The family table in config/esb.php.',
     none: 'No base URL is documented for this family in this environment.',
+};
+
+/**
+ * What a failure means when the ESB did answer. Authentication and
+ * authorization send an operator to different places.
+ */
+const OUTCOME_HINT: Record<string, string> = {
+    authentication:
+        'The ERP service answered, so the host is up. It rejected the gateway credential: check the stored token, or the username and password.',
+    authorization:
+        "The ERP service answered, so the host is up. What failed is the gateway credential's privileges for this operation.",
 };
 
 export default function EsbConnectionsIndex({
@@ -84,14 +106,24 @@ export default function EsbConnectionsIndex({
     canManage,
 }: Props) {
     const { can } = usePermissions();
-    const probe = usePage().props.probe as ProbeResult | undefined;
+    const { flash } = usePage().props;
+    const probe = flash.probe as ProbeResult | null;
     const [editing, setEditing] = useState<Connection | null>(null);
+    const [probing, setProbing] = useState<string | null>(null);
 
     function runProbe(family: string) {
         router.post(
             `/esb-connections/${family}/test`,
             {},
-            { preserveScroll: true },
+            {
+                preserveScroll: true,
+                onStart: () => {
+                    setProbing(family);
+                },
+                onFinish: () => {
+                    setProbing(null);
+                },
+            },
         );
     }
 
@@ -113,6 +145,12 @@ export default function EsbConnectionsIndex({
                     the most this screen will tell you is whether one is stored.
                     Every change is recorded in the audit log.
                 </p>
+
+                {flash.status && (
+                    <p className="rounded-xl border border-green-600/30 bg-green-600/10 p-3 text-sm">
+                        {flash.status}
+                    </p>
+                )}
 
                 {probe && (
                     <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-4">
@@ -146,9 +184,8 @@ export default function EsbConnectionsIndex({
                         </p>
                         {probe.reachable === true && probe.outcome && (
                             <p className="text-muted-foreground mt-1 text-xs">
-                                The ERP service answered, so the host is up.
-                                What failed is the gateway credential&rsquo;s
-                                privileges for this operation.
+                                {OUTCOME_HINT[probe.outcome] ??
+                                    'The ERP service answered, so the host is up, but it reported an error.'}
                             </p>
                         )}
                     </div>
@@ -195,14 +232,18 @@ export default function EsbConnectionsIndex({
                                     <TableCell>
                                         <Badge
                                             variant={
-                                                connection.configured
-                                                    ? 'default'
-                                                    : 'secondary'
+                                                !connection.active
+                                                    ? 'outline'
+                                                    : connection.configured
+                                                      ? 'default'
+                                                      : 'secondary'
                                             }
                                         >
-                                            {connection.configured
-                                                ? 'Configured'
-                                                : 'Not configured'}
+                                            {!connection.active
+                                                ? 'Disabled'
+                                                : connection.configured
+                                                  ? 'Active'
+                                                  : 'Not configured'}
                                         </Badge>
                                         {connection.note && (
                                             <p className="text-muted-foreground mt-1 max-w-md text-xs">
@@ -216,14 +257,18 @@ export default function EsbConnectionsIndex({
                                                 variant="outline"
                                                 size="sm"
                                                 disabled={
+                                                    !connection.active ||
                                                     !connection.configured ||
-                                                    !connection.probeAvailable
+                                                    !connection.probeAvailable ||
+                                                    probing !== null
                                                 }
                                                 onClick={() => {
                                                     runProbe(connection.family);
                                                 }}
                                             >
-                                                Test
+                                                {probing === connection.family
+                                                    ? 'Testing…'
+                                                    : 'Test'}
                                             </Button>
                                         )}
                                         {canManage && (
@@ -269,11 +314,11 @@ function EditConnectionDialog({
 }) {
     const form = useForm({
         base_url: connection.baseUrl ?? '',
-        auth_mechanism: 'static_token',
+        auth_mechanism: connection.authMechanism,
         static_token: '',
         username: '',
         password: '',
-        is_active: true,
+        is_active: connection.active,
     });
 
     function submit(event: React.FormEvent) {
@@ -429,6 +474,24 @@ function EditConnectionDialog({
                             </>
                         )}
 
+                        <div className="flex items-start gap-2">
+                            <Checkbox
+                                id="is_active"
+                                checked={form.data.is_active}
+                                onCheckedChange={(checked) => {
+                                    form.setData('is_active', checked === true);
+                                }}
+                            />
+                            <div className="grid gap-1">
+                                <Label htmlFor="is_active">Active</Label>
+                                <p className="text-muted-foreground text-xs">
+                                    When off, the gateway refuses every call to
+                                    the {connection.family} family. It does not
+                                    fall back to configuration.
+                                </p>
+                            </div>
+                        </div>
+
                         <p className="text-muted-foreground text-xs">
                             A saved credential is encrypted and never shown
                             again. Leaving a credential field blank keeps the
@@ -437,7 +500,8 @@ function EditConnectionDialog({
                     </div>
 
                     <DialogFooter className="gap-2">
-                        {connection.source === 'database' && (
+                        {(connection.source === 'database' ||
+                            connection.source === 'disabled') && (
                             <Button
                                 type="button"
                                 variant="outline"

@@ -116,6 +116,14 @@ Still open from this phase:
 - [ ] Confirm the role set and each role's grants with the business.
 - [ ] Shared component set is partial — forms, dialogs, alerts, status badges, and
       loading states arrive with the screens that need them rather than up front.
+- [x] `DevUserSeeder` (2026-09-10) — one account per role for local and CI work, run with
+      `php artisan db:seed --class=DevUserSeeder`. Kept out of `DatabaseSeeder` and
+      refuses to run in `production`, so a deployment still gains no accounts.
+- [ ] There is still no supported way to create the **first production account**.
+      Registration is disabled and `user:assign-role` only promotes an account that
+      already exists, so the documented path is `php artisan tinker`. Consider a
+      `user:create` command that prompts for a password rather than taking it as an
+      argument, where it would land in shell history.
 
 ---
 
@@ -221,8 +229,114 @@ Super Admin can reach the page. IT Admin and Viewer are refused, which is the se
 Still open from this phase:
 
 - [ ] Run this slice against a real ESB. It has only ever spoken to `Http::fake()`.
-- [ ] Surface the envelope's `errors[]` detail (attribute, code, message) on validation
-      failures. The ESB returns per-field detail that we currently discard.
+- [x] Surface the envelope's `errors[]` detail on validation failures (2026-09-30,
+      ADR-021). Carried on every `EsbException` as `fieldErrors`; shown by the purchase
+      request form and import screens. Products do not show them yet.
+
+### Module — Purchase Request
+
+Built test-first, in slices. Operations documented as `[ESB-002]`/`[ESB-003]` in
+`docs/05-api-integration.md`.
+
+- [x] Slice 1 (2026-09-25): read-only list + detail. `PurchaseRequestSource` contract,
+      canonical `PurchaseRequest*` DTOs, `PurchaseRequestClient`, `PurchaseRequestMapper`,
+      `ListPurchaseRequestsRequest`, `PurchaseRequestController`, Inertia pages
+      `purchase-requests/index` and `purchase-requests/show`, sidebar entry under
+      `esb.invoke`. Introduced `App\Http\Requests\BaseFormRequest` (ADR-015's second
+      consumer); `ListProductsRequest` now extends it.
+- [x] Slice 2 (2026-09-25): authorize / reject, documented as `[ESB-004]`. New
+      permission `purchase-requests.approve` (held by Super Admin only),
+      `DecidePurchaseRequest` action with a per-document lock and audit rows,
+      `EsbException::mayHaveBeenApplied()` to separate a definite refusal from an unknown
+      outcome, and a confirm dialog on the detail page. No Action base class was added:
+      one Action does not show duplication, so ADR-015 still defers it.
+- [x] Slice 3 (2026-09-30): create / update / delete, documented as `[ESB-005]`, with
+      lookups `[ESB-007]` (branches, request templates, `template-details`). Lines come
+      from a request template, because `template-details` is the only documented source
+      of `requestProcessID`. New permission `purchase-requests.manage` (Super Admin only).
+      `GuardedEsbWrite` now holds the lock/one-attempt/unconfirmed-audit rules for every
+      purchase request write (ADR-021).
+- [x] Import (2026-09-30): Excel upload forwarded to
+      `POST /purchase/purchase-request/import`, documented as `[ESB-006]`. The ESB's
+      per-row `errors[]` are shown on the import screen (ADR-021).
+- [ ] Business: decide which role holds `purchase-requests.approve`.
+- [ ] Business: decide which role holds `purchase-requests.manage`.
+- [ ] Ask the ESB team which statuses accept authorize/reject/update/delete, and whether
+      reject can take a reason.
+- [ ] Ask the ESB team: the date format create/update expects (`YYYY-MM-DD` assumed),
+      which `templateTypeID` means "purchase request" on `/document-template/list`, and
+      where to get the import sheet template.
+- [ ] Not built: cost center / project pickers (an edit carries existing values back),
+      the `qty-suggestion` helper (template lines already carry `suggestionQty`), and
+      attachment upload/delete.
+- [ ] Ask the ESB team: `statusID` meanings, accepted `sort` columns, response date
+      format, and whether `0` reference ids mean "none".
+- [ ] Attachments: `imageAttachments` are vendor-hosted URLs; decide whether the gateway
+      proxies them.
+- [x] Port `docs/esb/generate-catalog.py` to the vendor's OpenAPI source and regenerate
+      the catalogs (2026-09-30). Core: 1224 operations from OpenAPI; OMS: unchanged at 38
+      from apiDoc. `esb:import-catalog` reads both link formats. See "Catalog sync
+      2026-09-30" in `docs/05-api-integration.md`.
+- [ ] Ask the ESB team: the envelope `code` / `dataCount` described in the new Core intro
+      contradicts every operation example (`EC03100000` / `count`); which refresh
+      operation to use (`GET /auth/refresh` or `POST /auth/refresh-token`); and where
+      Online Voucher and `/corev1/*` operations are documented now.
+
+### Module — Purchase Invoice
+
+Built test-first. Operations documented as `[ESB-008]`–`[ESB-010]` in
+`docs/05-api-integration.md`.
+
+- [x] Slice 1 (2026-09-30): list + detail, authorize / reject, delete.
+      `PurchaseInvoiceSource` contract, canonical `PurchaseInvoice*` DTOs,
+      `PurchaseInvoiceClient`, `PurchaseInvoiceMapper`, `DecidePurchaseInvoice` and
+      `DeletePurchaseInvoice` on `GuardedEsbWrite`, Inertia pages
+      `purchase-invoices/index` and `purchase-invoices/show`, sidebar entry under
+      `esb.invoke`. New permissions `purchase-invoices.approve` and
+      `purchase-invoices.manage` (Super Admin only).
+- [ ] Business: decide which roles hold `purchase-invoices.approve` and
+      `purchase-invoices.manage`.
+- [ ] Ask the ESB team: which statuses accept authorize/reject/delete; what
+      `dateFrom`/`dateTo` filter on; whether `printData.statusName` is the document
+      status; which of `vat`/`vatValue`/`vatTotal`/`dppValue` is the line's tax amount.
+- [ ] Not built: create / update. First decide with the ESB team which totals and tax
+      figures the ERP derives, so the gateway does not duplicate ERP rules. The form
+      needs supplier and currency lookups and the reference browsers
+      (`browse-references`, `browse-data-details`).
+- [ ] Not built: attachments, `export-csv`, payment/settlement reads, `validate-*` checks,
+      supplier/status filters.
+
+### Module — Master Menu
+
+Built test-first on 2026-10-01 (`[ESB-012]`), on ESB Core `GET /menu/browse`.
+
+- [x] Slice 1: read-only list (name, code, active filters, paging), `MenuSource` /
+      `MenuClient`, page `menus/index`.
+- [x] OMS master menu (`[ESB-013]`, `/master-menus`): list + detail with prices,
+      packages, and extras, beside the Core list (2026-10-01).
+- [ ] Decide which menu source the business uses, then merge `Menu` and `MasterMenu`
+      or drop one.
+- [ ] Ask the ESB team about `get-menu`: active-flag parameter name; whether `menuCode`
+      is exact; the real update path; the menu code character set; whether the FnB
+      backend accepts the Core login token.
+- [ ] OMS create / update: needs `get-menu-category` and `get-menu-template` lookups,
+      and parsing `EC0110` per-field errors from the JSON in `message`.
+- [ ] Not built: create / update (not in the Core Menu group), `browse-for-product`,
+      `validate-bom-usage`, category filters (need a category lookup).
+
+### Module — Sales Push (POS -> ESB Push Sales Data V2)
+
+Built test-first on 2026-10-01 (ADR-022, `[ESB-011]`).
+
+- [x] Slice 1: `/api/v1/sales-data` for POS clients (API client tokens), `sales_pushes`
+      table, `PushSalesData` queue job, history + "Send again" screens.
+- [ ] Staging: confirm the FnB backend accepts the Core login token; the vendor documents
+      a static token for this operation.
+- [ ] Ask the ESB team: meaning of `result.status` other than `"00"`; which
+      `payment.paymentMethod` / `promotionID` types are correct.
+- [ ] Decide retention for `sales_pushes` (payload holds customer and payment data) and
+      add a prune command.
+- [ ] Not built: Shift Data V2, API client management UI, notifying the POS of refusals.
 
 ---
 
@@ -252,6 +366,7 @@ Built test-first.
       diagnosing it to check firewalls instead of ESB user permissions.
 - [x] Endpoint catalog — `php artisan esb:import-catalog` parses the generated files in
       `docs/esb/` into `integration_endpoints`, and a read-only UI makes all 401
+      (1262 since the 2026-09-30 regeneration)
       operations searchable by name, path, group, method, and family. Idempotent, and it
       prunes operations the vendor withdrew. No write routes: the catalog mirrors
       `docs/esb/`, and editing a row would create a source of truth that silently
@@ -452,21 +567,30 @@ equally binding: **none of the generic infrastructure below is built until a rea
 provider is contracted.** These items are recorded so the first second-provider
 integration follows the shape from day one, not so anyone starts them now.
 
-**Gate:** a second external system is named and its contract is documented. Until then
-every box here stays unchecked deliberately, and that is the correct state.
+**Gate:** a second external system is named and its contract is documented. ADR-019
+(2026-09-10) amends this gate for the **extraction step only**, on the project owner's
+direction: the contracts and canonical DTOs were extracted from the working ESB
+implementation, which ADR-017 already ordered first. Every remaining box needs the second
+provider's actual contract and stays unchecked deliberately — that is still the correct
+state.
 
 Ordered, once the gate opens:
 
 - [ ] Name the second provider and document its contract the way
       `docs/05-api-integration.md` documents the ESB's — auth, envelope, error catalog,
       pagination, rate limits. Do not start code before this exists.
-- [ ] Extract `Integrations/Contracts/OutboundAdapter.php` and `InboundAdapter.php`
-      **from the existing ESB client**, not from a guess. ADR-017 is explicit that
-      generalizing the working implementation comes before writing the new provider's
-      adapter.
-- [ ] Introduce `App\Domain\Canonical\...` DTOs for the entities that actually move
-      between the two systems, and only those. `ProductSummary` is the candidate to
-      promote first, since it already exists.
+- [x] Extract `Integrations/Contracts/OutboundAdapter.php` **from the existing ESB
+      client** (2026-09-10, ADR-019). `OutboundAdapter` carries `provider()` only;
+      capability is declared by narrower contracts, of which `ProductSource` is the
+      first. `ProductClient` implements it and `ProductController` depends on the
+      contract.
+- [ ] `InboundAdapter.php` — not written. No inbound flow exists, so there is nothing to
+      extract it from; writing it now would be a guess at a provider nobody has named.
+- [x] Introduce `App\Domain\Canonical\...` DTOs (2026-09-10, ADR-019) — `Product`
+      (promoted from `ProductSummary`, now carrying a `provider` key), `Pagination`
+      (promoted out of `EsbPagination`, which keeps `toCanonical()`), `ProductPage`, and
+      `ProductQuery`. The field set is still the ESB's, because the ESB is the only
+      example; expect revision when a second provider lands.
 - [ ] Add the `integration_providers` registry table per `docs/07-database-design.md`.
       Metadata only — credentials stay in config/environment/secret management, per
       ADR-013.
@@ -514,4 +638,4 @@ they must be resolved before pointing the gateway at a real environment.
 - [ ] Is `companyID` / `companyCode` scoping implied by the credential, or per request?
 - [ ] Base URLs for the operations where the vendor declares none: four Core "Flow"
       pages, and some OMS `Push_Sales_Data` and `Report` entries.
-- [ ] Which of the 401 operations are actually in scope for this project?
+- [ ] Which of the 1262 operations are actually in scope for this project?

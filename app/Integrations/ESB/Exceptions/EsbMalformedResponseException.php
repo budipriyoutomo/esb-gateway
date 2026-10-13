@@ -19,4 +19,12 @@ class EsbMalformedResponseException extends EsbException
     {
         return 'The ERP service returned a response the gateway could not read.';
     }
+
+    /**
+     * The ESB answered, but not in a way that says what it did.
+     */
+    public function mayHaveBeenApplied(): bool
+    {
+        return true;
+    }
 }

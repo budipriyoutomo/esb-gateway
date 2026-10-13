@@ -38,7 +38,7 @@ indicator. Every change writes an immutable `audit_logs` row in the same transac
 | base_url | |
 | auth_mechanism | `static_token` or `login`, mirroring `ESB_AUTH_MECHANISM`. |
 | credentials | Encrypted at rest (Laravel `encrypted` cast, keyed by `APP_KEY`). Never plaintext, never returned after storage. |
-| is_active | Only an active row overrides configuration. |
+| is_active | An active row overrides configuration. An inactive row disables the family: calls are refused, with no fallback (ADR-020). |
 | timestamps | |
 
 `config/esb.php` stays the bootstrap source and the fallback. An active row for a family
@@ -54,7 +54,7 @@ carries credential material — protected, but present.
 
 **Implemented.** Catalog of ESB operations, imported from `docs/esb/` by
 `php artisan esb:import-catalog`. Nothing dispatches from this table; it exists so
-operators can search 401 operations without reading markdown.
+operators can search 1262 operations without reading markdown.
 
 | Column | Notes |
 | --- | --- |
@@ -133,6 +133,42 @@ ADR-013 — this table is metadata/registry only, never a place credentials are 
 | status | `received`, `transformed`, `pushed`, `failed`, `dead_letter` |
 | canonical_payload | snapshot, redacted per `docs/10-security.md` |
 | attempt_count | |
+
+### api_clients
+
+**Implemented** (ADR-022). Machines allowed to call `/api/v1`, such as a POS.
+
+| Column | Notes |
+| --- | --- |
+| id | |
+| name | 100 chars, unique. Given to `api-client:create`. |
+| token_hash | SHA-256 of the token, unique. The token itself is never stored. |
+| is_active | `api-client:revoke` sets it false. Rows are kept so history still names them. |
+| last_used_at | Written at most once a minute per client. |
+| created_at / updated_at | |
+
+### sales_pushes
+
+**Implemented** (ADR-022). One row per sales transaction a POS sent to
+`POST /api/v1/sales-data`, and what the ESB said about it (`[ESB-011]`).
+
+| Column | Notes |
+| --- | --- |
+| id | Auto-increment. Orders pushes of one `sales_num`. |
+| public_id | ULID, unique. Used by the API and the URLs, so ids do not reveal volume. |
+| api_client_id | Nullable FK to `api_clients`, `nullOnDelete`. |
+| sales_num / branch_code | Copied from `salesHead` (max 20 each, the vendor's sizes). |
+| sales_date | From `salesHead.salesDate`; null when the POS sent `""`. |
+| payload | `{"salesHead": …}` as received, `encrypted:array`. Holds customer names and payment details. Never shown or returned. |
+| status | `queued`, `succeeded`, `rejected`, `failed`, `superseded` (`SalesPush::STATUSES`). |
+| attempts / last_attempted_at | Attempts the job made. |
+| failure / correlation_id / errors | Last failure: `EsbException::kind()`, the integration log correlation id, and the ESB's `[{field, message}]`. |
+| esb_status / esb_sync_date / pushed_at | From the accepted response (`result.status`, `result.syncDate`) and when it was accepted. |
+| created_at / updated_at | |
+
+Indexed on `(sales_num, id)`, `(status, created_at)`, and `(branch_code, created_at)`.
+
+Retention for this table, and especially for `payload`, is `TBD`.
 
 ### audit_logs
 

@@ -7,6 +7,7 @@ use App\Integrations\ESB\ErrorClassifier;
 use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbContext;
 use App\Integrations\ESB\EsbFamily;
+use App\Integrations\ESB\Exceptions\EsbConfigurationException;
 use App\Integrations\ESB\Exceptions\EsbConnectionException;
 use App\Integrations\ESB\Exceptions\EsbException;
 use App\Integrations\ESB\Exceptions\EsbMalformedResponseException;
@@ -86,8 +87,32 @@ class EsbClient
     }
 
     /**
+     * POST one file as multipart/form-data.
+     *
+     * A write like any other non-GET: exactly one attempt. The contents are
+     * never logged -- the integration log records metadata only.
+     *
+     * @throws EsbException
+     */
+    public function upload(
+        EsbFamily $family,
+        string $path,
+        string $field,
+        string $contents,
+        string $filename,
+        string $operation = '',
+    ): EsbEnvelope {
+        return $this->send('POST', $family, $path, $operation, file: [
+            'name' => $field,
+            'contents' => $contents,
+            'filename' => $filename,
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
+     * @param  array{name: string, contents: string, filename: string}|null  $file
      *
      * @throws EsbException
      */
@@ -98,6 +123,7 @@ class EsbClient
         string $operation = '',
         array $query = [],
         array $body = [],
+        ?array $file = null,
     ): EsbEnvelope {
         $method = strtoupper($method);
 
@@ -113,7 +139,7 @@ class EsbClient
         $startedAtMicro = microtime(true);
 
         try {
-            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $context);
+            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $file, $context);
         } catch (EsbException $exception) {
             $this->record(
                 $exception->context->withTiming($this->elapsedMs($startedAtMicro)),
@@ -143,6 +169,7 @@ class EsbClient
      *
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
+     * @param  array{name: string, contents: string, filename: string}|null  $file
      * @return array{EsbEnvelope, int, int|null}
      *
      * @throws EsbException
@@ -153,6 +180,7 @@ class EsbClient
         string $path,
         array $query,
         array $body,
+        ?array $file,
         EsbContext $context,
     ): array {
         $isRead = $method === 'GET';
@@ -171,7 +199,12 @@ class EsbClient
             $attempt++;
 
             try {
-                $response = $this->dispatch($method, $family, $path, $query, $body);
+                $response = $this->dispatch($method, $family, $path, $query, $body, $file);
+            } catch (EsbConfigurationException $misconfigured) {
+                // Not a transport failure: no retry fixes it, and wrapping it
+                // would report a disabled or undocumented family as an
+                // upstream error.
+                throw $misconfigured;
             } catch (Throwable $transportFailure) {
                 $lastException = $this->normalizeTransportFailure(
                     $transportFailure,
@@ -226,8 +259,9 @@ class EsbClient
     /**
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
+     * @param  array{name: string, contents: string, filename: string}|null  $file
      */
-    private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body): Response
+    private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body, ?array $file): Response
     {
         $url = $this->connectionResolver->resolve($family).'/'.ltrim($path, '/');
 
@@ -242,6 +276,13 @@ class EsbClient
 
         if ($query !== []) {
             $request = $request->withQueryParameters($query);
+        }
+
+        if ($file !== null) {
+            // PendingRequest only merges attached files into a request that
+            // carries a body option of its own format, even an empty one.
+            return $request->attach($file['name'], $file['contents'], $file['filename'])
+                ->send($method, $url, ['multipart' => []]);
         }
 
         return $body === []

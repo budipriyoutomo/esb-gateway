@@ -2,6 +2,7 @@
 
 namespace App\Integrations\ESB;
 
+use App\Integrations\ESB\Exceptions\EsbConfigurationException;
 use App\Models\EsbConnection;
 use Illuminate\Contracts\Config\Repository as Config;
 
@@ -17,6 +18,9 @@ use Illuminate\Contracts\Config\Repository as Config;
  *      environment;
  *   2. the ESB_BASE_URL_* override;
  *   3. the family table in config/esb.php.
+ *
+ * An inactive row does not fall through to 2 or 3: it switches the family off
+ * (ADR-020, superseding the ADR-018 fallback).
  *
  * Nothing ever writes back into configuration. A row for an environment other
  * than the configured one is a record, not a route: it is ignored, so writing
@@ -49,6 +53,16 @@ class EsbConnectionResolver
     public function resolve(EsbFamily $family, ?EsbEnvironment $environment = null): string
     {
         if ($environment === null) {
+            // Switched off on the connections screen (ADR-020). Falling back to
+            // configuration here would route traffic at a host the operator
+            // just said not to use.
+            if ($this->isDisabled($family)) {
+                throw new EsbConfigurationException(sprintf(
+                    'The %s ESB connection is disabled. Enable it on the ESB connections screen to use it.',
+                    $family->value,
+                ));
+            }
+
             $connection = $this->connectionFor($family);
 
             if ($connection !== null) {
@@ -67,10 +81,14 @@ class EsbConnectionResolver
     /**
      * Which layer supplied the effective base URL.
      *
-     * @return 'database'|'override'|'config'|'none'
+     * @return 'disabled'|'database'|'override'|'config'|'none'
      */
     public function source(EsbFamily $family): string
     {
+        if ($this->isDisabled($family)) {
+            return 'disabled';
+        }
+
         if ($this->connectionFor($family) !== null) {
             return 'database';
         }
@@ -92,6 +110,16 @@ class EsbConnectionResolver
      */
     public function connectionFor(EsbFamily $family): ?EsbConnection
     {
+        $row = $this->rowFor($family);
+
+        return $row?->is_active ? $row : null;
+    }
+
+    /**
+     * The family's row in the configured environment, active or not.
+     */
+    public function rowFor(EsbFamily $family): ?EsbConnection
+    {
         $environment = $this->configuredEnvironment()->value;
         $key = $family->value.'@'.$environment;
 
@@ -99,11 +127,20 @@ class EsbConnectionResolver
             $this->connections[$key] = EsbConnection::query()
                 ->where('family', $family->value)
                 ->where('environment', $environment)
-                ->where('is_active', true)
                 ->first();
         }
 
         return $this->connections[$key];
+    }
+
+    /**
+     * Has an operator switched this family off (ADR-020)?
+     */
+    public function isDisabled(EsbFamily $family): bool
+    {
+        $row = $this->rowFor($family);
+
+        return $row !== null && ! $row->is_active;
     }
 
     /**

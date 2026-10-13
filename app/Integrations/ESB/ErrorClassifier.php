@@ -5,6 +5,7 @@ namespace App\Integrations\ESB;
 use App\Integrations\ESB\Exceptions\EsbException;
 use App\Integrations\ESB\Exceptions\EsbUnknownException;
 use App\Integrations\ESB\Responses\EsbEnvelope;
+use App\Integrations\ESB\Responses\EsbFieldError;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Log;
  */
 class ErrorClassifier
 {
+    public const MAX_FIELD_ERRORS = 100;
+
     public function classify(EsbEnvelope $envelope, EsbContext $context): EsbException
     {
         $exceptionClass = ErrorCode::exceptionClassFor($envelope->code);
@@ -38,6 +41,70 @@ class ErrorClassifier
             context: $context,
             esbCode: $envelope->code,
             upstreamMessage: $envelope->message,
+            fieldErrors: $this->fieldErrors($envelope->errors)
+                ?: $this->messageErrors($envelope->body['data'] ?? null),
         );
+    }
+
+    /**
+     * The FnB backend's refusals: plain strings in `data` rather than objects
+     * in `errors` (Push Sales Data V2, [ESB-011]). Bounded the same way.
+     *
+     * @return list<EsbFieldError>
+     */
+    private function messageErrors(mixed $messages): array
+    {
+        if (! is_array($messages) || ! array_is_list($messages)) {
+            return [];
+        }
+
+        $fieldErrors = [];
+
+        foreach ($messages as $message) {
+            $fieldError = is_string($message) ? EsbFieldError::fromMessage($message) : null;
+
+            if ($fieldError === null) {
+                continue;
+            }
+
+            $fieldErrors[] = $fieldError;
+
+            if (count($fieldErrors) === self::MAX_FIELD_ERRORS) {
+                break;
+            }
+        }
+
+        return $fieldErrors;
+    }
+
+    /**
+     * The envelope's `errors[]`, bounded: a sheet with thousands of bad rows
+     * must not become a response of thousands of messages.
+     *
+     * @return list<EsbFieldError>
+     */
+    private function fieldErrors(mixed $errors): array
+    {
+        if (! is_array($errors)) {
+            return [];
+        }
+
+        $fieldErrors = [];
+
+        foreach ($errors as $entry) {
+            $fieldError = is_array($entry) ? EsbFieldError::fromArray($entry) : null;
+
+            if ($fieldError === null) {
+                continue;
+            }
+
+            $fieldErrors[] = $fieldError;
+
+            if (count($fieldErrors) === self::MAX_FIELD_ERRORS) {
+                break;
+            }
+        }
+
+        return $fieldErrors;
     }
 }

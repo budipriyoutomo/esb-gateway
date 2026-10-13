@@ -3,6 +3,7 @@
 namespace Tests\Feature\EsbConnections;
 
 use App\Authorization\Role;
+use App\Models\EsbConnection;
 use App\Models\IntegrationLog;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
@@ -228,6 +229,54 @@ class EsbConnectionTest extends TestCase
         $this->assertIsArray($probe);
         $this->assertArrayHasKey('reachable', $probe);
         $this->assertNull($probe['reachable'], 'Unknown is not the same as unreachable.');
+
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function the_probe_result_reaches_the_page(): void
+    {
+        Http::fake(['*' => Http::response([
+            'code' => 'EC03100001',
+            'message' => 'Invalid Token',
+            'status' => 'fail',
+            'result' => null,
+        ], 401)]);
+
+        // The controller flashes the result, but a flash the page never
+        // receives is a Test button that appears to do nothing. Assert on what
+        // the page actually gets, not only on the session.
+        $this->actingAs($this->userWithRole(Role::IntegrationOperator))
+            ->from(route('esb-connections.index'))
+            ->followingRedirects()
+            ->post(route('esb-connections.test', ['family' => 'core']))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('esb-connections/index')
+                ->where('flash.probe.family', 'core')
+                ->where('flash.probe.reachable', true)
+                ->where('flash.probe.outcome', 'authentication'),
+            );
+    }
+
+    #[Test]
+    public function probing_a_disabled_family_is_refused_without_calling_the_esb(): void
+    {
+        Http::fake();
+
+        EsbConnection::query()->create([
+            'family' => 'core',
+            'environment' => 'staging_int',
+            'base_url' => 'https://esb.example.test/core',
+            'auth_mechanism' => 'static_token',
+            'credentials' => null,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($this->userWithRole(Role::IntegrationOperator))
+            ->post(route('esb-connections.test', ['family' => 'core']))
+            ->assertSessionHas('probe.outcome', 'disabled');
+
+        $this->assertNull(session('probe')['reachable']);
 
         Http::assertNothingSent();
     }

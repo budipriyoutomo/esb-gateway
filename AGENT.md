@@ -94,9 +94,14 @@ whether the work is done by a human or an AI agent. Concretely:
 - An adapter knows exactly one external system. It must never call another adapter.
   Cross-provider orchestration belongs in a Service/Action (ADR-007), consistent with
   the existing rule that controllers stay thin.
-- Do not scaffold `Integrations/Contracts`, `Domain/Canonical`, `integration_providers`,
-  or `sync_transactions` speculatively. Build them when a second provider is actually
-  being integrated, using the first provider (ESB) as the pattern to generalize from.
+- `App\Integrations\Contracts` and `App\Domain\Canonical` **exist** as of 2026-09-10
+  (ADR-019), extracted from the working ESB adapter. `OutboundAdapter` carries
+  `provider()` only; capability is declared by narrower contracts such as `ProductSource`.
+  Callers depend on the contract, and `AppServiceProvider` binds it to `ProductClient`.
+- Widen a canonical DTO only against a real second example. The current field set is the
+  ESB's and is expected to need revision, not to be treated as settled.
+- Still do not scaffold `InboundAdapter`, `integration_providers`, or `sync_transactions`.
+  They need a second provider's actual contract; ADR-017's gate holds for them.
 
 ## Backend Rules
 

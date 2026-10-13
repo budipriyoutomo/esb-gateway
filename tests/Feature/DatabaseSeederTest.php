@@ -38,7 +38,7 @@ class DatabaseSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(401, IntegrationEndpoint::query()->count());
+        $this->assertSame(1262, IntegrationEndpoint::query()->count());
     }
 
     #[Test]
@@ -59,6 +59,6 @@ class DatabaseSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame(count(Role::cases()), RoleModel::count());
-        $this->assertSame(401, IntegrationEndpoint::query()->count());
+        $this->assertSame(1262, IntegrationEndpoint::query()->count());
     }
 }

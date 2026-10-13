@@ -75,7 +75,45 @@ class ErrorClassifierTest extends TestCase
 
             'unknown error' => ['EC03100032', EsbUnknownException::class],
             'upstream defect' => ['EC0118', EsbUnknownException::class],
+
+            // FnB backend (Push Sales Data V2) uses HTTP-style numbers.
+            'fnb backend bad request' => ['400', EsbValidationException::class],
+            'fnb backend invalid credentials' => ['401', EsbAuthenticationException::class],
         ];
+    }
+
+    #[Test]
+    public function messages_in_data_become_field_errors_when_errors_is_absent(): void
+    {
+        // The FnB backend lists its refusals as plain strings in `data`, not
+        // as objects in `errors`. The field is the dotted path the message
+        // names; a message that names none keeps a null field.
+        $exception = app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray([
+                'code' => 400,
+                'message' => 'Member not found: salesHead.memberCode',
+                'data' => [
+                    'Member not found: salesHead.memberCode',
+                    'salesHead.salesNum cannot be blank',
+                    'Missing attribute: salesHead.menu[0].extras.[0].qty',
+                    'Something went wrong',
+                    ['not' => 'a string'],
+                    '   ',
+                ],
+            ]),
+            new EsbContext(correlationId: 'corr-1', operation: 'sales-data.push'),
+        );
+
+        $this->assertInstanceOf(EsbValidationException::class, $exception);
+        $this->assertSame(
+            [
+                ['row' => null, 'field' => 'salesHead.memberCode', 'message' => 'Member not found: salesHead.memberCode'],
+                ['row' => null, 'field' => 'salesHead.salesNum', 'message' => 'salesHead.salesNum cannot be blank'],
+                ['row' => null, 'field' => 'salesHead.menu[0].extras.[0].qty', 'message' => 'Missing attribute: salesHead.menu[0].extras.[0].qty'],
+                ['row' => null, 'field' => null, 'message' => 'Something went wrong'],
+            ],
+            array_map(fn ($error) => $error->toArray(), $exception->fieldErrors),
+        );
     }
 
     /**
@@ -143,6 +181,91 @@ class ErrorClassifierTest extends TestCase
         $this->assertSame('purchase order not found', $exception->upstreamMessage);
         $this->assertSame('corr-1', $exception->context->correlationId);
         $this->assertSame('product.list', $exception->context->operation);
+    }
+
+    // ----------------------------------------------------------- errors[]
+
+    private function classifyWithErrors(mixed $errors, string $code = 'EC03100003'): object
+    {
+        return app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray([
+                'code' => $code,
+                'message' => 'Validation Error',
+                'status' => 'fail',
+                'errors' => $errors,
+            ]),
+            new EsbContext(correlationId: 'corr-1', operation: 'purchase-request.import'),
+        );
+    }
+
+    #[Test]
+    public function it_carries_the_per_field_detail_of_errors(): void
+    {
+        $exception = $this->classifyWithErrors([
+            ['attribute' => 'branchID', 'field' => 'branchID', 'code' => 'EC03100003', 'message' => 'branchID is required'],
+            ['attribute' => 'qty', 'field' => 'qty', 'code' => 'EC03100003', 'message' => 'qty must be greater than 0', 'row' => 4],
+        ]);
+
+        $this->assertCount(2, $exception->fieldErrors);
+        $this->assertSame('branchID', $exception->fieldErrors[0]->field);
+        $this->assertNull($exception->fieldErrors[0]->row);
+        $this->assertSame('branchID is required', $exception->fieldErrors[0]->message);
+        $this->assertSame('qty', $exception->fieldErrors[1]->field);
+        $this->assertSame(4, $exception->fieldErrors[1]->row);
+    }
+
+    #[Test]
+    public function field_detail_falls_back_to_attribute_when_field_is_absent(): void
+    {
+        $exception = $this->classifyWithErrors([
+            ['attribute' => 'requiredDate', 'message' => 'requiredDate is invalid'],
+        ]);
+
+        $this->assertSame('requiredDate', $exception->fieldErrors[0]->field);
+    }
+
+    #[Test]
+    public function errors_that_are_not_a_list_of_objects_are_ignored(): void
+    {
+        $this->assertSame([], $this->classifyWithErrors(null)->fieldErrors);
+        $this->assertSame([], $this->classifyWithErrors('boom')->fieldErrors);
+
+        // Entries without a usable message say nothing; drop them rather
+        // than show an empty bullet.
+        $exception = $this->classifyWithErrors([
+            'not-an-object',
+            ['field' => 'branchID'],
+            ['field' => 'branchID', 'message' => '   '],
+            ['field' => 'branchID', 'message' => 'branchID is required'],
+        ]);
+
+        $this->assertCount(1, $exception->fieldErrors);
+    }
+
+    #[Test]
+    public function field_detail_is_bounded(): void
+    {
+        // Untrusted input shown to a user: a runaway message or list must
+        // not become a runaway page.
+        $exception = $this->classifyWithErrors([
+            ...array_fill(0, 500, ['field' => 'qty', 'message' => 'qty is invalid', 'row' => 2]),
+        ]);
+        $this->assertCount(100, $exception->fieldErrors);
+
+        $long = $this->classifyWithErrors([['field' => 'qty', 'message' => str_repeat('x', 5000)]]);
+        $this->assertLessThanOrEqual(300, mb_strlen($long->fieldErrors[0]->message));
+    }
+
+    #[Test]
+    public function a_field_name_that_is_not_an_identifier_is_dropped(): void
+    {
+        $exception = $this->classifyWithErrors([
+            ['field' => '<script>alert(1)</script>', 'message' => 'bad', 'row' => -3],
+        ]);
+
+        $this->assertNull($exception->fieldErrors[0]->field);
+        $this->assertNull($exception->fieldErrors[0]->row);
+        $this->assertSame('bad', $exception->fieldErrors[0]->message);
     }
 
     #[Test]

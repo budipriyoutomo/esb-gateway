@@ -1,6 +1,6 @@
 # ESB OMS API — Endpoint Catalog (v2.0.0)
 
-> Generated from the official apiDoc source (`https://developers.esb.co.id/esb-oms/api_data.json`) on 2026-09-09 by `docs/esb/generate-catalog.py`. This is a mechanical transcription of the vendor documentation, not a design document. Do not hand-edit — regenerate it, and record contract changes in `docs/05-api-integration.md`.
+> Generated from the official apiDoc source (`https://developers.esb.co.id/esb-oms/api_data.json`) on 2026-09-30 by `docs/esb/generate-catalog.py`. This is a mechanical transcription of the vendor documentation, not a design document. Do not hand-edit — regenerate it, and record contract changes in `docs/05-api-integration.md`.
 
 Official documentation: https://developers.esb.co.id/esb-oms/
 

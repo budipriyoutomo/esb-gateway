@@ -3,8 +3,10 @@
 namespace Tests\Feature\EsbConnections;
 
 use App\Authorization\Role;
+use App\Integrations\ESB\Clients\EsbClient;
 use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbFamily;
+use App\Integrations\ESB\Exceptions\EsbConfigurationException;
 use App\Models\AuditLog;
 use App\Models\EsbConnection;
 use App\Models\User;
@@ -12,6 +14,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -265,18 +268,113 @@ class EsbConnectionManagementTest extends TestCase
     }
 
     #[Test]
-    public function an_inactive_row_falls_back_to_configuration(): void
+    public function an_inactive_row_disables_the_family(): void
     {
+        // ADR-020, superseding the ADR-018 fallback: switching a connection
+        // off means the gateway stops talking to that family. Quietly
+        // re-routing to config/esb.php would send traffic at a host the
+        // operator just said not to use.
         $this->actingAs($this->userWithRole(Role::ItAdmin))
             ->put(
                 route('esb-connections.update', ['family' => 'core']),
                 $this->payload(['is_active' => false]),
             );
 
+        $this->expectException(EsbConfigurationException::class);
+
+        app(EsbConnectionResolver::class)->resolve(EsbFamily::Core);
+    }
+
+    #[Test]
+    public function disabling_one_family_leaves_the_others_active(): void
+    {
+        $this->actingAs($this->userWithRole(Role::ItAdmin))
+            ->put(
+                route('esb-connections.update', ['family' => 'voucher']),
+                $this->payload(['base_url' => 'https://esb.example.test/voucher', 'is_active' => false]),
+            );
+
         $this->assertSame(
             'https://stg7.esb.co.id/core-int',
             app(EsbConnectionResolver::class)->resolve(EsbFamily::Core),
         );
+    }
+
+    #[Test]
+    public function a_disabled_family_sends_nothing_to_the_esb(): void
+    {
+        Http::fake();
+
+        EsbConnection::query()->create([
+            'family' => 'core',
+            'environment' => 'staging_int',
+            'base_url' => 'https://esb.example.test/core',
+            'auth_mechanism' => 'static_token',
+            'credentials' => null,
+            'is_active' => false,
+        ]);
+
+        try {
+            app(EsbClient::class)->get(EsbFamily::Core, '/product/list', ['limit' => 1], operation: 'test');
+            $this->fail('A disabled family must refuse the call.');
+        } catch (EsbConfigurationException) {
+            // expected
+        }
+
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function the_screen_says_which_connections_are_active(): void
+    {
+        $admin = $this->userWithRole(Role::ItAdmin);
+
+        $this->actingAs($admin)->put(
+            route('esb-connections.update', ['family' => 'voucher']),
+            $this->payload(['base_url' => 'https://esb.example.test/voucher', 'is_active' => false]),
+        );
+
+        $this->actingAs($admin)
+            ->get(route('esb-connections.index'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('connections.0.active', true)
+                ->where('connections.1.family', 'voucher')
+                ->where('connections.1.active', false)
+                ->where('connections.1.source', 'disabled')
+                // The stored URL is kept on screen so switching the connection
+                // back on does not mean retyping it.
+                ->where('connections.1.baseUrl', 'https://esb.example.test/voucher')
+                ->where('connections.1.probeAvailable', false),
+            );
+    }
+
+    #[Test]
+    public function the_screen_reports_each_rows_auth_mechanism(): void
+    {
+        // The edit form starts from this. Defaulting it would flip a login
+        // connection to static_token on an unrelated edit, like toggling it off.
+        $this->actingAs($this->userWithRole(Role::ItAdmin))->put(
+            route('esb-connections.update', ['family' => 'core']),
+            $this->payload(['auth_mechanism' => 'login', 'username' => 'gw', 'password' => 'pw']),
+        );
+
+        $this->actingAs($this->userWithRole(Role::ItAdmin))
+            ->get(route('esb-connections.index'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('connections.0.authMechanism', 'login')
+                ->where('connections.1.authMechanism', 'static_token'),
+            );
+    }
+
+    #[Test]
+    public function a_saved_change_is_confirmed_on_the_page(): void
+    {
+        $this->actingAs($this->userWithRole(Role::ItAdmin))
+            ->followingRedirects()
+            ->put(route('esb-connections.update', ['family' => 'core']), $this->payload())
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('flash.status', 'The core connection was updated.'),
+            );
     }
 
     #[Test]

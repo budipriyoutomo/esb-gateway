@@ -32,8 +32,10 @@ class EsbConnectionInspector
      *     family: string,
      *     baseUrl: string|null,
      *     configured: bool,
+     *     active: bool,
      *     probeAvailable: bool,
      *     source: string,
+     *     authMechanism: string,
      *     hasCredential: bool,
      *     note: string|null
      * }>
@@ -43,6 +45,26 @@ class EsbConnectionInspector
         $connections = [];
 
         foreach (EsbFamily::cases() as $family) {
+            $row = $this->resolver->rowFor($family);
+
+            if ($this->resolver->isDisabled($family)) {
+                $connections[] = [
+                    'family' => $family->value,
+                    // Kept on screen so switching it back on does not mean
+                    // retyping the URL. Nothing is sent to it.
+                    'baseUrl' => $row?->base_url,
+                    'configured' => false,
+                    'active' => false,
+                    'probeAvailable' => false,
+                    'source' => 'disabled',
+                    'authMechanism' => $row?->auth_mechanism ?? 'static_token',
+                    'hasCredential' => $row?->hasCredential() ?? false,
+                    'note' => 'Disabled. The gateway refuses every call to this family until it is enabled again.',
+                ];
+
+                continue;
+            }
+
             $baseUrl = null;
             $note = null;
 
@@ -61,12 +83,16 @@ class EsbConnectionInspector
                 'family' => $family->value,
                 'baseUrl' => $baseUrl,
                 'configured' => $baseUrl !== null,
+                'active' => true,
                 'probeAvailable' => $probe !== null,
                 // Which layer won. An operator who sets an override and sees
                 // no effect needs to be able to find out why without reading
                 // the source.
                 'source' => $this->resolver->source($family),
-                'hasCredential' => $this->resolver->connectionFor($family)?->hasCredential() ?? false,
+                // The edit form starts from this, so an unrelated edit does not
+                // flip a login connection to static_token.
+                'authMechanism' => $row?->auth_mechanism ?? 'static_token',
+                'hasCredential' => $row?->hasCredential() ?? false,
                 'note' => $note ?? ($probe === null
                     ? 'The vendor documents no health endpoint for this family, so connectivity cannot be probed.'
                     : null),
@@ -89,6 +115,14 @@ class EsbConnectionInspector
      */
     public function probe(EsbFamily $family): array
     {
+        if ($this->resolver->isDisabled($family)) {
+            return [
+                'reachable' => null,
+                'outcome' => 'disabled',
+                'message' => 'This connection is disabled, so it was not probed.',
+            ];
+        }
+
         $probe = $this->probeFor($family);
 
         if ($probe === null) {

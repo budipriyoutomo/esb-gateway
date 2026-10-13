@@ -46,6 +46,13 @@ class HandleInertiaRequests extends Middleware
                 // still authorized server-side.
                 'permissions' => $request->user()?->effectivePermissionNames() ?? [],
             ],
+            // Controllers flash these on redirect. Without sharing them the
+            // page never sees them, and an action like the ESB connection
+            // Test button looks as if it did nothing.
+            'flash' => [
+                'status' => fn () => $request->session()->get('status'),
+                'probe' => fn () => $request->session()->get('probe'),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

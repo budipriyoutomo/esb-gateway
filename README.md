@@ -28,7 +28,8 @@ Copy the contents of this folder into the root of your Laravel project repositor
   provider's contract; a future provider gets its own equivalent document).
 - `docs/esb/esb-core-endpoints.md` — generated catalog of all ESB Core operations.
 - `docs/esb/esb-oms-endpoints.md` — generated catalog of all ESB OMS operations.
-- `docs/esb/generate-catalog.py` — regenerates the two catalogs from the vendor apiDoc source.
+- `docs/esb/generate-catalog.py` — regenerates the two catalogs from the vendor sources
+  (OpenAPI for ESB Core, apiDoc for ESB OMS).
 - `docs/06-authentication-authorization.md` — application user authentication and
   authorization. Machine-to-machine auth for external providers calling into the gateway
   is not written yet; it arrives with the first inbound provider (ADR-017).
@@ -53,8 +54,8 @@ writing code, and should update `docs/project-state.md` after finishing a unit o
 ## Important
 
 The ESB API contract was imported on 2026-09-09 from
-https://developers.esb.co.id/esb-core/ and https://developers.esb.co.id/esb-oms/ —
-401 operations in total. `docs/05-api-integration.md` records the authentication flow,
+https://developers.esb.co.id/esb-core/ and https://developers.esb.co.id/esb-oms/, and the
+catalogs were regenerated on 2026-09-30 — 1262 operations in total (1224 Core, 38 OMS). `docs/05-api-integration.md` records the authentication flow,
 response envelope, pagination, error-code catalog, and retry/idempotency rules.
 
 Two things still need answers from the ESB team before ESB integration work can be

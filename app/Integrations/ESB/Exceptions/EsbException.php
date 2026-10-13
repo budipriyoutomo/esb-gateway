@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Exceptions;
 
 use App\Integrations\ESB\EsbContext;
+use App\Integrations\ESB\Responses\EsbFieldError;
 use RuntimeException;
 use Throwable;
 
@@ -16,11 +17,18 @@ use Throwable;
  */
 abstract class EsbException extends RuntimeException
 {
+    /**
+     * @param  list<EsbFieldError>  $fieldErrors  The envelope's `errors[]`, filtered.
+     *                                            Unlike upstreamMessage, these are
+     *                                            meant for the person who filled the
+     *                                            form or sheet.
+     */
     public function __construct(
         public readonly EsbContext $context,
         public readonly ?string $esbCode = null,
         public readonly ?string $upstreamMessage = null,
         ?Throwable $previous = null,
+        public readonly array $fieldErrors = [],
     ) {
         parent::__construct($this->buildInternalMessage(), 0, $previous);
     }
@@ -46,6 +54,20 @@ abstract class EsbException extends RuntimeException
      * timed-out write is in an unknown state.
      */
     public function isRetryable(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Whether a write that failed this way may nonetheless have been applied.
+     *
+     * False means the ESB answered with a definite refusal, so the caller can
+     * report that nothing happened. True means there was no usable answer, or
+     * one that does not say what happened: the ERP document is in an unknown
+     * state, and a human must check it (a GET by document number) before
+     * trying again. Meaningless for reads.
+     */
+    public function mayHaveBeenApplied(): bool
     {
         return false;
     }

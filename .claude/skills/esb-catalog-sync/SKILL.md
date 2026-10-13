@@ -14,13 +14,17 @@ description: >
 
 **Jangan pernah mengedit `docs/esb/esb-core-endpoints.md` atau
 `docs/esb/esb-oms-endpoints.md` secara manual.** Kedua file ini adalah hasil generate
-otomatis dari `docs/esb/generate-catalog.py` berdasarkan apiDoc vendor. Edit manual akan
+otomatis dari `docs/esb/generate-catalog.py` berdasarkan sumber vendor (OpenAPI
+`openapi.json` untuk ESB Core, apiDoc `api_data.json` untuk ESB OMS). Edit manual akan
 hilang begitu script dijalankan ulang, dan berisiko membuat katalog tidak sinkron dengan
 sumber aslinya.
 
 ## Kapan katalog perlu di-sync ulang
 
-- Vendor merilis versi baru dokumentasi apiDoc ESB Core/OMS.
+- Vendor merilis versi baru dokumentasi ESB Core (OpenAPI) / OMS (apiDoc).
+- Cara download sumbernya ada di docstring `docs/esb/generate-catalog.py`. Kalau jumlah
+  operasi berubah, test `tests/Feature/EndpointCatalog/*` yang menghitung jumlah operasi
+  juga harus di-update.
 - Ada laporan endpoint yang hilang/berbeda dari yang didokumentasikan di
   `developers.esb.co.id`.
 - Sebelum mulai mengintegrasikan family endpoint yang belum pernah disentuh, untuk

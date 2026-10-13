@@ -422,7 +422,7 @@ contract.
 
 ## ADR-017 — Do Not Scaffold a Second Provider Speculatively
 
-**Status:** Accepted
+**Status:** Accepted — gate amended for the extraction step by ADR-019
 
 **Context**
 ADR-016 establishes the shape future integrations should take. Without a real second
@@ -456,7 +456,7 @@ integrated — extracted from that concrete need — not ahead of it.
 
 ## ADR-018 — ESB Connections Are Editable Records, With Credentials Encrypted at Rest
 
-**Status:** Accepted — supersedes ADR-013
+**Status:** Accepted — supersedes ADR-013; inactive-row rule amended by ADR-020
 
 **Context**
 ADR-013 decided that ESB connections are configuration only, and closed with an explicit
@@ -537,3 +537,271 @@ An `esb_connections` table exists and is editable through the UI, under these ru
 - Whether an external secret manager will be provisioned, which would change *how*
   credentials are stored but not *that* connections are editable.
 
+
+---
+
+## ADR-019 — Extract the Provider Contracts From ESB Before a Second Provider Is Named
+
+**Status:** Accepted — amends the gate in ADR-017
+
+**Context**
+ADR-016 sets the target architecture: every external system is a provider, integrated
+through an adapter pair against canonical DTOs. ADR-017 gates that work — "the generic
+infrastructure itself ... is built when the first real second provider is integrated —
+extracted from that concrete need — not ahead of it" — and names the trigger as a second
+provider being contracted.
+
+No second provider is named or contracted. The project owner nevertheless directed that
+Phase 9 begin, and reaffirmed it after the gate was pointed out. That is a decision the
+owner is entitled to make, and this ADR records it rather than leaving the deviation
+undocumented in a commit message.
+
+Two facts bound what could honestly be built:
+
+- A second provider's contract — its auth model, envelope, error catalogue, and
+  pagination style — is not known. Inventing one would be indistinguishable from
+  fabricating vendor documentation, which `AGENT.md` forbids for the ESB and which is no
+  more acceptable for a system nobody has named.
+- ADR-017's own ordering states that when the gate opens, "the first task is generalizing
+  the ESB adapter to fit the `OutboundAdapter`/`InboundAdapter` contracts, not building
+  the contracts in the abstract first." Generalizing existing, working, tested code is
+  grounded in a real example even without the second one.
+
+**Decision**
+The gate in ADR-017 is amended for exactly the extraction step. The contracts and
+canonical DTOs are extracted **from the working ESB implementation**:
+
+- `App\Domain\Canonical\Product`, `Pagination`, `ProductPage`, and `ProductQuery`.
+- `App\Integrations\Contracts\OutboundAdapter` and `ProductSource`.
+- `ProductClient` implements `ProductSource`; `ProductController` depends on the contract,
+  and `AppServiceProvider` binds it.
+
+Everything in ADR-017 that describes a *second* provider's needs stays gated and unbuilt:
+`integration_providers`, `sync_transactions`, `InboundAdapter`, machine-to-machine
+inbound authentication, `routes/api.php`, `SyncOrchestrator`, per-provider queues,
+per-provider health and rate limiting, and the replay/dead-letter path. None of them can
+be designed from one example, and building them now would be the speculation ADR-017
+exists to prevent.
+
+`OutboundAdapter` carries only `provider()`. Capability is declared by narrower contracts
+such as `ProductSource`, so a provider is never made to stub out an operation it does not
+have.
+
+**Reason**
+- The extraction is verifiable against real code and real tests; it changed the shape of
+  a working feature without changing its behaviour.
+- Depending on `ProductSource` rather than `ProductClient` makes a second provider a
+  binding change instead of a rewrite of every caller.
+- Leaving the rest gated keeps ADR-017's actual protection intact: the parts that need two
+  examples still wait for the second one.
+
+**Consequences**
+- `App\Integrations\ESB\DTOs\ProductSummary`, `ProductListResult`, and `ProductListQuery`
+  are removed; their roles moved to `App\Domain\Canonical`. `EsbPagination` remains the
+  ESB list-envelope shape and gains `toCanonical()`.
+- Canonical `Product` carries a `provider` key, exposed to the frontend. A canonical
+  record is only identifiable together with its origin once more than one provider exists.
+- The canonical field set is the ESB's, because the ESB is the only example. Expect
+  revision when a second provider lands. `bomId`/`bomName` are the likeliest fields to
+  turn out ERP-specific rather than canonical.
+- `ProductSource::listProducts()` still declares `EsbException`. A provider-neutral
+  exception hierarchy needs a second error model to design against.
+- The risk ADR-017 names — a contract designed against one example needing rework — is
+  accepted, not avoided. The mitigation is that the contract is deliberately narrow.
+
+**Rejected**
+- Building the full Phase 9 list, including `integration_providers` and
+  `sync_transactions`. Their columns encode assumptions about a provider nobody has named.
+- Refusing to start at all. ADR-017's ordering already puts ESB generalization first, so
+  the extraction step is the one part that does not depend on the unnamed provider.
+
+**Open**
+- The name and contract of the second provider. Until it exists, `ProductQuery::SORTABLE`
+  holds the ESB's own column names rather than a canonical sort vocabulary, and is marked
+  TBD in that class.
+- Whether `InboundAdapter` is needed at all. No inbound flow exists today, so it is not
+  written.
+
+
+---
+
+## ADR-020 — An Inactive ESB Connection Disables Its Family
+
+**Status:** Accepted — amends ADR-018 (the inactive-row rule only)
+
+**Context**
+ADR-018 gave each `esb_connections` row an active flag, and the resolver treated an
+inactive row as absent: the family fell back to the `ESB_BASE_URL_*` override or to
+`config/esb.php`. The edit form never exposed the flag (it always sent `true`), so in
+practice every family was always "active".
+
+On 2026-09-29 the staging install had Core repointed to `https://stg7.esb.co.id/core-stg`
+while Voucher, FnB Backend, and POS still pointed at `https://stg-erp.esb.co.id`, which
+answered HTTP 500 to every request. The project owner asked to be able to say which
+connections are active, and chose, when asked, that switching one off must stop the
+gateway using that family entirely rather than re-route it.
+
+**Decision**
+- A row with `is_active = false` for a family in the configured environment **disables
+  that family**. `EsbConnectionResolver::resolve()` throws `EsbConfigurationException`;
+  nothing is sent to the ESB and nothing falls back to the override or `config/esb.php`.
+- `EsbConnectionResolver::source()` reports `disabled` for such a family, and the
+  connections screen shows it as Disabled with its stored base URL kept for re-enabling.
+- Probing a disabled family returns `reachable: null, outcome: "disabled"` without an
+  HTTP call.
+- The edit form exposes the Active checkbox, and starts from the row's current
+  `auth_mechanism` instead of defaulting to `static_token`.
+- `EsbClient` rethrows `EsbConfigurationException` unchanged instead of wrapping it as an
+  upstream failure and retrying it.
+- Reverting a disabled connection deletes the row, which re-enables the family under
+  configuration.
+
+**Reason**
+- An operator who switches a connection off means "do not talk to this host". Silently
+  routing to a configured default sends traffic somewhere they did not choose, possibly a
+  different ESB environment.
+- A configuration error is not transient; retrying it only delays a clear message.
+
+**Consequences**
+- The ADR-018 test `an_inactive_row_falls_back_to_configuration` is replaced by
+  `an_inactive_row_disables_the_family`.
+- Disabling the family named in `esb.auth.family` (Core) removes that row's credentials
+  from `auth()`, which falls back to configured credentials. Because Core itself is then
+  disabled, that fallback can only authenticate calls to the other families.
+- There is now no way to "park" a row and keep using configuration. Use Revert for that.
+
+**Rejected**
+- Keeping the ADR-018 fallback and only exposing the toggle. The owner rejected this
+  because "inactive" would silently mean "use another host".
+
+---
+
+## ADR-021 — One Write Guard for ESB Writes, and Show the ESB's Field Errors
+
+**Status:** Accepted
+
+**Context**
+Purchase request slice 3 added create, update, delete, and file import next to the
+existing authorize/reject decision. That makes five non-idempotent ESB writes with the
+same rules: one write at a time, exactly one attempt, and an audit row with the
+correlation id when the outcome is unknown. ADR-015 deferred an Action base "until the
+first write adapter is built". This is now proven duplication.
+
+Create and import also need the ESB's per-field and per-row `errors[]`. Without them, a
+refused import sheet only says "rejected as invalid". The envelope `message` is kept away
+from users because it can leak internals (a documented case carries a PHP file path).
+
+**Decision**
+- `App\Actions\Support\GuardedEsbWrite::run($lockKey, $write, $onUnconfirmed)` holds the
+  lock, runs the write, calls `$onUnconfirmed` for an exception whose
+  `mayHaveBeenApplied()` is true, and rethrows. Each Action composes it and keeps its own
+  audit rows. It is composition, not a base class, because the Actions have different
+  signatures and return values.
+- Writes to an existing purchase request (update, delete, authorize, reject) share one
+  lock per document, `purchase-request-write:{number}`. Create and import have no number
+  yet, so they lock per person. `WriteAlreadyInFlight` replaces `DecisionAlreadyInFlight`.
+- `ErrorClassifier` copies the envelope's `errors[]` onto every `EsbException` as
+  `fieldErrors` (`EsbFieldError`: `field`, `row`, `message`). Entries are capped at 100
+  and messages at 300 characters. A `field` that is not an identifier is dropped and a
+  non-positive `row` becomes null. These messages may be shown to the person who filled
+  the form or sheet. `upstreamMessage` still is not.
+- The base `Controller` gets the `toast()` helper, and `BaseFormRequest` gets
+  `userHoldsAll()`, each now with three or more consumers.
+
+**Reason**
+- Five copies of the lock-and-audit logic would drift. The unconfirmed-write rule is the
+  one most costly to get subtly wrong.
+- A shared per-document lock closes a race the per-decision lock left open: an update
+  racing a reject on the same document.
+- `errors[]` entries are written for form users ("branchID is required", "qty must be
+  greater than 0"). The envelope message is a diagnostic string.
+
+**Consequences**
+- The decision lock key changed from `purchase-request-decision:{number}` to
+  `purchase-request-write:{number}`.
+- A new ESB write should use `GuardedEsbWrite` rather than taking its own lock.
+- Screens other than the purchase request form and import do not show `fieldErrors` yet.
+  The data is available on the exception when they want it.
+
+**Rejected**
+- An abstract `EsbWriteAction` base class. It would force one `handle()` signature on
+  actions that take a number, a draft, a file, or a decision.
+- Showing the envelope `message` for validation failures instead of `errors[]`. It is
+  the less specific of the two and the one known to leak internals.
+
+
+---
+
+## ADR-022 — Inbound POS Sales Data: API-Client Tokens, a Stored Push, and a Queue
+
+**Status:** Accepted
+
+**Context**
+The business asked for ESB Push Sales Data V2 (`POST /extv1/push/sales-data`, FnB
+backend family) with POS systems as the source of the data. Until now every ESB call
+was started by a person in the web UI. A POS is a machine: it has no session, sends
+transactions at any hour, and must not lose one when the ESB is down.
+
+The vendor documents that "when push sales with the existing salesNum, it will overwrite
+the existing sales data". It is the first ESB write documented as safe to repeat, and
+also one where sending an older version after a newer one silently replaces good data.
+
+The project has no API routes, no Sanctum, and no job classes. AGENT.md still forbids
+scaffolding `InboundAdapter`, `integration_providers`, and `sync_transactions` before a
+second provider's contract exists (ADR-017).
+
+**Decision**
+- `/api/v1` routes (`routes/api.php`) authenticate with an **API client token**: a row
+  in `api_clients` holding the SHA-256 of a random 48-character token. Tokens are issued
+  and revoked with `php artisan api-client:create|revoke`, audited as
+  `api-client.issued` / `.revoked`, and shown once. A web session is never accepted.
+  Rate limited per client (`throttle:sales-push-api`).
+- `POST /api/v1/sales-data` takes the ESB's own V2 body. It validates only identity
+  and structure, stores the transaction in `sales_pushes` (payload `encrypted:array`),
+  answers `202` with a ULID, and queues `PushSalesData`. `GET /api/v1/sales-data/{id}`
+  returns the status and the ESB's messages to the client that sent it.
+- The body is forwarded **unchanged**. `/api/*` skips `TrimStrings` and
+  `ConvertEmptyStringsToNull`. There is no canonical sales model; `SalesDataSink`
+  declares the provider's shape, as `importPurchaseRequests()` does for its sheet.
+- `PushSalesData` repeats unknown outcomes (bounded `tries` and `backoff`) because the
+  ESB overwrites by `salesNum`. A refusal ends as `rejected`, a credential or
+  configuration problem as `failed`. A push is `superseded` and never sent when a newer
+  push of the same `salesNum` is queued or succeeded; pushes of one `salesNum` never run
+  side by side.
+- A web screen lists pushes (`sales-pushes.view`) and lets an operator queue a `failed`
+  or `rejected` push again (`sales-pushes.retry`, audited `sales-push.retried`).
+
+**Reason**
+- A queue is the only way to keep a POS transaction when the ESB is unavailable, and the
+  vendor's overwrite rule makes a queue retry safe.
+- A hashed token table is about 100 lines and needs no new dependency. Sanctum would add
+  a package, a migration, and a `tokenable` model for one kind of caller.
+- Forwarding the vendor shape keeps the gateway out of tax and rounding rules it does not
+  own. The vendor documentation disagrees with itself on several field types, so
+  re-validating every field here would reject data the ESB accepts, or the reverse.
+- `sales_pushes` is a feature table, not the generic `sync_transactions` ADR-017 gates.
+
+**Consequences**
+- The gateway now stores sales payloads with customer names and payment details. They
+  are encrypted at rest and never shown on a page or returned by the API. Their
+  retention is `TBD`.
+- A production installation must run a queue worker for sales pushes to leave the
+  gateway.
+- `ErrorCode` accepts the FnB backend's HTTP-style codes (`"200"`, `400`, `401`), and
+  `ErrorClassifier` reads `data[]` strings as field errors.
+- POS clients must call the status endpoint to learn about refusals. There is no webhook
+  back to them.
+
+**Rejected**
+- Laravel Sanctum — a dependency for what one table and one middleware do.
+- Calling the ESB inside the POS request — the POS would lose the transaction whenever
+  the ESB is slow or down, and a POS retry loop would multiply the load.
+- Validating every documented attribute in the gateway — see Reason.
+- Upload-a-file or manual-entry screens — the owner chose the POS API (2026-10-01).
+
+**Open**
+- The vendor documents a **static token** for this operation. The gateway sends its
+  configured credential, the Core username/password login token, on the owner's
+  instruction (2026-10-01). Whether the FnB backend accepts it is `TBD` on staging.
+- Retention of `sales_pushes` and its payload.
+- Managing API clients from the UI instead of the console.

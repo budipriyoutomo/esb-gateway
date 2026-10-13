@@ -53,7 +53,7 @@ class EndpointCatalogTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('endpoints/index')
                 ->has('endpoints.data')
-                ->where('endpoints.total', 401),
+                ->where('endpoints.total', 1262),
             );
     }
 
@@ -71,9 +71,9 @@ class EndpointCatalogTest extends TestCase
     public function it_filters_by_group(): void
     {
         $this->actingAs($this->viewer())
-            ->get(route('endpoints.index', ['group' => 'Master_Product']))
+            ->get(route('endpoints.index', ['group' => 'Master Product']))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('endpoints.total', 25),
+                ->where('endpoints.total', 35),
             );
     }
 
@@ -83,7 +83,7 @@ class EndpointCatalogTest extends TestCase
         $this->actingAs($this->viewer())
             ->get(route('endpoints.index', ['method' => 'DELETE']))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('endpoints.total', 35),
+                ->where('endpoints.total', 101),
             );
     }
 
@@ -91,9 +91,9 @@ class EndpointCatalogTest extends TestCase
     public function it_filters_by_family(): void
     {
         $this->actingAs($this->viewer())
-            ->get(route('endpoints.index', ['family' => 'voucher']))
+            ->get(route('endpoints.index', ['family' => 'pos']))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('endpoints.total', 3),
+                ->where('endpoints.total', 5),
             );
     }
 
@@ -110,13 +110,13 @@ class EndpointCatalogTest extends TestCase
     {
         // Offering a group with nothing in it would be a dead end.
         //
-        // 49, not 51: Core declares 41 groups and OMS 10, but "Authorization"
-        // and "Report" appear in both products. The filter matches on group
-        // name, so those are one option each.
+        // 125, not 126: Core declares 116 groups and OMS 10, but "Report"
+        // appears in both products. The filter matches on group name, so it
+        // is one option.
         $this->actingAs($this->viewer())
             ->get(route('endpoints.index'))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('groups', 49)
+                ->has('groups', 125)
                 ->has('methods')
                 ->has('families'),
             );

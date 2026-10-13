@@ -15,4 +15,13 @@ class EsbUnknownException extends EsbException
     {
         return 'unknown';
     }
+
+    /**
+     * EC03100032 covers generic failures and some business
+     * rejections alike, so it is not a definite refusal.
+     */
+    public function mayHaveBeenApplied(): bool
+    {
+        return true;
+    }
 }
