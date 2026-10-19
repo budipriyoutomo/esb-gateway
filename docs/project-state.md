@@ -1061,6 +1061,55 @@ the vendor's `openapi.json` on 2026-10-19.
   in new code.
 - Not run against a real ESB — faked HTTP only. Not checked in a browser.
 
+## Update 2026-10-19 — Simple Purchase module, slice 1 (ESB Core)
+
+`[ESB-018]`, built test-first on the Purchase Order pattern from the same day.
+
+**Selesai**
+
+- Read: `GET /purchase/simple-purchase` (number, supplier invoice number, date range,
+  single `branchID`, free-text) and `GET /purchase/simple-purchase/{cashPurchaseNum}`
+  (header, lines, costs, payments).
+- Write: authorize, reject (required reason), delete — `GuardedEsbWrite`, lock
+  `simple-purchase-write:{number}`.
+- `SimplePurchaseSource` bound to `SimplePurchaseClient`; `SimplePurchaseMapper`;
+  canonical `SimplePurchase`, `SimplePurchaseSummary`, `SimplePurchaseLine`,
+  `SimplePurchaseCost`, `SimplePurchasePayment`, `SimplePurchasePage`,
+  `SimplePurchaseQuery`, `SimplePurchaseDecision`.
+- `ListSimplePurchasesRequest`, `DecideSimplePurchaseRequest`,
+  `SimplePurchaseController`, `SimplePurchaseDecisionController`, routes
+  `simple-purchases.*`. Actions `DecideSimplePurchase`, `DeleteSimplePurchase`,
+  `SimplePurchaseLocks`, `UnconfirmedWrite`.
+- Permissions `simple-purchases.approve` / `.manage` (enum + `permissions.ts`, no role);
+  audit actions `simple-purchase.authorized` / `.rejected` / `.deleted` /
+  `.write-unconfirmed`.
+- Pages `simple-purchases/index` and `/show`, TS types
+  `resources/js/types/simple-purchase.ts`, sidebar entry "Simple purchases".
+- Tests: `tests/Feature/SimplePurchases/` (List, Detail, Decision, Delete),
+  `tests/Unit/Integrations/ESB/SimplePurchaseMapperTest.php`, fixture
+  `tests/Fixtures/CoreSimplePurchase.php` — 59 tests; 56 failed before the code existed
+  (3 path-escape tests already 404).
+- Docs: `[ESB-018]` in `docs/05`, `docs/06`, `TODO.md` "Module — Simple Purchase".
+
+**Tersisa**
+
+- `validate` pre-check, branch/status filters, create/update, uploads — see TODO.
+- Duplication with the Purchase Order slice is now real (decision actions, controllers,
+  page controls). Extraction recorded as one refactor in TODO, not mixed in here.
+
+**Assumptions / TBD**
+
+- Unknown number → `EC03100004` → 404 (assumed). Reason cap 500 (gateway's own).
+- Integer `dueDate`, header `coaNo` / `description` not carried (undocumented).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 807 tests (3821 assertions).
+- `tsc --noEmit`, `vp check` (after `vp fmt` on the two new pages), `npm run build`,
+  `pint --test` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only. Not checked in a browser.
+
 ## Known Unknowns / TBD
 
 Resolved by the 2026-09-09 contract import:

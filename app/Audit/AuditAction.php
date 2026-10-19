@@ -100,6 +100,25 @@ enum AuditAction: string
     case PurchaseOrderWriteUnconfirmed = 'purchase-order.write-unconfirmed';
 
     /**
+     * A simple purchase was authorized, rejected, or deleted in the ERP
+     * through the gateway. The ERP sees the shared service credential, so
+     * these rows are the record of which person did it. A rejection carries
+     * the reason that was sent.
+     */
+    case SimplePurchaseAuthorized = 'simple-purchase.authorized';
+
+    case SimplePurchaseRejected = 'simple-purchase.rejected';
+
+    case SimplePurchaseDeleted = 'simple-purchase.deleted';
+
+    /**
+     * A decision or delete on a simple purchase was sent but the ESB gave no
+     * definite answer. The metadata names the operation and carries the
+     * correlation id needed to trace it.
+     */
+    case SimplePurchaseWriteUnconfirmed = 'simple-purchase.write-unconfirmed';
+
+    /**
      * A document template was created in the ERP through the gateway. The
      * ERP sees the shared service credential, so this row is the record of
      * which person did it.

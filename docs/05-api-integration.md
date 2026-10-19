@@ -1235,6 +1235,89 @@ Decisions and open points for these operations:
   lookups, and the same "which totals does the ERP derive" question as purchase
   invoices.
 
+### [ESB-018] Simple Purchase (list, detail, authorize / reject, delete)
+
+```
+Purpose:         List and read simple (cash) purchases from ESB Core -- goods bought
+                 and paid for in one step; authorize, reject, or delete one.
+Family:          Core
+Method / Path:   GET    {{base_url}}/purchase/simple-purchase
+                 GET    {{base_url}}/purchase/simple-purchase/{cashPurchaseNum}
+                 PATCH  {{base_url}}/purchase/simple-purchase/{cashPurchaseNum}/authorize
+                 PATCH  {{base_url}}/purchase/simple-purchase/{cashPurchaseNum}/reject
+                 DELETE {{base_url}}/purchase/simple-purchase/{cashPurchaseNum}
+Query (used):    page (default 1), limit (default 20, max 100), cashPurchaseNum,
+                 supplierInvoiceNum, dateFrom, dateTo (YYYY-MM-DD), branchID (single),
+                 indexSearch
+Query (unused):  statusID, sort (vendor default -cashPurchaseNum), supplierID,
+                 cashPurchaseTotal, additionalInfo, otherCashPurchaseNum
+Request Body:    authorize, delete: none. reject: {"reason": string}, marked required.
+Response:        list: paginated envelope; rows carry cashPurchaseNum,
+                 cashPurchaseDate, supplierInvoiceNum, branch*, supplier*,
+                 currencySign, cashPurchaseTotal, statusID, statusName, createdBy,
+                 additionalInfo, approval[], approvalFlow[]
+                 detail: header (as above plus cashPurchaseDueDate, dueDate (int),
+                 purchaseTypeName, locationName, paymentName, picName, supplierPhone1,
+                 currency*, rate, costCenter*, project*, costTotal, coaNo,
+                 description, creator/editor/authorizer {fullName, username} with
+                 their dates), simplePurchaseDetails[] (product*, qty, uomName, price,
+                 discount, discountPercent, taxName, taxRate, vat, vatValue, dppValue,
+                 total, notes, pricelist*), simplePurchaseCosts[] (coaNo, description,
+                 amount, notes), purchasePayments[] (purchasePaymentNum, paymentDate,
+                 paymentTotal, bankAccountName, statusName, ...),
+                 simplePurchaseExpirations[], image[], supplierDefaultPIC{}
+                 writes: envelope with result null
+Errors:          400 "validation error or resource not found -- see errors array";
+                 EC03100004 -> 404 in the gateway (assumed); EC03100001; EC03100032
+Retry Policy:    reads retried with backoff (three attempts); writes exactly one attempt
+Idempotency:     none documented; assume not idempotent
+Laravel Adapter: App\Integrations\ESB\Clients\SimplePurchaseClient
+Contract:        App\Integrations\Contracts\SimplePurchaseSource
+DTOs:            App\Domain\Canonical\SimplePurchaseQuery, SimplePurchaseSummary,
+                 SimplePurchasePage, SimplePurchase, SimplePurchaseLine,
+                 SimplePurchaseCost, SimplePurchasePayment, SimplePurchaseDecision
+Mapper:          App\Integrations\ESB\Mappers\SimplePurchaseMapper
+Actions:         App\Actions\SimplePurchases\DecideSimplePurchase, DeleteSimplePurchase
+Routes:          GET    /simple-purchases, /simple-purchases/{number}
+                 POST   /simple-purchases/{number}/decisions
+                        (decision=authorize|reject, reason required for reject)
+                 DELETE /simple-purchases/{number}
+Permissions:     read:     esb.invoke
+                 decision: esb.invoke + simple-purchases.approve
+                 delete:   esb.invoke + simple-purchases.manage
+Log operations:  simple-purchase.list, .view, .authorize, .reject, .delete
+Tests:           tests/Feature/SimplePurchases/ (List, Detail, Decision, Delete),
+                 tests/Unit/Integrations/ESB/SimplePurchaseMapperTest.php,
+                 fixture tests/Fixtures/CoreSimplePurchase.php
+```
+
+Decisions and open points for these operations:
+
+- **Source.** Transcribed on 2026-10-19 from the vendor's `openapi.json`. Examples are
+  zero-valued placeholders; field names and types only. Date formats are `TBD`.
+- **Single branch filter.** This list documents `branchID`, not the comma-separated
+  `branchIDs` of the purchase order and invoice lists. The gateway takes one
+  `branchId`. The screen does not offer it yet (no branch picker on this page).
+- **Reject requires a reason**, exactly as for purchase orders (`[ESB-017]`): blank is
+  refused before the call, capped at 500 (gateway's own, `TBD`), kept in the audit row.
+- **No `access` flags** in this detail, unlike purchase orders, so Delete is offered to
+  every holder of `simple-purchases.manage` and the ERP is left to refuse.
+- **`validate` not used yet.** `POST .../{cashPurchaseNum}/validate?action=` checks
+  cost-center access, active supplier, open period, and existing payments/returns
+  without saving. A pre-check before authorize/delete is a natural slice 2; it was left
+  out to keep slice 1 the same shape as the other purchasing documents.
+- **`dueDate` (integer) not carried.** The detail sends both `cashPurchaseDueDate`
+  (string) and `dueDate` (integer, undocumented unit). Only the string is shown. `TBD`.
+- **Line tax:** only `taxName` is shown, as for purchase invoices.
+- **Not carried:** `image` (vendor URLs, ADR-006), `supplierDefaultPIC`, `phoneNumber`,
+  header `coaNo` / `description` (undocumented meaning), `simplePurchaseExpirations`,
+  `approval[]`, `approvalFlow[]`, `releasePaymentNum`, `exportCsvCounter`,
+  `branchFlagActive`.
+- **One write at a time** under `simple-purchase-write:{number}`; ambiguous failures
+  audited as `simple-purchase.write-unconfirmed`.
+- **Not built:** create / update, `validate`, asset-image upload, bulk `upload` and
+  `upload-form`.
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

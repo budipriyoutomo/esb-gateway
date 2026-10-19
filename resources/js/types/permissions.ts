@@ -20,6 +20,8 @@ export type Permission =
     | 'purchase-invoices.manage'
     | 'purchase-orders.approve'
     | 'purchase-orders.manage'
+    | 'simple-purchases.approve'
+    | 'simple-purchases.manage'
     | 'document-templates.manage'
     | 'sales-pushes.view'
     | 'sales-pushes.retry'

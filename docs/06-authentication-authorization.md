@@ -72,6 +72,11 @@ Rules that the implementation enforces:
   order commits the company to a supplier. No role holds either yet, so only Super Admin
   can use them until the business decides. Audited as `purchase-order.authorized` /
   `.rejected` (with the reason) / `.deleted`, and `.write-unconfirmed`.
+- Simple purchases have their own permissions (2026-10-19, `[ESB-018]`), on the same
+  rules as purchase orders: `simple-purchases.approve` + `esb.invoke` to authorize or
+  reject (with a reason), `simple-purchases.manage` + `esb.invoke` to delete. Not
+  implied by any other purchasing permission. No role holds either yet. Audited as
+  `simple-purchase.authorized` / `.rejected` / `.deleted` / `.write-unconfirmed`.
 - Document templates (2026-10-15, `[ESB-016]`). Reading them needs `esb.invoke`.
   Creating one needs `document-templates.manage` **and** `esb.invoke`: a template
   decides which products every branch it is assigned to can request. No role holds

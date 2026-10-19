@@ -91,6 +91,23 @@ enum Permission: string
     case ManagePurchaseOrders = 'purchase-orders.manage';
 
     /**
+     * Permission to authorize or reject a simple purchase in the ERP.
+     *
+     * A simple purchase records goods bought and paid for in one step, so
+     * approving it books both. Separate from the other purchasing approvals.
+     * No role holds it yet; which role approves is for the business to
+     * confirm (docs/06).
+     */
+    case ApproveSimplePurchases = 'simple-purchases.approve';
+
+    /**
+     * Permission to delete simple purchases in the ERP. Creating and editing
+     * them is not built yet. No role holds it yet, for the same reason as
+     * ApproveSimplePurchases.
+     */
+    case ManageSimplePurchases = 'simple-purchases.manage';
+
+    /**
      * Permission to create document templates in the ERP. Changing and
      * deleting them is not built yet. A template decides which products
      * every branch it is assigned to can request, so esb.invoke alone does

@@ -20,6 +20,7 @@ import {
     Store,
     Users,
     UtensilsCrossed,
+    Wallet,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -49,6 +50,7 @@ import { index as purchaseOrdersIndex } from '@/routes/purchase-orders';
 import { index as purchaseRequestsIndex } from '@/routes/purchase-requests';
 import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
+import { index as simplePurchasesIndex } from '@/routes/simple-purchases';
 import { index as usersIndex } from '@/routes/users';
 import type { NavEntry, NavGroup, NavItem, Permission } from '@/types';
 
@@ -125,6 +127,12 @@ const mainNavItems: GatedNavEntry[] = [
                 title: 'Purchase invoices',
                 href: purchaseInvoicesIndex(),
                 icon: ReceiptText,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Simple purchases',
+                href: simplePurchasesIndex(),
+                icon: Wallet,
                 permission: 'esb.invoke',
             },
         ],

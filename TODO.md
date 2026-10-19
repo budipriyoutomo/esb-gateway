@@ -326,9 +326,29 @@ Built test-first. Operations documented as `[ESB-017]` in `docs/05-api-integrati
       status filter backed by `GET /common/status`, supplier filter.
 - [ ] Not built: create / update / drafts, print, send-email-authorize, asset images,
       bulk upload and form-import.
-- [ ] Refactor (separate change): `PurchaseRequestDecision`, `PurchaseInvoiceDecision`
-      and `PurchaseOrderDecision` are three two-case enums. Merge them into one
-      approval-decision enum, as the Purchase Invoice entry planned for the third.
+- [ ] Refactor (separate change): `PurchaseRequestDecision`, `PurchaseInvoiceDecision`,
+      `PurchaseOrderDecision` and `SimplePurchaseDecision` are four two-case enums.
+      Merge them into one approval-decision enum, as the Purchase Invoice entry planned
+      for the third. The PO and simple purchase decision actions/controllers/pages are
+      also near-identical; extract shared pieces in the same change.
+
+### Module — Simple Purchase
+
+Built test-first. Operations documented as `[ESB-018]` in `docs/05-api-integration.md`.
+
+- [x] Slice 1 (2026-10-19): list + detail (lines, costs, payments), authorize / reject
+      (with the required reason), delete. `SimplePurchaseSource`, canonical
+      `SimplePurchase*` DTOs, `SimplePurchaseClient`, `SimplePurchaseMapper`,
+      `DecideSimplePurchase` / `DeleteSimplePurchase` on `GuardedEsbWrite`, pages
+      `simple-purchases/index` and `/show`, sidebar entry under "Purchase". New
+      permissions `simple-purchases.approve` / `.manage` (Super Admin only).
+- [ ] Business: decide which roles hold `simple-purchases.approve` and `.manage`.
+- [ ] Ask the ESB team: which statuses accept authorize/reject/delete; the unit of the
+      integer `dueDate`; meaning of header `coaNo` / `description` and of
+      `otherCashPurchaseNum`; reject reason length.
+- [ ] Slice 2 candidates: pre-check with `POST .../validate?action=` before authorize
+      and delete; branch filter (needs a branch picker); status filter.
+- [ ] Not built: create / update, asset images, bulk upload and upload-form.
 
 ### Module — Master Menu
 

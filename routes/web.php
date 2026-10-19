@@ -25,6 +25,8 @@ use App\Http\Controllers\PurchaseRequests\PurchaseRequestImportController;
 use App\Http\Controllers\Purposes\PurposeController;
 use App\Http\Controllers\SalesPushes\SalesPushController;
 use App\Http\Controllers\SalesPushes\SalesPushRetryController;
+use App\Http\Controllers\SimplePurchases\SimplePurchaseController;
+use App\Http\Controllers\SimplePurchases\SimplePurchaseDecisionController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -218,6 +220,31 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-orders/{number}/decisions', [PurchaseOrderDecisionController::class, 'store'])
             ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
             ->name('purchase-orders.decisions.store');
+
+        // Authorization for the list is on its form request (esb.invoke).
+        Route::get('simple-purchases', [SimplePurchaseController::class, 'index'])
+            ->name('simple-purchases.index');
+
+        // Held to a plain document number for the same reason as purchase
+        // requests: it is interpolated into the upstream path.
+        Route::get('simple-purchases/{number}', [SimplePurchaseController::class, 'show'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('simple-purchases.show');
+
+        Route::delete('simple-purchases/{number}', [SimplePurchaseController::class, 'destroy'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware([
+                'can:'.Permission::InvokeEsbOperations->value,
+                'can:'.Permission::ManageSimplePurchases->value,
+            ])
+            ->name('simple-purchases.destroy');
+
+        // Authorization (esb.invoke plus simple-purchases.approve) is on the
+        // form request.
+        Route::post('simple-purchases/{number}/decisions', [SimplePurchaseDecisionController::class, 'store'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('simple-purchases.decisions.store');
 
         Route::post('esb-connections/{family}/test', [EsbConnectionProbeController::class, 'store'])
             ->name('esb-connections.test');
