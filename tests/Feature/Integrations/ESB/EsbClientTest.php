@@ -199,6 +199,80 @@ class EsbClientTest extends TestCase
         $this->assertSame(1, $attempts);
     }
 
+    // ---------------------------------------------- reads sent as POST (ADR-025)
+
+    #[Test]
+    public function a_post_read_is_sent_as_a_post_with_its_body(): void
+    {
+        Http::fake(['*' => Http::response($this->success(['rows' => []]))]);
+
+        $this->client()->postRead(EsbFamily::Core, '/accounting/general-ledger', ['coaNo' => '1101'], 'general-ledger.list');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+            && str_ends_with($request->url(), '/accounting/general-ledger')
+            && $request['coaNo'] === '1101');
+    }
+
+    #[Test]
+    public function a_post_read_is_retried_after_a_connection_failure(): void
+    {
+        Http::fake(['*' => Http::sequence()
+            ->pushFailedConnection()
+            ->push($this->success()),
+        ]);
+
+        $envelope = $this->client()->postRead(EsbFamily::Core, '/accounting/general-ledger', operation: 'general-ledger.list');
+
+        $this->assertTrue($envelope->isSuccessful());
+        Http::assertSentCount(2);
+    }
+
+    #[Test]
+    public function a_post_read_gives_up_after_the_read_retry_budget(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+
+            throw new ConnectionException('cURL error 28: Operation timed out');
+        });
+
+        try {
+            $this->client()->postRead(EsbFamily::Core, '/accounting/general-ledger', operation: 'general-ledger.list');
+            $this->fail('Expected EsbTimeoutException.');
+        } catch (EsbTimeoutException) {
+            // expected
+        }
+
+        $this->assertSame(3, $attempts);
+    }
+
+    #[Test]
+    public function a_post_read_is_not_retried_on_a_validation_failure(): void
+    {
+        Http::fake(['*' => Http::response($this->failure('EC03100003', 'coaNo is required'), 422)]);
+
+        try {
+            $this->client()->postRead(EsbFamily::Core, '/accounting/general-ledger', operation: 'general-ledger.list');
+        } catch (EsbValidationException) {
+            // expected
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    #[Test]
+    public function a_post_read_is_recorded_as_a_post_in_the_integration_log(): void
+    {
+        Http::fake(['*' => Http::response($this->success())]);
+
+        $this->client()->postRead(EsbFamily::Core, '/accounting/general-ledger', operation: 'general-ledger.list');
+
+        $log = IntegrationLog::query()->sole();
+        $this->assertSame('POST', $log->method);
+        $this->assertSame(0, $log->retry_count);
+    }
+
     #[Test]
     public function a_file_upload_is_sent_as_multipart_with_the_bearer_token(): void
     {

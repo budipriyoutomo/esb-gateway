@@ -1,25 +1,21 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
-import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { DateRangeField } from '@/components/date-range-field';
+import { FilterBar } from '@/components/filter-bar';
+import type { ActiveFilter } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
+import { useListQuery } from '@/hooks/use-list-query';
+import { formatAmount, formatDate } from '@/lib/format';
 import {
     index as purchaseOrdersIndex,
     show as purchaseOrdersShow,
 } from '@/routes/purchase-orders';
-import type { PurchaseOrderSummary } from '@/types/purchase-order';
 import type { DocumentFilters, Pagination } from '@/types/pagination';
-import { formatAmount, formatDate } from '@/lib/format';
+import type { PurchaseOrderSummary } from '@/types/purchase-order';
 
 type Filters = DocumentFilters & {
     requiredDateFrom?: string;
@@ -33,48 +29,108 @@ type Props = {
     filters: Filters;
 };
 
+const columns: DataTableColumn<PurchaseOrderSummary>[] = [
+    {
+        key: 'number',
+        header: 'Number',
+        className: 'font-mono text-xs',
+        cell: (order) =>
+            order.number !== '' ? (
+                <Link
+                    href={purchaseOrdersShow(order.number)}
+                    className="underline-offset-4 hover:underline"
+                >
+                    {order.number}
+                </Link>
+            ) : (
+                '—'
+            ),
+    },
+    {
+        key: 'supplier',
+        header: 'Supplier',
+        className: 'font-medium',
+        cell: (order) => order.supplierName ?? '—',
+    },
+    { key: 'date', header: 'Date', cell: (order) => formatDate(order.date) },
+    {
+        key: 'required',
+        header: 'Required',
+        cell: (order) => formatDate(order.requiredDate),
+    },
+    {
+        key: 'branch',
+        header: 'Branch',
+        className: 'text-muted-foreground',
+        cell: (order) => order.branchName ?? '—',
+    },
+    {
+        key: 'total',
+        header: 'Total',
+        align: 'right',
+        cell: (order) => formatAmount(order.total, order.currencySign),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (order) => <StatusBadge status={order.statusName} />,
+    },
+];
+
+const DATE_FILTERS: { key: keyof Filters & string; label: string }[] = [
+    { key: 'dateFrom', label: 'Order date from' },
+    { key: 'dateTo', label: 'Order date to' },
+    { key: 'requiredDateFrom', label: 'Required from' },
+    { key: 'requiredDateTo', label: 'Required to' },
+];
+
 export default function PurchaseOrdersIndex({
     purchaseOrders,
     pagination,
     filters,
 }: Props) {
+    const list = useListQuery(purchaseOrdersIndex().url, filters);
     const [search, setSearch] = useState(filters.search ?? '');
-    const [dateFrom, setDateFrom] = useState(filters.dateFrom ?? '');
-    const [dateTo, setDateTo] = useState(filters.dateTo ?? '');
-    const [requiredDateFrom, setRequiredDateFrom] = useState(
-        filters.requiredDateFrom ?? '',
-    );
-    const [requiredDateTo, setRequiredDateTo] = useState(
-        filters.requiredDateTo ?? '',
-    );
+    const [orderDate, setOrderDate] = useState({
+        from: filters.dateFrom ?? '',
+        to: filters.dateTo ?? '',
+    });
+    const [requiredDate, setRequiredDate] = useState({
+        from: filters.requiredDateFrom ?? '',
+        to: filters.requiredDateTo ?? '',
+    });
 
-    function applyFilters(event: React.FormEvent) {
-        event.preventDefault();
+    // Chips describe what the server applied, not what is being typed.
+    const active: ActiveFilter[] = [
+        ...(filters.search
+            ? [{ key: 'search', label: `“${filters.search}”` }]
+            : []),
+        ...DATE_FILTERS.flatMap(({ key, label }) => {
+            const value = filters[key];
 
-        // Empty values are dropped rather than sent: the ERP narrows a result
-        // set to rows matching an empty filter.
-        const query = Object.fromEntries(
-            Object.entries({
-                search,
-                dateFrom,
-                dateTo,
-                requiredDateFrom,
-                requiredDateTo,
-            }).filter(([, value]) => value !== ''),
-        );
+            return typeof value === 'string' && value !== ''
+                ? [{ key, label: `${label} ${formatDate(value)}` }]
+                : [];
+        }),
+    ];
+    const advancedActive = DATE_FILTERS.some(({ key }) => filters[key]);
 
-        router.get(purchaseOrdersIndex().url, query, {
-            preserveState: true,
-            replace: true,
-        });
-    }
-
-    function goToPage(page: number) {
-        router.get(
-            purchaseOrdersIndex().url,
-            { ...filters, page },
-            { preserveState: true, preserveScroll: true },
-        );
+    // The fields keep their own state across visits (preserveState), so a
+    // removed filter is cleared in its field as well as in the query.
+    function clearField(key: string) {
+        if (key === 'search') {
+            setSearch('');
+        } else if (key === 'dateFrom' || key === 'dateTo') {
+            setOrderDate((range) => ({
+                ...range,
+                [key === 'dateFrom' ? 'from' : 'to']: '',
+            }));
+        } else if (key === 'requiredDateFrom' || key === 'requiredDateTo') {
+            setRequiredDate((range) => ({
+                ...range,
+                [key === 'requiredDateFrom' ? 'from' : 'to']: '',
+            }));
+        }
     }
 
     return (
@@ -82,191 +138,80 @@ export default function PurchaseOrdersIndex({
             <Head title="Purchase orders" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="Purchase orders"
                     description="Orders to suppliers, read live from the ERP."
                 />
 
-                <form
-                    onSubmit={applyFilters}
-                    className="flex flex-wrap items-end gap-3"
+                <FilterBar
+                    id="po"
+                    search={{
+                        value: search,
+                        onChange: setSearch,
+                        placeholder: 'Number, supplier, notes…',
+                    }}
+                    onSubmit={() => {
+                        list.apply({
+                            search,
+                            dateFrom: orderDate.from,
+                            dateTo: orderDate.to,
+                            requiredDateFrom: requiredDate.from,
+                            requiredDateTo: requiredDate.to,
+                        });
+                    }}
+                    active={active}
+                    onRemove={(key) => {
+                        clearField(key);
+                        list.apply({
+                            ...filters,
+                            page: undefined,
+                            [key]: undefined,
+                        });
+                    }}
+                    onReset={() => {
+                        setSearch('');
+                        setOrderDate({ from: '', to: '' });
+                        setRequiredDate({ from: '', to: '' });
+                        list.reset();
+                    }}
+                    defaultAdvancedOpen={advancedActive}
                 >
-                    <div className="grid w-full gap-1.5 sm:w-64">
-                        <Label htmlFor="po-search">Search</Label>
-                        <Input
-                            id="po-search"
-                            value={search}
-                            onChange={(event) => {
-                                setSearch(event.target.value);
-                            }}
-                            placeholder="Number, supplier, notes…"
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="po-date-from">Order date from</Label>
-                        <Input
-                            id="po-date-from"
-                            type="date"
-                            value={dateFrom}
-                            onChange={(event) => {
-                                setDateFrom(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="po-date-to">to</Label>
-                        <Input
-                            id="po-date-to"
-                            type="date"
-                            value={dateTo}
-                            min={dateFrom || undefined}
-                            onChange={(event) => {
-                                setDateTo(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="po-required-from">
-                            Required date from
-                        </Label>
-                        <Input
-                            id="po-required-from"
-                            type="date"
-                            value={requiredDateFrom}
-                            onChange={(event) => {
-                                setRequiredDateFrom(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="po-required-to">to</Label>
-                        <Input
-                            id="po-required-to"
-                            type="date"
-                            value={requiredDateTo}
-                            min={requiredDateFrom || undefined}
-                            onChange={(event) => {
-                                setRequiredDateTo(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <Button type="submit" variant="secondary">
-                        Apply
-                    </Button>
-                </form>
+                    <DateRangeField
+                        id="po-date"
+                        label="Order date"
+                        from={orderDate.from}
+                        to={orderDate.to}
+                        onChange={setOrderDate}
+                    />
+                    <DateRangeField
+                        id="po-required"
+                        label="Required date"
+                        from={requiredDate.from}
+                        to={requiredDate.to}
+                        onChange={setRequiredDate}
+                    />
+                </FilterBar>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Number</TableHead>
-                                <TableHead>Supplier</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Required</TableHead>
-                                <TableHead>Branch</TableHead>
-                                <TableHead className="text-right">
-                                    Total
-                                </TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {purchaseOrders.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={7}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No purchase orders matched this filter.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                <DataTable
+                    caption="Purchase orders"
+                    columns={columns}
+                    rows={purchaseOrders}
+                    rowKey={(order, index) =>
+                        order.number !== '' ? order.number : `row-${index}`
+                    }
+                    rowHref={(order) =>
+                        order.number !== ''
+                            ? purchaseOrdersShow(order.number).url
+                            : null
+                    }
+                    empty="No purchase orders matched this filter. Try a wider date range or reset the filters."
+                />
 
-                            {purchaseOrders.map((order, index) => (
-                                <TableRow
-                                    key={
-                                        order.number !== ''
-                                            ? order.number
-                                            : `row-${index}`
-                                    }
-                                >
-                                    <TableCell className="font-mono text-xs">
-                                        {order.number !== '' ? (
-                                            <Link
-                                                href={purchaseOrdersShow(
-                                                    order.number,
-                                                )}
-                                                className="underline-offset-4 hover:underline"
-                                            >
-                                                {order.number}
-                                            </Link>
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {order.supplierName ?? '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        {formatDate(order.date)}
-                                    </TableCell>
-                                    <TableCell>
-                                        {formatDate(order.requiredDate)}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {order.branchName ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatAmount(
-                                            order.total,
-                                            order.currencySign,
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {order.statusName ? (
-                                            <Badge variant="secondary">
-                                                {order.statusName}
-                                            </Badge>
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {pagination && (
-                    <div className="flex items-center justify-between gap-4">
-                        <p className="text-muted-foreground text-sm">
-                            Page {pagination.page} of {pagination.lastPage} —{' '}
-                            {pagination.count} purchase orders
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pagination.page <= 1}
-                                onClick={() => {
-                                    goToPage(pagination.page - 1);
-                                }}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!pagination.hasMorePages}
-                                onClick={() => {
-                                    goToPage(pagination.page + 1);
-                                }}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                <ListPagination
+                    pagination={pagination}
+                    noun="purchase orders"
+                    onPageChange={list.goToPage}
+                />
             </div>
         </>
     );

@@ -16,7 +16,7 @@ jawaban ESB/bisnis).
 
 1. **Dokumentasi kontrak dulu.** Baca operasi di `docs/esb/esb-core-endpoints.md` /
    `esb-oms-endpoints.md` + halaman vendor. Tulis entri `[ESB-0xx]` di
-   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-019]`**). Jangan mengarang
+   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-024]`**). Jangan mengarang
    field yang tidak terdokumentasi — tandai sebagai asumsi/TBD.
 2. **Fixture** `tests/Fixtures/Core<Module>.php` dari contoh respons vendor.
 3. **Tulis test yang gagal (RED)**, jalankan, pastikan gagal karena alasan yang benar:
@@ -72,9 +72,9 @@ memberi usulan pesan commit.
 | P2 | §1 tipe TS `Pagination` / `Filters` bersama | `[x]` siap commit |
 | P3 | UI-0 tooling test frontend (ADR Vitest + RTL, setup, CI) | `[x]` siap commit |
 | P4 | UI-1 design foundation (token, helper `formatAmount` / `formatDate`) | `[x]` siap commit |
-| P5 | UI-2 komponen bersama | `[ ]` |
-| P6 | §1 lookup bersama (picker + endpoint JSON) + §5.1 ADR POST-as-read | `[ ]` |
-| P7 | Master Data S1: Unit, Category, Sub Category, Supplier Category | `[ ]` |
+| P5 | UI-2 komponen bersama | `[x]` siap commit (tab + combobox ditunda, lihat UI-2) |
+| P6 | §1 lookup bersama (picker + endpoint JSON) + §5.1 ADR POST-as-read | `[x]` siap commit |
+| P7 | Master Data S1: Unit, Category, Sub Category, Supplier Category | `[x]` siap commit |
 | P8 | Master Data S1: Supplier, COA, Product (perluasan), Pricelist, Payment Method | `[ ]` |
 | P9 | Master Data S2–S4 | `[ ]` |
 | P10 | Inventory S1 (GTR, Goods Delivery, Goods Receipt, Simple Transfer, Item Journal) | `[ ]` |
@@ -141,6 +141,55 @@ Visible change: numbers now use id-ID grouping (1.234,56) and ERP dates
 show as 20 Mar 2026 instead of the raw string.
 ```
 
+Usulan pesan commit P5:
+
+```
+feat(ui): shared list, detail and approval components
+
+Add PageHeader, FilterBar (+ useListQuery), DateRangeField, DataTable,
+ListPagination, StatusBadge, DetailSummary/DetailFields, ApprovalActions,
+UnconfirmedWriteNotice, FormActions and useUnsavedChangesWarning, each
+with component tests. Rebuild the purchase order list and detail pages on
+them as the reference. Mock Inertia's Head in the test setup so pages can
+be rendered in tests.
+
+No new dependencies: tabs and a popover combobox are deferred until an
+ADR adds them.
+```
+
+Usulan pesan commit P6:
+
+```
+feat: shared lookups for pickers, and retry POST reads (ADR-025)
+
+ADR-025: EsbClient::postRead() sends a POST the vendor documents as a read
+with the GET retry policy; post() and every other write keep one attempt.
+
+[ESB-019]: LookupSource / LookupClient over ESB Core branch, supplier,
+location, COA (active non-module, cash and bank), status and transfer
+product lists, served as JSON from GET /lookups/{kind} (esb.invoke,
+throttle:esb). Whole lists are searched and paged in the gateway; no
+undocumented array query parameters are sent.
+
+Frontend: fetchLookup, an accessible Combobox (no new dependency) and
+LookupCombobox, with component tests.
+```
+
+Usulan pesan commit P7:
+
+```
+feat: read-only units, product categories, sub-categories, supplier categories
+
+[ESB-020]–[ESB-023]: list (search, active filter, paging; product
+categories also by type) and detail for four ESB Core master lists,
+behind esb.invoke. Shared pieces for this kind of module:
+ListReferenceDataRequest, the ReadsEsbValues mapper trait,
+ReferenceDataIndex / ReferenceDataShow pages, and a
+ReadOnlyMasterDataTestCase every module's feature test extends.
+
+Also makes LookupSource extend OutboundAdapter like the other contracts.
+```
+
 ---
 
 ## 1. Fondasi sebelum batch modul (kerjakan PERTAMA)
@@ -164,16 +213,21 @@ Tanpa ini, 24 modul akan menggandakan kode yang sama ±24 kali.
 - [x] Ekstrak tipe `Pagination`/`Filters` TS (2026-10-19): `resources/js/types/pagination.ts`
       (`Pagination`, `PagingFilters`, `DocumentFilters`), dipakai 10 halaman list. Field
       filter khusus modul tetap di page masing-masing.
-- [ ] **Lookup bersama** (dipakai banyak modul — bangun sekali, test sekali):
-      - [ ] Branch picker (`[ESB-007]` sudah ada untuk purchase request — generalisasi).
-      - [ ] Location picker (grup `Location` di Core).
-      - [ ] Product picker untuk transfer (`GET /product/browse-transfer`) dan purchase.
-      - [ ] Supplier picker (`GET /supplier/list`).
-      - [ ] COA picker (`GET /accounting/coa/active-non-module`,
-            `/accounting/coa/cash-bank`).
-      - [ ] Status filter (`GET /common/status`) — dicatat di PO slice 2.
-      - [ ] Endpoint JSON internal untuk picker (searchable, paginated), dibatasi
-            rate limit per user yang sudah ada.
+- [x] **Lookup bersama** (2026-10-19, `[ESB-019]`): kontrak `LookupSource`,
+      `LookupClient` + `LookupMapper`, DTO `LookupKind` / `LookupQuery` / `LookupOption`
+      / `LookupPage`; endpoint `GET /lookups/{kind}` (JSON, `esb.invoke`,
+      `throttle:esb`); frontend `fetchLookup` + `Combobox` + `LookupCombobox`.
+      - [x] Branch (`GET /branch`). Form purchase request masih memakai
+            `listBranches()` `[ESB-007]` — pindah ke lookup = refactor nanti.
+      - [x] Location (`GET /location/list`, filter branch di gateway).
+      - [~] Product untuk transfer (`GET /product/browse-transfer`). Picker product
+            untuk purchase belum: endpoint browse purchase belum dipilih.
+      - [x] Supplier (`GET /supplier/list`).
+      - [x] COA (`active-non-module` paginated, `cash-bank` filter branch di gateway).
+      - [x] Status (`GET /common/status`, global — mapping per dokumen `TBD`).
+      - [x] Endpoint JSON internal (searchable, paginated), rate limit per user.
+      - [!] Format parameter array ESB (`a=1&a=2` vs `a[]=1`) tidak terdokumentasi —
+            tanya ESB agar filter branch bisa dikirim ke upstream.
 - [ ] Selesaikan **Fase UI-1 dan UI-2** (§7) dulu agar modul baru langsung memakai
       komponen baru, bukan menambah halaman gaya lama.
 
@@ -196,18 +250,23 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 
 ### 2.2 Category (`/product/category`)
 
-- [ ] S1: list, detail, `/all` untuk picker.
+- [x] S1 (2026-10-19, `[ESB-021]`): list (search, tipe, status) + detail (akun COA,
+      depresiasi). `/all` untuk picker belum — picker category belum dibutuhkan.
 - [ ] S2: inactive / restore / delete.
 - [ ] S3: create / update.
 - [ ] S4: upload / export Excel.
 
 ### 2.3 Sub Category (`/product/sub-category`)
 
-- [ ] S1–S4 sama seperti Category; filter berdasarkan category.
+- [x] S1 (2026-10-19, `[ESB-022]`): list (search, status) + detail.
+- [!] Filter berdasarkan category: vendor tidak mendokumentasikan filter category dan
+      row sub-category tidak membawa `categoryID`. Tanya ESB.
+- [ ] S2–S4 sama seperti Category.
 
 ### 2.4 Unit (`/units`)
 
-- [ ] S1: list, detail, `/units/list` untuk picker.
+- [x] S1 (2026-10-19, `[ESB-020]`): list (search, status) + detail. `/units/list` untuk
+      picker belum.
 - [ ] S2: delete / restore.
 - [ ] S3: create / update.
 - [ ] S4: import / export.
@@ -251,7 +310,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 
 ### 2.10 Supplier Category (`/supplier/category`)
 
-- [ ] S1: list, detail.
+- [x] S1 (2026-10-19, `[ESB-023]`): list (`/supplier/category/list`, search nama,
+      status) + detail.
 - [ ] S2: delete (pakai `/check-delete` sebagai pre-check) / restore.
 - [ ] S3: create / update.
 
@@ -318,9 +378,9 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 
 ### 5.1 Keputusan lintas modul
 
-- [ ] **ADR**: operasi `POST` yang secara semantik read (General Ledger, Payment
-      Method, OMS Master POS) — boleh di-retry seperti read atau tidak? Test-kan
-      keputusan ini di `EsbClient`.
+- [x] **ADR-025** (2026-10-19): `POST` yang oleh vendor didokumentasikan sebagai read
+      dikirim lewat `EsbClient::postRead()` dan di-retry seperti `GET`. Opt-in per
+      operasi, tidak pernah ditebak dari path. Dikunci di `EsbClientTest`.
 
 ### 5.2 General Ledger (`POST /accounting/general-ledger`, `/summary`)
 
@@ -395,8 +455,8 @@ Dikerjakan bertahap. UI-1 dan UI-2 **sebelum** modul baru; UI-3 dst. paralel.
 - [x] Setup: blok `test` di `vite.config.ts` (bukan `vitest.config.ts`, sesuai
       rekomendasi vite-plus), `resources/js/test/setup.ts`, script `npm run test:ui`,
       masuk `composer ci:check` → CI. Test pertama: `components/heading.test.tsx`.
-- [ ] Setiap komponen bersama di bawah: test perilaku ditulis dulu (render, empty
-      state, keyboard, aksesibilitas dasar). → dikerjakan di P5.
+- [x] Setiap komponen bersama UI-2: test perilaku ditulis dulu (render, empty state,
+      keyboard, aksesibilitas dasar) — P5, 2026-10-19.
 - [ ] Follow-up (di luar P3): `npm audit` melaporkan advisory di dependency lama
       (`@rolldown/plugin-babel`, `concurrently`, `@tailwindcss/vite`, `vite-plus`);
       upgrade Node lokal ke 22 agar bisa naik ke jsdom 30 / jest-dom 7.
@@ -421,26 +481,36 @@ Dikerjakan bertahap. UI-1 dan UI-2 **sebelum** modul baru; UI-3 dst. paralel.
 
 ### UI-2 Komponen bersama (test dulu)
 
-- [ ] `PageHeader` — judul, deskripsi singkat, breadcrumb, slot aksi utama di kanan.
-- [ ] `FilterBar` — search utama selalu tampil, filter lanjutan dalam popover/sheet,
-      chip filter aktif + tombol reset, submit dengan Enter.
-- [ ] `DataTable` — header sticky, angka rata kanan, baris bisa diklik ke detail,
-      skeleton saat loading, empty state yang menjelaskan langkah berikutnya, error
-      state ESB yang ramah (bukan pesan mentah).
-- [ ] `Pagination` — satu komponen untuk semua list.
-- [ ] `StatusBadge` — pemetaan status ERP → warna konsisten (draft, menunggu, disetujui,
-      ditolak, selesai).
-- [ ] `DetailLayout` — kartu ringkasan di atas (nomor, status, tanggal, total), tab untuk
-      lines / costs / payments / attachments / riwayat.
-- [ ] `ApprovalActions` — tombol authorize/reject/delete + `ConfirmDialog` dengan field
-      alasan; tampil sesuai permission.
-- [ ] `UnconfirmedWriteNotice` — banner jelas untuk outcome tidak pasti.
-- [ ] Toast (`sonner`, sudah terpasang) untuk hasil write.
-- [ ] Picker searchable (`Combobox`) + `DateRangePicker` — butuh `cmdk`/popover shadcn;
-      ADR bila menambah dependency.
-- [ ] Form: label di atas field, error inline di bawah field, tombol simpan sticky
-      di bawah pada form panjang, peringatan sebelum meninggalkan form yang berubah.
+Semua di `resources/js/components/` / `resources/js/hooks/`, test di sebelah file-nya
+(2026-10-19). Referensi pemakaian: `pages/purchase-orders/index.tsx` + `show.tsx`.
 
+- [x] `PageHeader` — judul, deskripsi, link kembali, slot aksi (`role=group`).
+      Breadcrumb tetap di layout (UI-3).
+- [x] `FilterBar` — search selalu tampil, filter lanjutan di balik "More filters"
+      (Collapsible, tanpa dependency baru), chip filter aktif + "Reset filters", Enter
+      submit. Hook `useListQuery` (buang nilai kosong, paging, reset).
+- [x] `DateRangeField` — dua input date native, `min` di ujung akhir.
+- [x] `DataTable` — header sticky (container scroll sendiri), angka rata kanan,
+      baris klik ke detail, skeleton + `aria-busy`, empty state, error `role=alert`.
+- [x] `ListPagination` — satu komponen untuk semua list.
+- [x] `StatusBadge` — tone dari kata kunci (EN/ID), fallback netral; teks tetap dari
+      ERP. Asumsi: kosakata status ERP tidak terdokumentasi (baru terlihat `New`,
+      `Authorized`).
+- [~] `DetailLayout` — `DetailSummary` (kartu ringkasan) + `DetailFields`/`DetailField`
+      selesai. **Tab belum**: butuh `@radix-ui/react-tabs` → ADR dulu.
+- [x] `ApprovalActions` — authorize/reject/delete + dialog konfirmasi, alasan reject
+      opsional (`rejectReason`), semua kontrol terkunci selama write berjalan.
+- [~] `UnconfirmedWriteNotice` — komponen selesai. **Belum di-wire**: server baru
+      mengirim toast `warning` berisi teks; banner butuh flash terstruktur
+      (`operation`, `number`, `correlation_id`) dari `HandlesDocumentWrites`.
+- [x] Toast (`sonner`) untuk hasil write — sudah ada (`use-flash-toast`).
+- [x] Picker searchable (P6): `Combobox` dibuat sendiri (pola WAI-ARIA 1.2 combobox +
+      listbox, keyboard, debounce, load more, respons basi diabaikan) — **tanpa
+      dependency baru**, jadi tidak perlu ADR. `LookupCombobox` untuk `/lookups`.
+      Date range tetap `DateRangeField` (input date native).
+- [x] Form: `FormActions` (bar tombol, opsi sticky, hint) + hook
+      `useUnsavedChangesWarning` (konfirmasi di navigasi GET + `beforeunload`, submit
+      tidak diblok). Label di atas / error di bawah = pola existing (`InputError`).
 ### UI-3 Navigasi
 
 - [ ] Sidebar dikelompokkan: Dashboard, Master Data, Purchase, Inventory, Finance,
@@ -467,7 +537,8 @@ Dikerjakan bertahap. UI-1 dan UI-2 **sebelum** modul baru; UI-3 dst. paralel.
 
 - [ ] products, menus, master-menus, bills-of-material, purposes, document-templates,
       document-template-imports
-- [ ] purchase-requests, purchase-orders, purchase-invoices, simple-purchases
+- [~] purchase-orders (index + show, 2026-10-19, halaman referensi P5);
+      purchase-requests, purchase-invoices, simple-purchases belum
 - [ ] sales-pushes, integration-logs, endpoints, esb-connections, users, dashboard
 - [ ] Setiap migrasi: test PHP existing tetap hijau; tidak ada perubahan perilaku.
 
@@ -500,6 +571,8 @@ nilai read-only cepat terlihat dan kontrak ESB tervalidasi lebih awal.
 - [ ] ESB: `refNum` valid untuk Goods Delivery & Goods Receipt.
 - [ ] ESB: status mana yang menerima authorize/reject/delete untuk tiap dokumen baru.
 - [ ] ESB: Product pending vs temp.
+- [ ] ESB: format parameter query multi-value (`branchIDs=1&branchIDs=2` atau `branchIDs[]=1`).
+- [ ] ESB: arti `/common/status/mapping` (status mana untuk dokumen mana).
 - [ ] Bisnis: role pemegang `.approve` / `.manage` per modul baru.
 - [ ] Bisnis: sumber menu (Core vs OMS).
 - [ ] Bisnis: bahasa UI.

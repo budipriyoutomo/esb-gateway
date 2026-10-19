@@ -1,28 +1,21 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
-import InputError from '@/components/input-error';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Head, Link } from '@inertiajs/react';
+import { ApprovalActions } from '@/components/approval-actions';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+    DetailField,
+    DetailFields,
+    DetailSummary,
+} from '@/components/detail-fields';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { usePermissions } from '@/hooks/use-permissions';
+import {
+    formatAmount,
+    formatDate,
+    formatDateTime,
+    formatQuantity,
+} from '@/lib/format';
 import { show as purchaseInvoicesShow } from '@/routes/purchase-invoices';
 import {
     destroy as destroyPurchaseOrder,
@@ -31,14 +24,9 @@ import {
 import { store as storeDecision } from '@/routes/purchase-orders/decisions';
 import type {
     PurchaseOrder,
+    PurchaseOrderLine,
     PurchaseOrderLinkedDocument,
 } from '@/types/purchase-order';
-import {
-    formatAmount,
-    formatDate,
-    formatDateTime,
-    formatQuantity,
-} from '@/lib/format';
 
 type Props = {
     purchaseOrder: PurchaseOrder;
@@ -46,9 +34,6 @@ type Props = {
 
 // Mirrors DecidePurchaseOrderRequest::REASON_MAX.
 const REASON_MAX = 500;
-
-const textareaClass =
-    'border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
 
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
@@ -60,235 +45,66 @@ function byline(name: string | null, at: string | null): string {
         .join(' · ');
 }
 
-function Field({ label, value }: { label: string; value: string | null }) {
-    return (
-        <div className="grid gap-0.5">
-            <dt className="text-muted-foreground text-xs">{label}</dt>
-            <dd className="text-sm">{value ?? '—'}</dd>
-        </div>
-    );
-}
-
-type Decision = 'authorize' | 'reject';
-
-const DECISION_COPY: Record<
-    Decision,
-    { label: string; title: string; description: string }
-> = {
-    authorize: {
-        label: 'Authorize',
-        title: 'Authorize this purchase order?',
-        description:
-            'The order is authorized in the ERP straight away. The ERP records the gateway as the approver; the gateway records you.',
+const lineColumns: DataTableColumn<PurchaseOrderLine>[] = [
+    {
+        key: 'code',
+        header: 'Code',
+        cell: (line) => line.productCode || '—',
+        className: 'font-mono text-xs',
     },
-    reject: {
-        label: 'Reject',
-        title: 'Reject this purchase order?',
-        description:
-            'The order is rejected in the ERP straight away, with the reason below. The ERP records the gateway as the approver; the gateway records you.',
+    {
+        key: 'product',
+        header: 'Product',
+        cell: (line) => (
+            <>
+                <div className="font-medium">{line.productName || '—'}</div>
+                {line.notes && (
+                    <div className="text-muted-foreground text-xs">
+                        {line.notes}
+                    </div>
+                )}
+            </>
+        ),
     },
-};
-
-function DecisionControls({ number }: { number: string }) {
-    const [pending, setPending] = useState<Decision | null>(null);
-    const [reason, setReason] = useState('');
-    const [error, setError] = useState<string | undefined>(undefined);
-    const [processing, setProcessing] = useState(false);
-
-    function close() {
-        setPending(null);
-        setReason('');
-        setError(undefined);
-    }
-
-    function submit() {
-        if (pending === null) {
-            return;
-        }
-
-        // The write is not idempotent. Buttons stay disabled until the
-        // request finishes, and the server holds a lock per document too.
-        router.post(
-            storeDecision(number).url,
-            pending === 'reject'
-                ? { decision: pending, reason }
-                : { decision: pending },
-            {
-                preserveScroll: true,
-                onStart: () => {
-                    setProcessing(true);
-                },
-                onSuccess: () => {
-                    close();
-                },
-                onError: (errors) => {
-                    // A validation error keeps the dialog open so the reason
-                    // can be corrected; nothing was sent to the ERP.
-                    setError(errors.reason ?? errors.decision);
-                },
-                onFinish: () => {
-                    setProcessing(false);
-                },
-            },
-        );
-    }
-
-    const copy = pending === null ? null : DECISION_COPY[pending];
-    const reasonMissing = pending === 'reject' && reason.trim() === '';
-
-    return (
-        <>
-            <div className="flex gap-2">
-                <Button
-                    size="sm"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('authorize');
-                    }}
-                >
-                    Authorize
-                </Button>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('reject');
-                    }}
-                >
-                    Reject
-                </Button>
-            </div>
-
-            <Dialog
-                open={pending !== null}
-                onOpenChange={(open) => {
-                    if (!open && !processing) {
-                        close();
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{copy?.title}</DialogTitle>
-                        <DialogDescription>
-                            {copy?.description}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {pending === 'reject' && (
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="po-reject-reason">Reason</Label>
-                            <textarea
-                                id="po-reject-reason"
-                                className={textareaClass}
-                                maxLength={REASON_MAX}
-                                value={reason}
-                                disabled={processing}
-                                onChange={(event) => {
-                                    setReason(event.target.value);
-                                }}
-                            />
-                            <InputError message={error} />
-                        </div>
-                    )}
-
-                    {pending === 'authorize' && <InputError message={error} />}
-
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={close}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant={
-                                pending === 'reject' ? 'destructive' : 'default'
-                            }
-                            disabled={processing || reasonMissing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Sending…' : copy?.label}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
-function DeleteControl({ number }: { number: string }) {
-    const [open, setOpen] = useState(false);
-    const [processing, setProcessing] = useState(false);
-
-    function submit() {
-        // Not idempotent either; the server holds the same per-document lock
-        // as for a decision.
-        router.delete(destroyPurchaseOrder(number).url, {
-            onStart: () => {
-                setProcessing(true);
-            },
-            onFinish: () => {
-                setProcessing(false);
-                setOpen(false);
-            },
-        });
-    }
-
-    return (
-        <>
-            <Button
-                size="sm"
-                variant="outline"
-                disabled={processing}
-                onClick={() => {
-                    setOpen(true);
-                }}
-            >
-                Delete
-            </Button>
-
-            <Dialog
-                open={open}
-                onOpenChange={(next) => {
-                    if (!processing) {
-                        setOpen(next);
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete {number}?</DialogTitle>
-                        <DialogDescription>
-                            The purchase order is deleted in the ERP straight
-                            away. This cannot be undone from the gateway.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => {
-                                setOpen(false);
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            disabled={processing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Deleting…' : 'Delete'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
+    {
+        key: 'requested',
+        header: 'Requested',
+        cell: (line) => formatQuantity(line.requestedQty),
+        align: 'right',
+        className: 'text-muted-foreground',
+    },
+    {
+        key: 'qty',
+        header: 'Qty',
+        cell: (line) => formatQuantity(line.qty),
+        align: 'right',
+    },
+    {
+        key: 'uom',
+        header: 'UoM',
+        cell: (line) => line.uomName ?? '—',
+        className: 'text-muted-foreground',
+    },
+    {
+        key: 'price',
+        header: 'Price',
+        cell: (line) => formatAmount(line.price),
+        align: 'right',
+    },
+    {
+        key: 'discount',
+        header: 'Discount',
+        cell: (line) => (line.discount ? formatAmount(line.discount) : '—'),
+        align: 'right',
+        className: 'text-muted-foreground',
+    },
+    {
+        key: 'total',
+        header: 'Total',
+        cell: (line) => formatAmount(line.total),
+        align: 'right',
+    },
+];
 
 function LinkedDocuments({
     title,
@@ -335,9 +151,7 @@ function LinkedDocuments({
                             </span>
                         )}
                         {document.statusName && (
-                            <Badge variant="secondary">
-                                {document.statusName}
-                            </Badge>
+                            <StatusBadge status={document.statusName} />
                         )}
                     </li>
                 ))}
@@ -362,91 +176,115 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
             <Head title={po.number} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={purchaseOrdersIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Purchase orders
-                        </Link>
-                    </Button>
-                </div>
+                <PageHeader
+                    title={po.number}
+                    description="Read live from the ERP."
+                    back={{
+                        href: purchaseOrdersIndex(),
+                        label: 'Purchase orders',
+                    }}
+                    actions={
+                        <>
+                            <StatusBadge status={po.statusName} />
+                            {/* Decisions are offered on every order: which
+                                statuses accept one is not documented, so the
+                                ERP is left to refuse one it does not accept.
+                                Delete is hidden only when the ERP itself says
+                                the order cannot be deleted. */}
+                            <ApprovalActions
+                                documentLabel="purchase order"
+                                number={po.number}
+                                decisionUrl={storeDecision(po.number).url}
+                                deleteUrl={destroyPurchaseOrder(po.number).url}
+                                canDecide={
+                                    can('esb.invoke') &&
+                                    can('purchase-orders.approve')
+                                }
+                                canDelete={
+                                    can('esb.invoke') &&
+                                    can('purchase-orders.manage') &&
+                                    po.canDelete !== false
+                                }
+                                rejectReason={{ max: REASON_MAX }}
+                            />
+                        </>
+                    }
+                />
 
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Heading
-                        title={po.number}
-                        description="Read live from the ERP."
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                        {po.statusName && (
-                            <Badge variant="secondary">{po.statusName}</Badge>
-                        )}
-                        {/* Offered on every order: which statuses accept a
-                            decision is not documented, so the ERP is left to
-                            refuse one it does not accept. */}
-                        {can('esb.invoke') &&
-                            can('purchase-orders.approve') && (
-                                <DecisionControls number={po.number} />
-                            )}
-                        {/* Hidden only when the ERP itself says the order
-                            cannot be deleted; unknown is left to the ERP. */}
-                        {can('esb.invoke') &&
-                            can('purchase-orders.manage') &&
-                            po.canDelete !== false && (
-                                <DeleteControl number={po.number} />
-                            )}
-                    </div>
-                </div>
+                <DetailSummary
+                    label="Purchase order summary"
+                    items={[
+                        { label: 'Supplier', value: po.supplierName },
+                        { label: 'Order date', value: formatDate(po.date) },
+                        {
+                            label: 'Required date',
+                            value: formatDate(po.requiredDate),
+                        },
+                        {
+                            label: 'Order total',
+                            value: formatAmount(po.total, po.currencySign),
+                            align: 'right',
+                        },
+                    ]}
+                />
 
-                <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Field
+                <DetailFields>
+                    <DetailField
                         label="Supplier"
                         value={supplier === '' ? null : supplier}
                     />
-                    <Field label="Supplier contact" value={po.contactName} />
-                    <Field label="Supplier phone" value={po.supplierPhone} />
-                    <Field
+                    <DetailField
+                        label="Supplier contact"
+                        value={po.contactName}
+                    />
+                    <DetailField
+                        label="Supplier phone"
+                        value={po.supplierPhone}
+                    />
+                    <DetailField
                         label="Supplier address"
                         value={po.supplierAddress}
                     />
-                    <Field label="Branch" value={po.branchName} />
-                    <Field label="Order date" value={formatDate(po.date)} />
-                    <Field
-                        label="Required date"
-                        value={formatDate(po.requiredDate)}
+                    <DetailField label="Branch" value={po.branchName} />
+                    <DetailField
+                        label="Purchase type"
+                        value={po.purchaseTypeName}
                     />
-                    <Field label="Purchase type" value={po.purchaseTypeName} />
-                    <Field
+                    <DetailField
                         label="Payment terms"
                         value={
                             po.dueDays === null ? null : `${po.dueDays} days`
                         }
                     />
-                    <Field label="Currency" value={currency} />
-                    <Field
+                    <DetailField label="Currency" value={currency} />
+                    <DetailField
                         label="Rate"
                         value={
                             po.rate === null ? null : formatQuantity(po.rate)
                         }
                     />
-                    <Field label="Cost center" value={po.costCenterName} />
-                    <Field label="Project" value={po.projectName} />
-                    <Field
+                    <DetailField
+                        label="Cost center"
+                        value={po.costCenterName}
+                    />
+                    <DetailField label="Project" value={po.projectName} />
+                    <DetailField
                         label="Purchase requests"
                         value={po.purchaseRequestNumbers}
                     />
-                    <Field
+                    <DetailField
                         label="Created"
                         value={byline(po.createdByName, po.createdAt)}
                     />
-                    <Field
+                    <DetailField
                         label="Last edited"
                         value={byline(po.editedByName, po.editedAt)}
                     />
-                    <Field
+                    <DetailField
                         label="Authorized"
                         value={byline(po.authorizedByName, po.authorizedAt)}
                     />
-                </dl>
+                </DetailFields>
 
                 {po.notes && (
                     <div className="grid gap-0.5">
@@ -457,86 +295,17 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                     </div>
                 )}
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Code</TableHead>
-                                <TableHead>Product</TableHead>
-                                <TableHead className="text-right">
-                                    Requested
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    Qty
-                                </TableHead>
-                                <TableHead>UoM</TableHead>
-                                <TableHead className="text-right">
-                                    Price
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    Discount
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    Total
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {po.lines.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={8}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        This purchase order has no lines.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-
-                            {po.lines.map((line, index) => (
-                                // A product can appear on more than one line,
-                                // so its id is not a unique key on its own.
-                                <TableRow
-                                    key={`${line.productDetailId ?? 'x'}-${index}`}
-                                >
-                                    <TableCell className="font-mono text-xs">
-                                        {line.productCode || '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="font-medium">
-                                            {line.productName || '—'}
-                                        </div>
-                                        {line.notes && (
-                                            <div className="text-muted-foreground text-xs">
-                                                {line.notes}
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-right tabular-nums">
-                                        {formatQuantity(line.requestedQty)}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatQuantity(line.qty)}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {line.uomName ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatAmount(line.price)}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-right tabular-nums">
-                                        {line.discount
-                                            ? formatAmount(line.discount)
-                                            : '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatAmount(line.total)}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                <DataTable
+                    caption="Purchase order lines"
+                    columns={lineColumns}
+                    rows={po.lines}
+                    // A product can appear on more than one line, so its id
+                    // is not a unique key on its own.
+                    rowKey={(line, index) =>
+                        `${line.productDetailId ?? 'x'}-${index}`
+                    }
+                    empty="This purchase order has no lines."
+                />
 
                 <div className="flex flex-wrap items-start justify-between gap-6">
                     <div className="grid gap-4">
@@ -565,8 +334,7 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                         <div className="flex justify-between gap-4 border-t pt-2 font-medium">
                             <dt>Order total</dt>
                             <dd className="tabular-nums">
-                                {po.currencySign ? `${po.currencySign} ` : ''}
-                                {formatAmount(po.total)}
+                                {formatAmount(po.total, po.currencySign)}
                             </dd>
                         </div>
                     </dl>

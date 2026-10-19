@@ -12,6 +12,12 @@ import {
     LayoutGrid,
     ListTree,
     Package,
+    Ruler,
+    Tag,
+    Tags,
+    Truck,
+    Factory,
+    Landmark,
     PlugZap,
     ReceiptText,
     ScrollText,
@@ -38,12 +44,15 @@ import {
 import { usePermissions } from '@/hooks/use-permissions';
 import { dashboard } from '@/routes';
 import { index as billsOfMaterialIndex } from '@/routes/bills-of-material';
+import { index as coaAccountsIndex } from '@/routes/coa-accounts';
 import { index as documentTemplatesIndex } from '@/routes/document-templates';
 import { index as endpointsIndex } from '@/routes/endpoints';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
 import { index as masterMenusIndex } from '@/routes/master-menus';
 import { index as menusIndex } from '@/routes/menus';
+import { index as productCategoriesIndex } from '@/routes/product-categories';
+import { index as productSubCategoriesIndex } from '@/routes/product-sub-categories';
 import { index as productsIndex } from '@/routes/products';
 import { index as purchaseInvoicesIndex } from '@/routes/purchase-invoices';
 import { index as purchaseOrdersIndex } from '@/routes/purchase-orders';
@@ -51,6 +60,9 @@ import { index as purchaseRequestsIndex } from '@/routes/purchase-requests';
 import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import { index as simplePurchasesIndex } from '@/routes/simple-purchases';
+import { index as supplierCategoriesIndex } from '@/routes/supplier-categories';
+import { index as suppliersIndex } from '@/routes/suppliers';
+import { index as unitsIndex } from '@/routes/units';
 import { index as usersIndex } from '@/routes/users';
 import type { NavEntry, NavGroup, NavItem, Permission } from '@/types';
 
@@ -76,6 +88,36 @@ const mainNavItems: GatedNavEntry[] = [
                 permission: 'esb.invoke',
             },
             {
+                title: 'Units',
+                href: unitsIndex(),
+                icon: Ruler,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Product categories',
+                href: productCategoriesIndex(),
+                icon: Tags,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Product sub-categories',
+                href: productSubCategoriesIndex(),
+                icon: Tag,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Suppliers',
+                href: suppliersIndex(),
+                icon: Factory,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Supplier categories',
+                href: supplierCategoriesIndex(),
+                icon: Truck,
+                permission: 'esb.invoke',
+            },
+            {
                 title: 'Menus',
                 href: menusIndex(),
                 icon: UtensilsCrossed,
@@ -91,6 +133,12 @@ const mainNavItems: GatedNavEntry[] = [
                 title: 'Bill of material',
                 href: billsOfMaterialIndex(),
                 icon: Boxes,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Chart of accounts',
+                href: coaAccountsIndex(),
+                icon: Landmark,
                 permission: 'esb.invoke',
             },
             {

@@ -2,6 +2,7 @@
 
 use App\Authorization\Permission;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
+use App\Http\Controllers\CoaAccounts\CoaAccountController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateFormController;
@@ -11,9 +12,12 @@ use App\Http\Controllers\EsbConnections\EsbConnectionController;
 use App\Http\Controllers\EsbConnections\EsbConnectionProbeController;
 use App\Http\Controllers\Health\HealthController;
 use App\Http\Controllers\IntegrationLogs\IntegrationLogController;
+use App\Http\Controllers\Lookups\LookupController;
 use App\Http\Controllers\MasterMenus\MasterMenuController;
 use App\Http\Controllers\Menus\MenuController;
+use App\Http\Controllers\ProductCategories\ProductCategoryController;
 use App\Http\Controllers\Products\ProductController;
+use App\Http\Controllers\ProductSubCategories\ProductSubCategoryController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceDecisionController;
 use App\Http\Controllers\PurchaseOrders\PurchaseOrderController;
@@ -27,6 +31,9 @@ use App\Http\Controllers\SalesPushes\SalesPushController;
 use App\Http\Controllers\SalesPushes\SalesPushRetryController;
 use App\Http\Controllers\SimplePurchases\SimplePurchaseController;
 use App\Http\Controllers\SimplePurchases\SimplePurchaseDecisionController;
+use App\Http\Controllers\SupplierCategories\SupplierCategoryController;
+use App\Http\Controllers\Suppliers\SupplierController;
+use App\Http\Controllers\Units\UnitOfMeasureController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +53,10 @@ Route::middleware('auth')->group(function () {
     // vendor's own rate limits are undocumented, and the gateway must not let
     // its users discover them the hard way (config/esb.php).
     Route::middleware('throttle:esb')->group(function () {
+        // JSON for searchable pickers ([ESB-019]). Authorization (esb.invoke)
+        // is on the form request; an unknown kind is a 404 by enum binding.
+        Route::get('lookups/{kind}', [LookupController::class, 'show'])->name('lookups.show');
+
         Route::get('products', [ProductController::class, 'index'])->name('products.index');
 
         // Read-only master menu list ([ESB-012]). Authorization is on its
@@ -81,6 +92,54 @@ Route::middleware('auth')->group(function () {
             ->where('purposeId', '[1-9][0-9]{0,9}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('purposes.show');
+
+        // Read-only master data ([ESB-020]–[ESB-023]). Authorization for each
+        // list is on its form request (esb.invoke). Ids are interpolated into
+        // upstream paths, so they are held to positive integers here.
+        Route::get('units', [UnitOfMeasureController::class, 'index'])
+            ->name('units.index');
+        Route::get('units/{uomId}', [UnitOfMeasureController::class, 'show'])
+            ->where('uomId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('units.show');
+
+        Route::get('product-categories', [ProductCategoryController::class, 'index'])
+            ->name('product-categories.index');
+        Route::get('product-categories/{categoryId}', [ProductCategoryController::class, 'show'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('product-categories.show');
+
+        Route::get('product-sub-categories', [ProductSubCategoryController::class, 'index'])
+            ->name('product-sub-categories.index');
+        Route::get('product-sub-categories/{subCategoryId}', [ProductSubCategoryController::class, 'show'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('product-sub-categories.show');
+
+        Route::get('supplier-categories', [SupplierCategoryController::class, 'index'])
+            ->name('supplier-categories.index');
+        Route::get('supplier-categories/{supplierCategoryId}', [SupplierCategoryController::class, 'show'])
+            ->where('supplierCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('supplier-categories.show');
+
+        Route::get('suppliers', [SupplierController::class, 'index'])
+            ->name('suppliers.index');
+        Route::get('suppliers/{supplierId}', [SupplierController::class, 'show'])
+            ->where('supplierId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('suppliers.show');
+
+        // The account number shares the upstream segment with literal vendor
+        // paths (/accounting/coa/export, /index, /tax), so it must start with a
+        // digit ([ESB-025]).
+        Route::get('coa-accounts', [CoaAccountController::class, 'index'])
+            ->name('coa-accounts.index');
+        Route::get('coa-accounts/{coaNo}', [CoaAccountController::class, 'show'])
+            ->where('coaNo', '[0-9][0-9A-Za-z._-]{0,31}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('coa-accounts.show');
 
         // Read-only ESB Core document templates ([ESB-016]). Authorization
         // for the list is on its form request (esb.invoke). The id is

@@ -1318,6 +1318,306 @@ Decisions and open points for these operations:
 - **Not built:** create / update, `validate`, asset-image upload, bulk `upload` and
   `upload-form`.
 
+### [ESB-019] Shared Lookups (pickers)
+
+```
+Purpose:         Reference data for searchable pickers used by many modules
+                 (TODO-modules.md §1): branches, suppliers, locations, COA accounts,
+                 document statuses, products for a transfer.
+Family:          Core
+Method / Path:   GET {{base_url}}/branch?flagActive=1
+                 GET {{base_url}}/supplier/list?flagActive=1
+                 GET {{base_url}}/location/list?flagActive=1
+                 GET {{base_url}}/accounting/coa/active-non-module
+                     ?coaNo=|description=&page=&limit=          (paginated)
+                 GET {{base_url}}/accounting/coa/cash-bank
+                 GET {{base_url}}/common/status
+                 GET {{base_url}}/product/browse-transfer
+                     ?branchID= (required)&productName=&page=&limit=  (paginated)
+Response:        bare arrays (all rows, "no pagination") except the two marked
+                 paginated, which use the standard paginated envelope.
+                 /branch:          branchID, branchCode, branchName
+                 /supplier/list:   supplierID, supplierCode, supplierName
+                 /location/list:   locationID, locationName, branchID, locationTypeID,
+                                   flagActive, allowMinusStock
+                 active-non-module: coaNo, description
+                 cash-bank:        coaNo, description, branchID, flagActive
+                 /common/status:   statusID, statusName
+                 browse-transfer:  productDetailID, productID, productCode,
+                                   productName, uomID, uomName, stockQty, pendingQty,
+                                   categoryName, subCategoryName, ...
+Retry Policy:    read -- retried with backoff, up to three attempts
+Idempotency:     n/a (reads)
+Laravel Adapter: App\Integrations\ESB\Clients\LookupClient
+Contract:        App\Integrations\Contracts\LookupSource
+DTOs:            App\Domain\Canonical\LookupKind, LookupQuery, LookupOption, LookupPage
+Mapper:          App\Integrations\ESB\Mappers\LookupMapper
+Routes:          GET /lookups/{kind}?search=&page=&branchId=   (JSON)
+                 kind = branches | suppliers | locations | coa-accounts |
+                        cash-bank-accounts | statuses | transfer-products
+Permissions:     esb.invoke; throttle:esb (per user)
+Log operations:  lookup.branches, .suppliers, .locations, .coa-accounts,
+                 .cash-bank-accounts, .statuses, .transfer-products
+Tests:           tests/Unit/Integrations/ESB/LookupMapperTest.php,
+                 tests/Feature/Lookups/LookupTest.php, fixture tests/Fixtures/CoreLookup.php
+```
+
+Decisions and open points for these operations:
+
+- **Source.** Transcribed on 2026-10-19 from the vendor's `openapi.json`. Examples are
+  zero-valued placeholders; field names and types only.
+- **One option shape.** Every row becomes a `LookupOption`: `value` (the id as a
+  string; the COA number for accounts), `label`, `code`, and a small `meta` map
+  (e.g. `branchId`, `uomName`). A row with no id or no label (vendor zero values `0` /
+  `""`) is dropped.
+- **Unpaginated lists are searched and paged in the gateway** (case-insensitive on
+  label and code, 20 per page), so a picker never receives thousands of rows. The ESB
+  still returns the whole list on every call; caching is not added yet.
+- **No array query parameters are sent.** `/location/list` (`branchIDs`) and
+  `cash-bank` (`branchID`) take multi-value filters whose wire format (`a=1&a=2` vs
+  `a[]=1`) is not documented. The gateway asks for all active rows and filters by the
+  row's own `branchID`. `TBD`, confirm the format to filter upstream.
+- **Search upstream where the ESB pages.** COA accounts: a search that starts with a
+  digit is sent as `coaNo`, anything else as `description` (the vendor documents no
+  combined search). Transfer products: `productName`. `branchID` is required for
+  transfer products and refused before the call when missing.
+- **`/common/status` is global.** It lists every status id the ERP knows; which ids
+  apply to which document is not documented (`/common/status/mapping` exists, `TBD`).
+- **Purchase request form unchanged.** It keeps `PurchaseRequestSource::listBranches()`
+  (`[ESB-007]`); moving it to the lookup is a later refactor.
+
+### [ESB-020] Unit of Measure (list, detail)
+
+```
+Purpose:         Read units of measure (PCS, KG, ...) from ESB Core.
+Family:          Core
+Method / Path:   GET {{base_url}}/units
+                 GET {{base_url}}/units/{uomID}
+Query (used):    page (default 1), limit (default 20, gateway max 100), indexSearch
+                 ("free-text search on unit name or metric name"), flagActive (1/0)
+Query (unused):  uomName, metricID, notes, sort (vendor default uomName)
+Response:        list: paginated; rows uomID, uomName, metricID, metricName, notes,
+                 refTaxCode, refTaxName, flagActive (1/0)
+                 detail: uomID, uomName, metricID, metricName, notes, refTaxID,
+                 flagActive, createdBy, createdDate, editedBy, editedDate
+Errors:          EC03100004 -> 404 (assumed, as the other Core details)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\UnitOfMeasureClient
+Contract:        App\Integrations\Contracts\UnitOfMeasureSource
+DTOs:            App\Domain\Canonical\UnitOfMeasureQuery, UnitOfMeasureSummary,
+                 UnitOfMeasurePage, UnitOfMeasure
+Routes:          GET /units, /units/{uomId}
+Permissions:     esb.invoke
+Log operations:  unit.list, unit.view
+Tests:           tests/Feature/Units/UnitOfMeasureTest.php,
+                 tests/Unit/Integrations/ESB/UnitOfMeasureMapperTest.php,
+                 fixture tests/Fixtures/CoreUnitOfMeasure.php
+```
+
+### [ESB-021] Product Category (list, detail)
+
+```
+Purpose:         Read product categories, with the accounts they post to.
+Family:          Core
+Method / Path:   GET {{base_url}}/product/category
+                 GET {{base_url}}/product/category/{categoryID}
+Query (used):    page, limit, indexSearch ("free-text search on category name or
+                 category type name"), categoryTypeID (1 Inventory, 2 Non Inventory,
+                 3 Asset, 4 Non Depreciated Asset), flagActive (1/0)
+Query (unused):  categoryName, categoryTypeIDs (multi-value, format undocumented),
+                 notes, sort
+Response:        list: paginated; rows categoryID, categoryName, categoryTypeID,
+                 categoryTypeName, flagActive, notes
+                 detail: categoryID, categoryCode, categoryName, categoryTypeID, coaNo,
+                 cogsCoaNo, accrualBasisCoaNo, opnameCoaNo, productSalesCoaNo,
+                 depCoaNo, depExpenseCoaNo, depLength, depLengthFiscal (months),
+                 depreciationTypeID, depreciationTypeIDFiscal, flagAssetTax, notes,
+                 flagActive, createdBy, createdDate, editedBy, editedDate
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\ProductCategoryClient
+Contract:        App\Integrations\Contracts\ProductCategorySource
+DTOs:            App\Domain\Canonical\ProductCategoryQuery, ProductCategorySummary,
+                 ProductCategoryPage, ProductCategory
+Routes:          GET /product-categories, /product-categories/{categoryId}
+Permissions:     esb.invoke
+Log operations:  product-category.list, product-category.view
+Tests:           tests/Feature/ProductCategories/ProductCategoryTest.php,
+                 tests/Unit/Integrations/ESB/ProductCategoryMapperTest.php,
+                 fixture tests/Fixtures/CoreProductCategory.php
+```
+
+### [ESB-022] Product Sub Category (list, detail)
+
+```
+Purpose:         Read product sub-categories.
+Family:          Core
+Method / Path:   GET {{base_url}}/product/sub-category
+                 GET {{base_url}}/product/sub-category/{subCategoryID}
+Query (used):    page, limit, indexSearch ("free-text search on sub-category name or
+                 notes"), flagActive (1/0)
+Query (unused):  subCategoryName, notes, sort
+Response:        list: paginated; rows subCategoryID, subCategoryName,
+                 deadStockThreshold (days), notes, flagActive
+                 detail: the same plus createdBy, createdDate, editedBy, editedDate
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\ProductSubCategoryClient
+Contract:        App\Integrations\Contracts\ProductSubCategorySource
+DTOs:            App\Domain\Canonical\ProductSubCategoryQuery,
+                 ProductSubCategorySummary, ProductSubCategoryPage, ProductSubCategory
+Routes:          GET /product-sub-categories, /product-sub-categories/{subCategoryId}
+Permissions:     esb.invoke
+Log operations:  product-sub-category.list, product-sub-category.view
+Tests:           tests/Feature/ProductSubCategories/ProductSubCategoryTest.php,
+                 tests/Unit/Integrations/ESB/ProductSubCategoryMapperTest.php,
+                 fixture tests/Fixtures/CoreProductSubCategory.php
+```
+
+### [ESB-023] Supplier Category (list, detail)
+
+```
+Purpose:         Read supplier categories.
+Family:          Core
+Method / Path:   GET {{base_url}}/supplier/category/list      (paginated)
+                 GET {{base_url}}/supplier/category/{supplierCategoryID}
+Query (used):    page, limit, supplierCategoryName, flagActive (1/0)
+Query (unused):  sort. (GET /supplier/category without /list returns all rows,
+                 unpaginated -- not used.)
+Response:        list: paginated; rows supplierCategoryID, supplierCategoryName,
+                 flagActive
+                 detail: the same plus createdBy, createdDate, editedBy, editedDate
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\SupplierCategoryClient
+Contract:        App\Integrations\Contracts\SupplierCategorySource
+DTOs:            App\Domain\Canonical\SupplierCategoryQuery, SupplierCategorySummary,
+                 SupplierCategoryPage, SupplierCategory
+Routes:          GET /supplier-categories, /supplier-categories/{supplierCategoryId}
+Permissions:     esb.invoke
+Log operations:  supplier-category.list, supplier-category.view
+Tests:           tests/Feature/SupplierCategories/SupplierCategoryTest.php,
+                 tests/Unit/Integrations/ESB/SupplierCategoryMapperTest.php,
+                 fixture tests/Fixtures/CoreSupplierCategory.php
+```
+
+Decisions and open points for `[ESB-020]`–`[ESB-023]`:
+
+- **Source.** Transcribed on 2026-10-19 from the vendor's `openapi.json`. Examples are
+  zero-valued placeholders; field names and types only. Date formats `TBD` (shown with
+  `formatDateTime`, which leaves an unknown shape as-is).
+- **Slice 1 is read-only.** Create / update / delete / restore / inactive, import /
+  export and push / pull are not built (`TODO-modules.md` §2).
+- **Sub-categories cannot be filtered by category.** The vendor documents no category
+  filter on `/product/sub-category`, and its rows carry no `categoryID`. The plan's
+  "filter by category" is `TBD` with the ESB team.
+- **Category type names.** List rows carry `categoryTypeName`; the detail only
+  `categoryTypeID`. The detail shows the name from the vendor's own legend (1 Inventory,
+  2 Non Inventory, 3 Asset, 4 Non Depreciated Asset); an unknown id is shown as the id.
+- **Category depreciation ids** (`depreciationTypeID`, `...Fiscal`) have no documented
+  legend and are shown as ids.
+- **`flagActive` is 1/0 here** (documented as integer), mapped to a boolean; anything
+  else is unknown, not false.
+
+### [ESB-024] Supplier (list, detail)
+
+```
+Purpose:         Read suppliers, with their contacts, bank accounts and product codes.
+Family:          Core
+Method / Path:   GET {{base_url}}/supplier                    (paginated)
+                 GET {{base_url}}/supplier/{supplierID}
+Query (used):    page, limit, indexSearch ("free-text search across supplier fields"),
+                 flagActive (1/0)
+Query (unused):  supplierName, supplierCode, dueDate, address, picName, picPhone,
+                 supplierCategoryName, linkSupplierCodeEsbGoods,
+                 includeEmptySupplierCode, selectedSupplierID, sort
+Response:        list rows: supplierID, supplierCode, supplierName, supplierCategoryID,
+                 category (name), address, contactPerson, cellPhone, dueDate (credit
+                 days), vatSubject, lockVAT, flagActive (boolean here),
+                 linkSupplierCodeEsbGoods, supplierNameEsbGoods
+                 detail: the above plus city, state, country, zipCode, phone1, phone2,
+                 fax, npwp, notes, payableCoaNo, advancePurchaseCoaNo, paymentID,
+                 flagInvoiceOnReceipt, isAnyTransaction, supplierPic[] (picSupplierID,
+                 picName, cellPhone, email, flagDefault, flagSendingPOEmail,
+                 greetingID), supplierBank[] (bankID, bankName, bankAccountName,
+                 bankAccountNumber), supplierBankOy[], supplierProduct[] (ID,
+                 productDetailID, productName, externalProductCode, uomName),
+                 imageAttachments[], createdBy/Date, editedBy/Date
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\SupplierClient
+Contract:        App\Integrations\Contracts\SupplierSource
+DTOs:            App\Domain\Canonical\SupplierQuery, SupplierSummary, SupplierPage,
+                 Supplier, SupplierContact, SupplierBankAccount, SupplierProduct
+Routes:          GET /suppliers, /suppliers/{supplierId}
+Permissions:     esb.invoke
+Log operations:  supplier.list, supplier.view
+Tests:           tests/Feature/Suppliers/SupplierTest.php,
+                 tests/Unit/Integrations/ESB/SupplierMapperTest.php,
+                 fixture tests/Fixtures/CoreSupplier.php
+```
+
+Decisions and open points:
+
+- **One call for the detail.** The detail already nests `supplierPic[]` and
+  `supplierBank[]`, so `GET /supplier/{id}/contacts` and `/banks` (same fields) are not
+  called.
+- **Bank account numbers are masked in the gateway.** The mapper keeps only the last
+  four digits (`•••• 6789`); the full number never reaches the browser. A read-only
+  screen does not need it and the ERP still has it. `TBD`: the business may decide
+  otherwise, or S3 (edit) may need the full value behind a stronger permission.
+- **Not carried:** `supplierBankOy[]` (payment-provider accounts, purpose undocumented),
+  `imageAttachments[]` (vendor URLs, ADR-006), ESB Goods link fields, `greetingID`,
+  `paymentID` is carried as an id only (no payment method name in the detail).
+- **`flagActive` is a boolean in supplier rows** (1/0 in the query), unlike the
+  `[ESB-020]`–`[ESB-023]` lists. Both are accepted.
+
+### [ESB-025] Chart of Accounts (list, detail)
+
+```
+Purpose:         Read the chart of accounts, as an outline by level, and one account
+                 with its mapping rows.
+Family:          Core
+Method / Path:   GET {{base_url}}/accounting/coa            ("all active", unpaginated)
+                 GET {{base_url}}/accounting/coa/{coaNo}
+Query:           none documented on the list
+Response:        list and detail rows: coaNo, description, coaLevel (1-4), orderList,
+                 branchID, currency (sign), flagModule (1/0), allowBudget (1/0),
+                 flagActive (1/0), additionalInfo, releasePaymentCode,
+                 createdBy/Date, editedBy/Date, mapCoa[] (ID, coaNo, key,
+                 mapCoaTypeID, currencyID)
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\CoaAccountClient
+Contract:        App\Integrations\Contracts\CoaAccountSource
+DTOs:            App\Domain\Canonical\CoaAccountQuery, CoaAccountSummary,
+                 CoaAccountPage, CoaAccount, CoaMapping
+Routes:          GET /coa-accounts?search=&level=&page=, /coa-accounts/{coaNo}
+Permissions:     esb.invoke (managing COA will need its own permission, TODO §2.7)
+Log operations:  coa.list, coa.view
+Tests:           tests/Feature/CoaAccounts/CoaAccountTest.php,
+                 tests/Unit/Integrations/ESB/CoaAccountMapperTest.php,
+                 fixture tests/Fixtures/CoreCoaAccount.php
+```
+
+Decisions and open points:
+
+- **Active accounts only.** The documented list is "all active". `/accounting/coa/index`
+  ("with mapping rows") may include inactive ones; its scope is undocumented (`TBD`).
+- **Searched, filtered and paged in the gateway** (50 per page): the list is
+  unpaginated. Search matches the number (prefix) or the description; level 1–4.
+- **Outline, not a tree.** Rows carry `coaLevel` and `orderList` but no parent. The
+  page lists accounts in `orderList` order (then number) indented by level; no parent
+  is derived (`TBD` whether `orderList` reliably groups children under parents).
+- **`coaNo` must start with a digit.** The detail path `/accounting/coa/{coaNo}` shares
+  its segment with literal vendor paths (`/export`, `/index`, `/tax`, `/cash-bank`), so
+  a value like `export` would reach the export endpoint. The route allows
+  `[0-9][0-9A-Za-z._-]{0,31}` only and the value is URL-encoded. Account numbers that
+  start with a letter would be unreachable (`TBD`, none seen).
+- **`branchID` 0** is carried as null ("not branch-specific", assumed).
+- **Mapping rows** are shown as key / type id / currency id; the type and currency ids
+  have no documented legend here.
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).
@@ -1338,9 +1638,14 @@ otherwise, assume **writes are not idempotent**.
 | Operation class | Retry |
 | --- | --- |
 | `GET` (list, detail, browse, dropdown, report) | safe to retry with backoff |
+| `POST` the vendor documents as a read, sent with `EsbClient::postRead()` (ADR-025) | same as `GET` |
 | `POST` / `PUT` / `PATCH` / `DELETE` | do not retry automatically on timeout or 5xx |
 | Authentication failure (`EC03100001`) | refresh token once, then retry once; then fail |
 | Validation / authorization / not found / business rejection | never retry |
+
+A `POST` gets the read policy only when its adapter calls `postRead()` and its
+`[ESB-0xx]` entry says "read via POST (ADR-025)". The policy is never inferred from the
+path: `POST /report/.../export` queues a job and stays a write.
 
 Exception: Push Sales Data V2 (`[ESB-011]`) is documented as overwriting by `salesNum`,
 so its queue job repeats an unknown outcome. EsbClient itself still makes one attempt.

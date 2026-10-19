@@ -63,6 +63,18 @@ class EsbClient
     }
 
     /**
+     * A POST the vendor documents as a read ("Get…", "List…"), retried like
+     * get(). Only for operations with no documented side effect; anything that
+     * queues, exports, creates or authenticates uses post() (ADR-025).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    public function postRead(EsbFamily $family, string $path, array $body = [], string $operation = ''): EsbEnvelope
+    {
+        return $this->send('POST', $family, $path, $operation, body: $body, read: true);
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      */
     public function put(EsbFamily $family, string $path, array $body = [], string $operation = ''): EsbEnvelope
@@ -113,6 +125,7 @@ class EsbClient
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
      * @param  array{name: string, contents: string, filename: string}|null  $file
+     * @param  bool  $read  apply the read retry policy to a non-GET (ADR-025)
      *
      * @throws EsbException
      */
@@ -124,6 +137,7 @@ class EsbClient
         array $query = [],
         array $body = [],
         ?array $file = null,
+        bool $read = false,
     ): EsbEnvelope {
         $method = strtoupper($method);
 
@@ -139,7 +153,7 @@ class EsbClient
         $startedAtMicro = microtime(true);
 
         try {
-            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $file, $context);
+            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $file, $context, $read);
         } catch (EsbException $exception) {
             $this->record(
                 $exception->context->withTiming($this->elapsedMs($startedAtMicro)),
@@ -182,8 +196,9 @@ class EsbClient
         array $body,
         ?array $file,
         EsbContext $context,
+        bool $read = false,
     ): array {
-        $isRead = $method === 'GET';
+        $isRead = $method === 'GET' || $read;
 
         // Writes get exactly one attempt. No idempotency key is documented for
         // any write operation, so a repeated write can create a duplicate ERP

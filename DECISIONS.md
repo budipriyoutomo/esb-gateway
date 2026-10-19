@@ -970,3 +970,55 @@ Facts that shaped the design:
 - Vitest browser mode / Playwright component tests — need a real browser in CI.
   Playwright stays an optional later step for end-to-end smoke tests (UI-0).
 - Snapshot tests as the main assertion — they pin markup, not behaviour.
+
+## ADR-025 — POST Operations the Vendor Documents as Reads Are Retried Like Reads
+
+**Status:** Accepted
+
+**Context**
+- `EsbClient` decides the retry policy from the HTTP method alone: `GET` gets three
+  attempts with backoff, every other method exactly one (`docs/05-api-integration.md`,
+  ADR-021), because no write has a documented idempotency key.
+- Several operations the next modules need are reads sent as `POST`. From the
+  generated catalogs (`docs/esb/`): Core `POST /accounting/general-ledger` ("List
+  general ledger entries"), `POST /accounting/general-ledger/summary` ("List general
+  ledger summary"), `POST /inventory/goods-transfer-request/detail` ("Get goods
+  transfer request product details"), `POST /inventory/goods-delivery/get-products`
+  ("Get products by product detail IDs"); OMS Master POS
+  `POST /external/general/get-payment-method`, `get-branch`, `get-menu`.
+- Under the method rule these would get one attempt, so one dropped connection fails
+  a report or a picker that is safe to ask again.
+- Other `POST`s *look* like reads but are not: `POST /report/accounting/general-ledger/export`
+  ("Queue general ledger report export") starts a job; `POST /auth/session` belongs to
+  authentication. The method or path alone cannot tell them apart.
+
+**Decision**
+- `EsbClient::postRead()` sends a `POST` with the read retry policy: three attempts
+  with exponential backoff, retryable failures only — the same as `get()`.
+- An adapter uses `postRead()` only when the vendor's own summary for that operation
+  describes a read ("Get…", "List…", "Search…") and nothing in its documentation
+  mentions a side effect. The `[ESB-0xx]` entry in `docs/05-api-integration.md` says
+  "read via POST (ADR-025)". Anything that queues, exports, sends, creates, or
+  authenticates stays on `post()`.
+- `post()`, `put()`, `patch()`, `delete()` and `upload()` are unchanged: one attempt.
+- The policy is never inferred from the path or the operation name; it is the method
+  the adapter calls.
+
+**Reason**
+- A read has no state to duplicate, so repeating it is safe; giving it one attempt
+  only makes it less reliable than the same data fetched by `GET`.
+- An explicit method keeps the decision reviewable per operation, in the adapter and in
+  its contract entry, instead of a pattern that would one day match an export.
+
+**Consequences**
+- `tests/Feature/Integrations/ESB/EsbClientTest.php` pins both sides: `postRead()`
+  retries a connection failure and gives up after the read budget; `post()` still
+  makes one attempt.
+- If the vendor ever documents a side effect for an operation on `postRead()`, that
+  adapter moves back to `post()` in the same change as the doc update.
+
+**Rejected**
+- Retrying every `POST` whose path contains `get`/`list`/`detail` — would match
+  `/report/.../export`-style jobs sooner or later.
+- Leaving POST reads at one attempt — a picker or report fails on the first network
+  blip for no safety gain.

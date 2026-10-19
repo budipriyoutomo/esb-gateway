@@ -39,6 +39,22 @@ Build reusable components for:
 
 Prefer composition over giant configurable components.
 
+Shared building blocks (each has a `*.test.tsx` beside it). New pages use these
+instead of hand-rolled equivalents; `pages/purchase-orders/` is the reference:
+
+| Need | Use |
+| --- | --- |
+| Page title, back link, actions | `PageHeader` |
+| List filters + query string | `FilterBar`, `DateRangeField`, `useListQuery` |
+| List table | `DataTable` (+ `rowHref` for clickable rows) |
+| Paging | `ListPagination` |
+| ERP status | `StatusBadge` |
+| Detail header | `DetailSummary`, `DetailFields` / `DetailField` |
+| Authorize / reject / delete | `ApprovalActions` |
+| Write outcome unknown | `UnconfirmedWriteNotice` |
+| Form buttons, unsaved changes | `FormActions`, `useUnsavedChangesWarning` |
+| Searchable picker | `LookupCombobox` (ERP lists via `/lookups/{kind}`), `Combobox` (any async source) |
+
 ## UX
 
 ERP UI should prioritize:

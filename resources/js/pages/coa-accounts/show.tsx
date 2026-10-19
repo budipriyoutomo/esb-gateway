@@ -1,0 +1,100 @@
+import { Head } from '@inertiajs/react';
+import { DataTable } from '@/components/data-table';
+import { DetailField } from '@/components/detail-fields';
+import { ReferenceDataShow } from '@/components/reference-data-show';
+import { index as coaIndex } from '@/routes/coa-accounts';
+import type { CoaAccount } from '@/types/master-data';
+
+function yesNo(value: boolean | null): string | null {
+    if (value === null) {
+        return null;
+    }
+
+    return value ? 'Yes' : 'No';
+}
+
+export default function CoaAccountShow({ account }: { account: CoaAccount }) {
+    const title = `${account.coaNo} ${account.description}`.trim();
+
+    return (
+        <>
+            <Head title={title} />
+
+            <ReferenceDataShow
+                title={title}
+                back={{ href: coaIndex(), label: 'Chart of accounts' }}
+                record={account}
+                extra={
+                    <section className="grid gap-3">
+                        <h2 className="text-base font-medium">Mappings</h2>
+                        <DataTable
+                            caption="Account mappings"
+                            columns={[
+                                {
+                                    key: 'key',
+                                    header: 'Key',
+                                    className: 'font-mono text-xs',
+                                    cell: (mapping) => mapping.key ?? '—',
+                                },
+                                {
+                                    key: 'type',
+                                    header: 'Type id',
+                                    align: 'right',
+                                    cell: (mapping) => mapping.typeId ?? '—',
+                                },
+                                {
+                                    key: 'currency',
+                                    header: 'Currency id',
+                                    align: 'right',
+                                    cell: (mapping) =>
+                                        mapping.currencyId ?? '—',
+                                },
+                            ]}
+                            rows={account.mappings}
+                            rowKey={(mapping, index) =>
+                                String(mapping.id ?? `mapping-${index}`)
+                            }
+                            empty="This account has no mappings."
+                        />
+                    </section>
+                }
+            >
+                <DetailField
+                    label="Level"
+                    value={
+                        account.level === null ? null : String(account.level)
+                    }
+                />
+                <DetailField label="Currency" value={account.currency} />
+                <DetailField
+                    label="Branch id"
+                    value={
+                        account.branchId === null
+                            ? 'All branches'
+                            : String(account.branchId)
+                    }
+                />
+                <DetailField
+                    label="Module account"
+                    value={yesNo(account.moduleAccount)}
+                />
+                <DetailField
+                    label="Budgeting allowed"
+                    value={yesNo(account.allowBudget)}
+                />
+                <DetailField
+                    label="Release payment code"
+                    value={account.releasePaymentCode}
+                />
+                <DetailField
+                    label="Additional info"
+                    value={account.additionalInfo}
+                />
+            </ReferenceDataShow>
+        </>
+    );
+}
+
+CoaAccountShow.layout = {
+    breadcrumbs: [{ title: 'Chart of accounts', href: coaIndex() }],
+};

@@ -1260,6 +1260,135 @@ the vendor's `openapi.json` on 2026-10-19.
 - PHP untouched; `php artisan test` not re-run (last: 830 pass, P1).
 - Not checked in a browser.
 
+## Update 2026-10-19 — Shared UI components (`TODO-modules.md` P5 / UI-2)
+
+**Selesai** (each test-first; RED = missing module, then green)
+
+- Components in `resources/js/components/`: `PageHeader`, `FilterBar`,
+  `DateRangeField`, `DataTable`, `ListPagination`, `StatusBadge`, `DetailSummary` /
+  `DetailFields` / `DetailField` (`detail-fields.tsx`), `ApprovalActions`,
+  `UnconfirmedWriteNotice`, `FormActions`.
+- Hooks in `resources/js/hooks/`: `useListQuery` (drops empty values, trims, keeps 0;
+  paging keeps filters; reset), `useUnsavedChangesWarning` (confirm on GET visits and
+  `beforeunload`; never blocks the form's own submit).
+- Reference migration: `pages/purchase-orders/index.tsx` and `show.tsx` rebuilt on
+  them (+ `index.test.tsx`, which caught a real bug — a removed chip / reset left the
+  old value in its field because of `preserveState`; fixed). Props unchanged:
+  `tests/Feature/PurchaseOrders` 49 pass.
+- `resources/js/test/setup.ts` mocks Inertia's `<Head>` (needs a running app) so pages
+  render in tests.
+- `docs/08-frontend-guidelines.md`: table of the shared building blocks.
+
+**Visible changes on purchase orders:** coloured status badges; date filters behind
+"More filters"; active-filter chips with reset; whole row clickable; summary card
+(supplier, dates, total) above the fields; lines table header sticks while scrolling.
+
+**Tersisa**
+
+- Tabs for `DetailLayout` need `@radix-ui/react-tabs`; combobox / popover date picker
+  need `cmdk` + `@radix-ui/react-popover` — both need an ADR (combobox planned in P6).
+- `UnconfirmedWriteNotice` is not wired: `HandlesDocumentWrites` only flashes a text
+  toast; a banner needs structured flash data (operation, number, correlation id).
+- PR / PI / SP and older pages still use hand-rolled versions → UI-6.
+
+**Assumptions / TBD**
+
+- `StatusBadge` tones are keyword guesses; the ERP status vocabulary is undocumented
+  (only `New`, `Authorized` seen). Unknown → neutral; text always the ERP's.
+
+**Checks dijalankan**
+
+- `npm run test:ui` — pass, 16 files, 132 tests.
+- `tsc --noEmit`, `vp check`, `npm run build` — pass.
+- `php artisan test tests/Feature/PurchaseOrders` — pass, 49 tests.
+- Not checked in a browser.
+
+## Update 2026-10-19 — Shared lookups + POST reads (`TODO-modules.md` P6, ADR-025, `[ESB-019]`)
+
+**New decision:** ADR-025 in `DECISIONS.md` — `EsbClient::postRead()` gives a POST the
+vendor documents as a read the GET retry policy. Opt-in per operation; never inferred.
+
+**Selesai** (test-first; RED = missing method / class / route)
+
+- `EsbClient::postRead()` + `send(..., read: true)`. `EsbClientTest` +5 tests (POST
+  with body, retried after a connection failure, gives up after 3, no retry on
+  validation, logged as POST). No adapter uses it yet. `docs/05` retry table updated.
+- `[ESB-019]` in `docs/05-api-integration.md`, transcribed from the vendor's
+  `openapi.json` (downloaded 2026-10-19). `LookupSource` → `LookupClient`
+  (`LookupMapper`), DTOs `LookupKind`, `LookupQuery`, `LookupOption`, `LookupPage`.
+  Kinds: branches, suppliers, locations, coa-accounts (ESB-paged), cash-bank-accounts,
+  statuses, transfer-products (ESB-paged, branch required). Bound in
+  `AppServiceProvider`.
+- `GET /lookups/{kind}` (`lookups.show`, JSON) inside `throttle:esb`; `LookupRequest`
+  (esb.invoke, search ≤ 100, page ≤ 1000, branchId required for transfer products);
+  unknown kind → 404 by enum binding; ESB failure → JSON via `EsbExceptionRenderer`.
+- Tests: `LookupMapperTest` (8), `LookupPageTest` (4), `tests/Feature/Lookups/LookupTest`
+  (13), fixture `tests/Fixtures/CoreLookup.php`.
+- Frontend: `lib/lookups.ts` (`fetchLookup`, gateway message on failure),
+  `components/combobox.tsx` (own WAI-ARIA combobox, no dependency → no ADR),
+  `components/lookup-combobox.tsx` (aborts superseded requests). Tests: 4 + 12 + 2.
+  No page uses the pickers yet; first consumers are the P7+ modules.
+
+**Assumptions / TBD**
+
+- Multi-value query format undocumented → no array parameter is sent; locations and
+  cash/bank accounts are filtered by the row's `branchID` in the gateway.
+- Whole lists (branch, supplier, location, cash-bank, status) are fetched in full on
+  every picker call; no cache yet.
+- COA search: leading digit → `coaNo`, else `description` (vendor has no combined
+  search). `/common/status` is global; per-document mapping `TBD`.
+
+**Tersisa**
+
+- Product picker for purchase documents (no browse endpoint chosen).
+- Moving the purchase request form's branch list onto `LookupSource`.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 860 tests (3957 assertions).
+- `pint --test` — pass. `phpstan analyse --memory-limit=1G` — same 2 pre-existing
+  errors in `EsbConnectionInspector.php`.
+- `npm run test:ui` — pass, 19 files, 150 tests. `tsc`, `vp check`, `npm run build` —
+  pass.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-19 — Master data S1: units, product categories, sub-categories, supplier categories (`TODO-modules.md` P7)
+
+**Selesai** (test-first; RED = missing classes/routes, then missing Inertia pages)
+
+- `[ESB-020]`–`[ESB-023]` in `docs/05-api-integration.md`, from the vendor's
+  `openapi.json`. Per module: `<X>Source` contract, `<X>Client`, `<X>Mapper`,
+  canonical `<X>Summary` / `<X>` / `<X>Page` / `<X>Query`, `List<X>Request`,
+  controller, routes, pages `resources/js/pages/<x>/index|show.tsx`, sidebar entry
+  (Master data group). X = UnitOfMeasure (`/units`), ProductCategory
+  (`/product-categories`), ProductSubCategory (`/product-sub-categories`),
+  SupplierCategory (`/supplier-categories`). All read-only, `esb.invoke`.
+- Shared pieces (ADR-015 — five read-only master lists now share the shape):
+  `App\Http\Requests\ListReferenceDataRequest` (page, limit ≤ 100, search, flagActive),
+  `App\Integrations\ESB\Mappers\Concerns\ReadsEsbValues` (older mappers keep their
+  private copies), `components/reference-data-index.tsx` /
+  `reference-data-show.tsx`, `types/master-data.ts`, test base
+  `tests/Feature/MasterData/ReadOnlyMasterDataTestCase.php` (access, list, filters,
+  empty filters dropped, bounds, detail, 404, path-escape), fixture trait
+  `tests/Fixtures/EsbEnvelope.php`.
+- `LookupSource` now extends `OutboundAdapter` like every other contract.
+
+**Assumptions / TBD**
+
+- Unknown id → `EC03100004` → 404 (assumed, as for other Core details).
+- Sub-categories: no category filter or `categoryID` documented — `[!]` in TODO §2.3.
+- Category detail names its type from the vendor's legend (1–4); depreciation type ids
+  have no legend and show as ids. `0` months / ids are carried as null.
+- Supplier category search maps onto `supplierCategoryName` (no free-text search
+  documented); the others use `indexSearch`.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 925 tests (4397 assertions).
+- `npm run test:ui` — pass, 21 files, 158 tests. `tsc`, `vp check`, `npm run build` —
+  pass. `pint --test` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
 ## Known Unknowns / TBD
 
 Resolved by the 2026-09-09 contract import:
