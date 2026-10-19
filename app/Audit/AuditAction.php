@@ -81,6 +81,56 @@ enum AuditAction: string
     case PurchaseInvoiceWriteUnconfirmed = 'purchase-invoice.write-unconfirmed';
 
     /**
+     * A purchase order was authorized, rejected, or deleted in the ERP
+     * through the gateway. The ERP sees the shared service credential, so
+     * these rows are the record of which person did it. A rejection carries
+     * the reason that was sent.
+     */
+    case PurchaseOrderAuthorized = 'purchase-order.authorized';
+
+    case PurchaseOrderRejected = 'purchase-order.rejected';
+
+    case PurchaseOrderDeleted = 'purchase-order.deleted';
+
+    /**
+     * A decision or delete on a purchase order was sent but the ESB gave no
+     * definite answer. The metadata names the operation and carries the
+     * correlation id needed to trace it.
+     */
+    case PurchaseOrderWriteUnconfirmed = 'purchase-order.write-unconfirmed';
+
+    /**
+     * A document template was created in the ERP through the gateway. The
+     * ERP sees the shared service credential, so this row is the record of
+     * which person did it.
+     */
+    case DocumentTemplateCreated = 'document-template.created';
+
+    /**
+     * A document template write was sent but the ESB gave no definite
+     * answer. The metadata names the operation and carries the correlation id
+     * needed to trace it.
+     */
+    case DocumentTemplateWriteUnconfirmed = 'document-template.write-unconfirmed';
+
+    /**
+     * A document template spreadsheet was uploaded and stored (ADR-023). The
+     * metadata carries the file's name and SHA-256 and what was read from it,
+     * never its contents.
+     */
+    case DocumentTemplateImportUploaded = 'document-template-import.uploaded';
+
+    /** Someone asked for an import to be checked against the ERP. */
+    case DocumentTemplateImportValidationRequested = 'document-template-import.validation-requested';
+
+    /**
+     * Someone asked for an import's ready templates to be sent. Each create
+     * is audited on its own as document-template.created, with this person
+     * as the actor.
+     */
+    case DocumentTemplateImportSyncRequested = 'document-template-import.sync-requested';
+
+    /**
      * An API client (a POS) was issued a token, or had it revoked, from the
      * console (ADR-022). The metadata names the client, never the token.
      */

@@ -805,3 +805,102 @@ second provider's contract exists (ADR-017).
   instruction (2026-10-01). Whether the FnB backend accepts it is `TBD` on staging.
 - Retention of `sales_pushes` and its payload.
 - Managing API clients from the UI instead of the console.
+
+## ADR-023 — Document Template Spreadsheet Import: Staged in the Gateway, Then Synced
+
+**Status:** Accepted
+
+**Context**
+The business keeps supplier document templates in a spreadsheet ("Document Template
+ESB_Supplier.xlsx": 22 templates, 178 product rows) and will send more files like it.
+The owner asked (2026-10-15) that the rows be stored in the gateway's own database
+**before** anything is POSTed to the ESB, "so it is known which succeeded and which did
+not", with a separate sync to the ESB.
+
+Facts that shaped the design:
+- `POST /document-template` is not documented as idempotent (`[ESB-016]`). Its 201
+  example result is `{}`, so the new id is not promised back.
+- The ESB has `POST /document-template/upload`, but its column layout is undocumented
+  and it "queues it for asynchronous import. result is null". The gateway could not
+  tell what happened to each template.
+- The sheet gives branch **codes** and product **code + unit**; the create body needs
+  branch ids and `productDetailID`s, which only the ERP can resolve
+  (`GET /branch`, `GET /product/list` + `GET /product/{productID}`; see `[ESB-016]` for
+  why not `/product-detail/browse`). Resolving 126 product codes is about
+  150 ESB reads: too many for one web request.
+- The sheet lists branches per product row, but the ESB holds branches per template.
+- The project had no spreadsheet reader. `ImportPurchaseRequests` forwards the file to
+  the ESB unread.
+
+**Decision**
+- Three steps, each started by a person holding `esb.invoke` and
+  `document-templates.manage`:
+  1. **Upload** reads the first sheet (`DocumentTemplateSheetReader`,
+     `DocumentTemplateSheetParser`) into `document_template_imports`,
+     `document_template_import_entries` (one per template), and
+     `document_template_import_lines`. No ESB call. A template the sheet already gets
+     wrong is `invalid` (final; fix the file and upload again), every other one
+     `pending`.
+  2. **Validate** (queued job, reads only) resolves branch codes, product code + unit
+     (exact code, unit compared ignoring case and spacing), and checks that the name is
+     not in the ERP. Each template becomes `ready`, or `blocked` with every reason found.
+     An `unconfirmed` template whose name the ERP now has is settled as `synced`.
+  3. **Sync** (queued job) sends `ready` templates one at a time in file order through
+     `CreateDocumentTemplate`, the same guarded write as the create form, on behalf of
+     the person who asked. The name is checked again right before each create.
+     Accepted: `synced` (with the ERP id if returned). Refused: `failed` with the ESB's
+     reasons, and the run continues. No definite answer: `unconfirmed`, and the run
+     **stops**.
+- Owner's rules (2026-10-15): branches of all a template's rows are **merged**; the
+  **Kategori** column becomes `requestTemplateDetailName`; a name already in the ERP
+  **stops that template** with the reason.
+- An import is claimed (`idle` → `validating`/`syncing`) before its job is queued, and
+  each template is claimed (`ready` → `syncing`) before it is sent. Two clicks never
+  send a template twice. Both jobs have `tries = 1`.
+- The file itself is not stored: only its name, its SHA-256, and what was read.
+- **Dependency:** `openspout/openspout` ^4 (MIT) reads the .xlsx. Rows are read with
+  `SHOULD_PRESERVE_EMPTY_ROWS`, so row numbers in messages match Excel. Reading stops
+  at 5000 rows; upload is capped at 2 MB and must start with the zip signature.
+
+**Reason**
+- Staging gives each template its own visible status and reason, which the owner asked
+  for. The ESB upload endpoint gives no per-template outcome.
+- Validating before sending turns a vague ESB refusal into a precise reason ("row 76:
+  product AC0006 has no unit PACK (it has: PC)"). Every problem is listed at once, so
+  the file can be fixed in one pass.
+- Reusing `CreateDocumentTemplate` keeps one write path: the same lock, single attempt,
+  and audit row per created template (ADR-021).
+- Stopping on an unconfirmed create stops hammering an ESB that may be down. It also
+  leaves at most one template in an unknown state, which validate then settles.
+- openspout streams the sheet instead of loading a whole workbook object model. It has
+  no further dependencies and needs only `ext-zip`/`ext-xmlreader`, both already present.
+  Parsing OOXML by hand would put zip and XML edge cases in project code.
+
+**Consequences**
+- A queue worker must run for validate and sync. This was already required by ADR-022.
+- The gateway now stores template names, branch codes, and product codes. None of this
+  is personal or financial data. Retention is `TBD`, like the other tables.
+- A template blocked because the ERP lacks a product or unit needs a fix in the file
+  (and a new upload) or in the ERP (then validate again). Imported rows cannot be
+  edited in the gateway.
+- `CreateDocumentTemplate::handle()` takes an optional actor id and audit context, for
+  callers outside a web request.
+
+**Rejected**
+- ESB `POST /document-template/upload` — undocumented layout, asynchronous, no
+  per-template result.
+- Sending straight from the upload request — no record of what failed, and ~150 reads
+  plus 22 writes would outlast the request.
+- Splitting a template whose rows list different branches — the owner chose merging.
+- phpoffice/phpspreadsheet — heavier, loads the whole workbook into memory, and more
+  than reading one sheet needs.
+- Fuzzy unit matching — a near miss is reported, not guessed.
+
+**Open**
+- `productCode` on `/product/list` matches partially (staging, 2026-10-15), which the
+  vendor does not document. The gateway compares the code itself.
+- Sheet cells may be formulas (Product Code is a `VLOOKUP` into another workbook). The
+  reader takes the result Excel saved with the formula; a formula whose result was an
+  error reads as empty.
+- The create result's id key (assumed `requestTemplateID`, see `[ESB-016]`).
+- Editing imported rows in the gateway instead of re-uploading. Not requested yet.

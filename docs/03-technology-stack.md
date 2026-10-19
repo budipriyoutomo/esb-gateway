@@ -26,6 +26,8 @@
 - Queue via Redis
 - Laravel HTTP Client for ESB calls
 - Database transactions where appropriate
+- `openspout/openspout` ^4 to read uploaded .xlsx sheets (document template import,
+  ADR-023)
 
 ## Testing
 

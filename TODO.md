@@ -306,6 +306,30 @@ Built test-first. Operations documented as `[ESB-008]`–`[ESB-010]` in
 - [ ] Not built: attachments, `export-csv`, payment/settlement reads, `validate-*` checks,
       supplier/status filters.
 
+### Module — Purchase Order
+
+Built test-first. Operations documented as `[ESB-017]` in `docs/05-api-integration.md`.
+
+- [x] Slice 1 (2026-10-19): list + detail, authorize / reject (with the required
+      reason), delete. `PurchaseOrderSource` contract, canonical `PurchaseOrder*` DTOs,
+      `PurchaseOrderClient`, `PurchaseOrderMapper`, `DecidePurchaseOrder` and
+      `DeletePurchaseOrder` on `GuardedEsbWrite`, Inertia pages `purchase-orders/index`
+      and `purchase-orders/show`, sidebar entry under "Purchase". New permissions
+      `purchase-orders.approve` and `purchase-orders.manage` (Super Admin only).
+- [ ] Business: decide which roles hold `purchase-orders.approve` and
+      `purchase-orders.manage`.
+- [ ] Ask the ESB team: which statuses accept authorize/reject/delete; the maximum
+      reject reason length; the `purchaseRequestNums` separator; which of
+      `vat`/`vatValue`/`dppValue` is the line's tax amount; whether an unknown
+      `purchaseNum` answers `EC03100004`.
+- [ ] Slice 2 candidates: close / unclose (the ERP already sends `access.unclose`),
+      status filter backed by `GET /common/status`, supplier filter.
+- [ ] Not built: create / update / drafts, print, send-email-authorize, asset images,
+      bulk upload and form-import.
+- [ ] Refactor (separate change): `PurchaseRequestDecision`, `PurchaseInvoiceDecision`
+      and `PurchaseOrderDecision` are three two-case enums. Merge them into one
+      approval-decision enum, as the Purchase Invoice entry planned for the third.
+
 ### Module — Master Menu
 
 Built test-first on 2026-10-01 (`[ESB-012]`), on ESB Core `GET /menu/browse`.
@@ -323,6 +347,46 @@ Built test-first on 2026-10-01 (`[ESB-012]`), on ESB Core `GET /menu/browse`.
       and parsing `EC0110` per-field errors from the JSON in `message`.
 - [ ] Not built: create / update (not in the Core Menu group), `browse-for-product`,
       `validate-bom-usage`, category filters (need a category lookup).
+
+### Module — Bill of Material
+
+Built test-first on 2026-10-13 (`[ESB-014]`), on ESB Core `GET /product/bom` and
+`GET /product/bom/{bomID}`.
+
+- [x] Slice 1: read-only list (name, code, product, active filters, paging) and detail
+      with materials, substitutes, other costs, and per-menu replacements.
+- [ ] Confirm with the ESB team what an unknown `bomID` returns (assumed `EC03100004`).
+- [ ] BOM type filter: needs `/common/bom-type/*` lookup; list `bomTypeID` is an array.
+- [ ] Location-scoped detail (`locationID`) once there is a location picker.
+- [ ] Not built: create / update / delete / restore (needs its own permission and an
+      unknown-outcome design like purchase requests), upload/export, push/pull to child
+      companies, `check-bom-infinite`, `validate-replacement`, user access mapping.
+
+### Module — Document Template
+
+Built test-first on 2026-10-15 (`[ESB-016]`), on ESB Core `GET /document-template` and
+`GET /document-template/{requestTemplateID}`.
+
+- [x] Slice 1: read-only list (name, type, active filters, paging) and detail with
+      product lines.
+- [x] Slice 2 (2026-10-15): create (`POST /document-template`) behind new permission
+      `document-templates.manage`; product picker on `GET /product/list` + `GET /product/{productID}`.
+- [x] Slice 3 (2026-10-15, ADR-023): spreadsheet import — upload into the gateway's
+      tables, validate against the ERP, sync ready templates; per-template status and
+      reason.
+- [ ] Run the first real import ("Document Template ESB_Supplier.xlsx", 22 templates)
+      on staging; check unit names match the ERP's `uomName`.
+- [ ] Decide retention for `document_template_import*` tables.
+- [ ] Decide which role gets `document-templates.manage` (only Super Admin today).
+- [ ] Confirm the create result's id key (assumed `requestTemplateID`; vendor example
+      is `{}`) and the `field` format of nested validation errors.
+- [ ] Create fields not offered yet: cost centers, supplier, currency, destination
+      branch, auto transfer, allow zero pricelist, line `mode` / `requestProcessID`.
+- [ ] Confirm with the ESB team what an unknown template id returns (assumed
+      `EC03100004`).
+- [ ] Resolve branch and cost-center names (`/{id}/template-branch`, `/{id}/cost-center`).
+- [ ] Branch filter (`branchID`) once there is a branch picker.
+- [ ] Not built: update / delete / restore, upload/export, push/pull, copy-template.
 
 ### Module — Sales Push (POS -> ESB Push Sales Data V2)
 

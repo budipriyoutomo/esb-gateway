@@ -170,6 +170,43 @@ Indexed on `(sales_num, id)`, `(status, created_at)`, and `(branch_code, created
 
 Retention for this table, and especially for `payload`, is `TBD`.
 
+### document_template_imports / _entries / _lines
+
+**Implemented** (ADR-023). Document templates read from an uploaded spreadsheet, held
+here before and after they are sent to the ESB (`[ESB-016]`). The file itself is not
+stored.
+
+`document_template_imports`, one per uploaded file:
+
+| Column | Notes |
+| --- | --- |
+| id | |
+| uploaded_by | Nullable FK to `users`, `nullOnDelete`. |
+| filename / file_sha256 | As uploaded; the hash identifies the exact file. |
+| status | `idle`, `validating`, `syncing`. Claimed with a conditional update before a job is queued, so one job runs per import. |
+| problems | JSON list: rows that belong to no template. |
+| last_error | Why the last validate or sync run stopped early. |
+| validated_at / synced_at / timestamps | |
+
+`document_template_import_entries`, one per template (rows sharing a name):
+
+| Column | Notes |
+| --- | --- |
+| id / document_template_import_id | FK, `cascadeOnDelete`. |
+| position | Order in the file; sync sends in this order. |
+| name / type | `type` is `DocumentTemplateType`; null when the sheet's text matched none. |
+| branch_codes / branch_ids | JSON. Codes merged across the template's rows; ids once validated. |
+| status | `invalid`, `pending`, `ready`, `blocked`, `syncing`, `synced`, `failed`, `unconfirmed` (`DocumentTemplateImportEntry::STATUSES`). |
+| problems | JSON list of reasons, shown on the page. |
+| esb_template_id / correlation_id / synced_at | The ERP id once created; the integration log id of the last create attempt. |
+
+`document_template_import_lines`, one per product row: `row_number` (as in Excel),
+`product_code`, `product_name`, `unit`, `category` (sent as the line name), and
+`product_detail_id` once validated.
+
+Indexed on `(import, position)`, `(import, status)`, and `(entry, row_number)`.
+Retention is `TBD`.
+
 ### audit_logs
 
 **Implemented** (ADR-012). Security/business audit events, immutable.

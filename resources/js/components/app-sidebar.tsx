@@ -1,10 +1,14 @@
 import { Link } from '@inertiajs/react';
 import {
     BookOpen,
+    Boxes,
     ChefHat,
+    ClipboardCheck,
     ClipboardList,
     Database,
+    FileText,
     FolderGit2,
+    Goal,
     LayoutGrid,
     ListTree,
     Package,
@@ -32,6 +36,8 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/hooks/use-permissions';
 import { dashboard } from '@/routes';
+import { index as billsOfMaterialIndex } from '@/routes/bills-of-material';
+import { index as documentTemplatesIndex } from '@/routes/document-templates';
 import { index as endpointsIndex } from '@/routes/endpoints';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
@@ -39,7 +45,9 @@ import { index as masterMenusIndex } from '@/routes/master-menus';
 import { index as menusIndex } from '@/routes/menus';
 import { index as productsIndex } from '@/routes/products';
 import { index as purchaseInvoicesIndex } from '@/routes/purchase-invoices';
+import { index as purchaseOrdersIndex } from '@/routes/purchase-orders';
 import { index as purchaseRequestsIndex } from '@/routes/purchase-requests';
+import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import { index as usersIndex } from '@/routes/users';
 import type { NavEntry, NavGroup, NavItem, Permission } from '@/types';
@@ -77,6 +85,24 @@ const mainNavItems: GatedNavEntry[] = [
                 icon: ChefHat,
                 permission: 'esb.invoke',
             },
+            {
+                title: 'Bill of material',
+                href: billsOfMaterialIndex(),
+                icon: Boxes,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Purposes',
+                href: purposesIndex(),
+                icon: Goal,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Document templates',
+                href: documentTemplatesIndex(),
+                icon: FileText,
+                permission: 'esb.invoke',
+            },
         ],
     },
     {
@@ -87,6 +113,12 @@ const mainNavItems: GatedNavEntry[] = [
                 title: 'Purchase requests',
                 href: purchaseRequestsIndex(),
                 icon: ClipboardList,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Purchase orders',
+                href: purchaseOrdersIndex(),
+                icon: ClipboardCheck,
                 permission: 'esb.invoke',
             },
             {

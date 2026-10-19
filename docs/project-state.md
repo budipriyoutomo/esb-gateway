@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-10-01
+2026-10-19
 
 ## Current Phase
 
@@ -799,6 +799,267 @@ back as its own screen, next to the Core `/menus` list (`[ESB-012]`).
 - `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
 - `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
 - Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-13 — Bill of Material module, slice 1 (read-only, ESB Core)
+
+`[ESB-014]`, built test-first on ESB Core `GET /product/bom` and
+`GET /product/bom/{bomID}`.
+
+**Selesai**
+
+- `BillOfMaterialSource` bound to `BillOfMaterialClient` (Core),
+  `BillOfMaterialMapper`, canonical `BillOfMaterial*` DTOs (summary, detail, line,
+  substitute, cost, replacement, query, page).
+- `ListBillsOfMaterialRequest` (page, limit, bomName, bomCode, productName,
+  flagActive), `BillOfMaterialController` (`/bills-of-material`,
+  `/bills-of-material/{bomId}`), permission `esb.invoke`, throttled with the ESB routes.
+  Integration-log operations `bom.list`, `bom.view`.
+- Pages `bills-of-material/index` and `bills-of-material/show`, TS types
+  `resources/js/types/bill-of-material.ts`, sidebar entry "Bill of material" under
+  "Master data".
+- Tests: `tests/Feature/BillsOfMaterial/BillOfMaterialTest.php`,
+  `tests/Unit/Integrations/ESB/BillOfMaterialMapperTest.php`, fixture
+  `tests/Fixtures/CoreBom.php`. Written and run first; they failed before the classes
+  existed.
+
+**Tersisa**
+
+- Writes (create / update / delete / restore), upload/export, push/pull, BOM type
+  filter, location-scoped detail. See `TODO.md` "Module — Bill of Material".
+
+**Assumptions / TBD**
+
+- An unknown BOM id is assumed to come back as `EC03100004` (rendered 404); the vendor
+  documents only 400/401/500 for the path. TBD in `[ESB-014]`.
+- A successful detail without a `bomID` is treated as not found (vendor example is
+  zero-valued).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 586 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-15 — Document Template module, slice 1 (read-only, ESB Core)
+
+`[ESB-016]`, built test-first on ESB Core `GET /document-template` and
+`GET /document-template/{requestTemplateID}`.
+
+**Selesai**
+
+- `DocumentTemplateSource` bound to `DocumentTemplateClient` (Core),
+  `DocumentTemplateMapper`, canonical `DocumentTemplate*` DTOs (summary, detail, line,
+  query, page) and enum `DocumentTemplateType` (1 Purchase Request, 2 Usage Management,
+  3 Item Journal).
+- `ListDocumentTemplatesRequest` (page, limit, requestTemplateName,
+  requestTemplateTypeID, flagActive), `DocumentTemplateController`
+  (`/document-templates`, `/document-templates/{templateId}`), permission `esb.invoke`.
+  Integration-log operations `document-template.list`, `document-template.view`.
+- Pages `document-templates/index` and `document-templates/show`, TS types
+  `resources/js/types/document-template.ts`, sidebar entry "Document templates" under
+  "Master data".
+- Tests: `tests/Feature/DocumentTemplates/DocumentTemplateTest.php`,
+  `tests/Unit/Integrations/ESB/DocumentTemplateMapperTest.php`, fixture
+  `tests/Fixtures/CoreDocumentTemplate.php`. Written and run first; they failed before
+  the classes existed.
+
+**Tersisa**
+
+- Branch / cost-center names, branch filter, writes, upload/export, push/pull. See
+  `TODO.md` "Module — Document Template".
+- The Purpose module (`[ESB-015]`, uncommitted in the working tree) has no contract
+  section in `docs/05-api-integration.md` yet.
+
+**Assumptions / TBD**
+
+- An unknown template id is assumed to come back as `EC03100004` (rendered 404).
+- Line fields `mode` and `requestProcessID` are undocumented and not carried.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 614 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-15 — Document Template module, slice 2 (create)
+
+`[ESB-016]`, built test-first on ESB Core `POST /document-template`, with
+`GET /product-detail/browse` as the product picker.
+
+**Selesai**
+
+- New permission `document-templates.manage` (PHP enum + `permissions.ts`); no role
+  holds it, so only Super Admin can create. Audit actions `document-template.created`,
+  `document-template.write-unconfirmed`.
+- `DocumentTemplateSource::createDocumentTemplate()` / `browseProductDetails()`,
+  canonical `DocumentTemplateDraft`, `DocumentTemplateDraftLine`, `ProductDetailOption`;
+  mapper `toRequestBody`, `createdIdFrom`, `productDetailsFromRows`.
+- `CreateDocumentTemplate` action on `GuardedEsbWrite` (per-person lock
+  `document-template-create:{userId}`, one attempt, unconfirmed audit), lock keys in
+  `DocumentTemplateLocks`.
+- `DocumentTemplateFormController` (`GET /document-templates/create`,
+  `POST /document-templates`), `DocumentTemplateFormQuery` (productSearch),
+  `SaveDocumentTemplateRequest` (name, type, active, branchIds, lines; emoji and
+  duplicate checks). ESB field errors mapped onto the form.
+- Page `document-templates/create` (branches checklist, product search + add, line name
+  and purpose per line); "New template" button on the list for holders of the permission.
+- Tests: `tests/Feature/DocumentTemplates/DocumentTemplateCreateTest.php`, new cases in
+  `DocumentTemplateMapperTest.php`. Written and run first; they failed before the code
+  existed.
+
+**Assumptions / TBD**
+
+- The create result's id key is assumed `requestTemplateID`; without it the user lands
+  on the list (never a guessed link).
+- The `field` format of nested ESB validation errors is undocumented; mapped by prefix.
+- Branches come from `PurchaseRequestSource::listBranches()` -- reused, not duplicated.
+  If a third screen needs branches, move it to its own `BranchSource`.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 643 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only.
+
+## Update 2026-10-15 — Document Template spreadsheet import (ADR-023, new decision)
+
+**New architectural decision: ADR-023** — read it before touching imports. New
+dependency `openspout/openspout` ^4.
+
+**Selesai**
+
+- Upload → validate → sync, each started from the page by a holder of `esb.invoke` +
+  `document-templates.manage`:
+  - `StoreDocumentTemplateImport` (reader + parser, no ESB call) stores into
+    `document_template_imports` / `_entries` / `_lines` (migration
+    `2026_10_15_090000_…`).
+  - `ValidateDocumentTemplateImport` (job + action, reads only) resolves branch codes,
+    product code + unit, and checks the name in the ERP → `ready` / `blocked`, with
+    reasons.
+  - `SyncDocumentTemplateImport` (job + action) sends `ready` templates via
+    `CreateDocumentTemplate` (now takes an actor id + audit context); refused →
+    `failed`, unconfirmed → stops the run.
+- Owner's rules: merge branches across a template's rows; Kategori = line name; a name
+  already in the ERP blocks that template with the reason.
+- Pages `document-template-imports/index` (upload + list) and `/show` (status per
+  template, reasons, lines; refreshes every 3 s while a job runs). "Import" button on
+  the document template list.
+- `DocumentTemplateRules` holds the name rules for both the form and the import.
+- Tests: `tests/Unit/Imports/DocumentTemplateSheetParserTest.php`,
+  `tests/Feature/DocumentTemplates/DocumentTemplateImportTest.php`, fixture
+  `tests/Fixtures/DocumentTemplateSheet.php` (builds real .xlsx files). Written and run
+  first; they failed before the code existed.
+- The real file parses as 22 templates / 178 lines with no sheet problems (checked
+  locally, no ESB).
+
+**Assumptions / TBD**
+
+- `productCode` on `/product-detail/browse` may match partially; the code is compared
+  exactly in the gateway.
+- Unit names in the sheet (`JRC @ 5 LT`, `BTL @0.946 LT`, …) must equal the ERP's
+  `uomName` ignoring case/spacing. Not yet seen against a real ESB.
+- Retention of the import tables.
+- `composer audit` reports 2 advisories in `league/commonmark` (existing dependency,
+  not touched here).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 675 tests.
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
+- Not run against a real ESB — faked HTTP only. Needs a queue worker in production.
+
+## Update 2026-10-15 — Import fixed after the first run on staging
+
+The first validate on staging failed: `GET /product-detail/browse` → `EC03100003`.
+
+**Diperbaiki**
+
+- `/product-detail/browse` requires `productDetailID(s)` on the real ESB (the vendor
+  documents them as optional). Product lookup is now `GET /product/list` (exact code
+  kept; the ESB matches partially) + `GET /product/{productID}` for the units
+  (`DocumentTemplateSource::findProductsByCode()` returns `ProductUnits`). The create
+  form's product picker had the same bug and uses the same lookup now.
+- Inactive products are reported as such; inactive units are not offered.
+- The reader returned formula text (`=VLOOKUP(…)`) instead of the saved result; it now
+  reads `FormulaCell::getComputedValue()` (`DocumentTemplateSheetReaderTest`).
+  **Imports uploaded before this fix stored formula text as product codes: upload the
+  file again.**
+- "Validation/Sync stopped" printed the reference twice.
+
+**Dry run of the real file against staging (read only)**
+
+- All 126 product codes are found.
+- Branch codes STHO, STJAWA, STFB are not in the ERP (it has HOF, STJWB, STFMB, STCKB,
+  STPVJ, STTSM, STP23, TSPVJ, TSSMB, TSTSM). Every template but one is blocked by this.
+  Waiting on the owner.
+- Units: 77 of 126 code+unit pairs match exactly. 36 more would match on the part
+  before "@" (`PACK` → `PACK @ 0.3 KG`). That rule is **not implemented**; it waits on
+  the owner. 13 differ outright (`PAIL` vs `PL @ 8 LT`, `KG` vs `PACK @ 0.25 KG`, …).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 681 tests. `pint` pass. `phpstan` — same 2
+  pre-existing errors.
+
+## Update 2026-10-19 — Purchase Order module, slice 1 (ESB Core)
+
+`[ESB-017]`, built test-first on the Purchase Invoice pattern. Contract transcribed from
+the vendor's `openapi.json` on 2026-10-19.
+
+**Selesai**
+
+- Read: `GET /purchase/purchase-order` (number, order-date range, required-date range,
+  branches, free-text) and `GET /purchase/purchase-order/{purchaseNum}` (header, lines,
+  linked goods receipts and purchase invoices, the ERP's `access` flags).
+- Write: authorize, reject (with the reason the vendor marks as required), and delete,
+  each through `GuardedEsbWrite` under one lock, `purchase-order-write:{number}`.
+- `PurchaseOrderSource` bound to `PurchaseOrderClient` in `AppServiceProvider`;
+  `PurchaseOrderMapper`; canonical `PurchaseOrder`, `PurchaseOrderSummary`,
+  `PurchaseOrderLine`, `PurchaseOrderLinkedDocument`, `PurchaseOrderPage`,
+  `PurchaseOrderQuery`, `PurchaseOrderDecision`.
+- `ListPurchaseOrdersRequest`, `DecidePurchaseOrderRequest` (reason required for reject,
+  max 500), `PurchaseOrderController` (index, show, destroy),
+  `PurchaseOrderDecisionController`; routes `purchase-orders.*` under the ESB group.
+- New permissions `purchase-orders.approve` and `purchase-orders.manage` (PHP enum +
+  `permissions.ts`); no role holds them, so only Super Admin. Audit actions
+  `purchase-order.authorized` / `.rejected` (with the reason) / `.deleted` /
+  `.write-unconfirmed`.
+- Pages `purchase-orders/index` and `purchase-orders/show` (reject dialog with a reason
+  field; Delete hidden only when the ERP says `canDelete: false`; invoice numbers link to
+  the purchase invoice page), TS types `resources/js/types/purchase-order.ts`, sidebar
+  entry "Purchase orders" under "Purchase".
+- Tests: `tests/Feature/PurchaseOrders/` (List, Detail, Decision, Delete),
+  `tests/Unit/Integrations/ESB/PurchaseOrderMapperTest.php`, fixture
+  `tests/Fixtures/CorePurchaseOrder.php` — 61 tests. Written and run first: 58 failed
+  before the code existed (the 3 path-escape tests passed already, as a missing route is
+  a 404 too).
+- Docs: `[ESB-017]` in `docs/05`, permissions in `docs/06`, "Module — Purchase Order" in
+  `TODO.md`.
+
+**Tersisa**
+
+- See `TODO.md` "Module — Purchase Order": roles for the two permissions, close/unclose,
+  status filter (`GET /common/status`), create/update, print/email, uploads.
+- Refactor, deliberately not mixed into this change: merge the three decision enums.
+
+**Assumptions / TBD**
+
+- Unknown `purchaseNum` assumed to answer `EC03100004` (rendered 404), as for invoices.
+- Reject reason cap of 500 is the gateway's own; the vendor documents none.
+- `purchaseRequestNums` carried as one string (separator undocumented).
+- Line tax figures (`vat`/`vatValue`/`dppValue`) not shown, as for invoices.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 748 tests (3514 assertions).
+- `tsc --noEmit`, `vp check`, `npm run build`, `pint --test` — pass.
+- `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`; none
+  in new code.
+- Not run against a real ESB — faked HTTP only. Not checked in a browser.
 
 ## Known Unknowns / TBD
 

@@ -967,6 +967,274 @@ Decisions and open points:
   their `EC0110` failures put per-field errors as JSON inside `message`. Menu category
   and menu template reads are also not built.
 
+### [ESB-014] Master Bill of Material (read-only)
+
+```
+Purpose:         List bills of material (recipes) and show one with its materials,
+                 substitutes, other costs, and per-menu replacements.
+Method / Path:   GET {{base_url}}/product/bom
+                 GET {{base_url}}/product/bom/{bomID}
+Family:          Core (group "Master - Product / Bill of Material")
+Query (list):    page (default 1), limit (default 20; gateway ceiling 100), bomName,
+                 bomCode, productName, flagActive (0 or 1). Sent only when set.
+Not sent:        bomTypeID (needs a BOM type lookup), productCode, exceptProductID,
+                 uomName, notes, sort (no documented list of sortable columns; ESB
+                 default is bomName). locationID on the detail (no location picker).
+Response (list): paginated envelope; rows carry bomID, bomCode, bomName, bomTypeID,
+                 bomTypeName, productName, uomName, notes, flagActive (1/0)
+Response (view): result object: header (bomID, bomCode, bomName, bomType*, accessType,
+                 product*, uom*, notes, flagActive, bomCostTotal, otherCostTotal,
+                 weightFactorTotal, created*/edited*), bomDetails[] (materials, each
+                 with subtitution[] and subtitutionManufacturing[]), bomCosts[],
+                 bomReplacements[]
+Errors:          EC03100001 unauthorized; documented responses 400/401/500. Not found
+                 is assumed to be EC03100004 like the other Core detail reads (TBD --
+                 the vendor documents no 404 for this path); it renders as a 404.
+Retry Policy:    GET -- EsbClient retries with backoff
+Laravel Adapter: App\Integrations\ESB\Clients\BillOfMaterialClient (contract
+                 BillOfMaterialSource), BillOfMaterialMapper; canonical BillOfMaterial,
+                 BillOfMaterialSummary, BillOfMaterialLine, BillOfMaterialSubstitute,
+                 BillOfMaterialCost, BillOfMaterialReplacement, BillOfMaterialQuery,
+                 BillOfMaterialPage
+Operations:      bom.list, bom.view (integration log)
+Routes:          GET /bills-of-material, GET /bills-of-material/{bomId}
+Permissions:     esb.invoke
+Tests:           tests/Feature/BillsOfMaterial/BillOfMaterialTest.php,
+                 tests/Unit/Integrations/ESB/BillOfMaterialMapperTest.php
+Docs:            https://developers.esb.co.id/esb-core/#/paths/product-bom/get
+                 https://developers.esb.co.id/esb-core/#/paths/product-bom-bomID/get
+```
+
+Decisions and open points:
+
+- **Source.** Transcribed on 2026-10-13 from the vendor's OpenAPI document
+  (`esb-core/openapi.json`). The vendor's examples are zero-valued, so test fixtures use
+  realistic stand-ins with the vendor's field names and types.
+- **Detail via `/product/bom/{bomID}`, not `/product/bom/detail/{bomID}`.** The former
+  returns the header plus materials, costs, and replacements; the latter returns only
+  material lines (with `stockQty`, which needs a location to mean anything).
+- **A successful response without a `bomID` is a 404.** The vendor's example result is
+  zero-valued; the mapper treats an id of 0 as "no BOM" rather than rendering an empty
+  record.
+- **Vendor spelling stops at the mapper.** `subtitution` becomes `substitutes`,
+  `convertionQty` becomes `conversionQty`, `lastHpp` becomes `lastCost`.
+- **Costs are display-only.** `bomCostTotal`, `lastHpp`, and `price` are the ERP's
+  figures; the gateway does not recompute them.
+- **BOM ids in URLs** are held to `[1-9][0-9]{0,9}`; the id is interpolated into the
+  upstream path.
+- **Not built:** create / update / delete / restore, upload and export, push/pull to
+  child companies, `check-bom-infinite`, `validate-replacement`, user access mapping,
+  BOM type lookup (`/common/bom-type/*`). Writes are business actions and need their own
+  permission and an unknown-outcome design, as for purchase requests.
+
+### [ESB-016] Master Document Template (list, detail, create, spreadsheet import)
+
+```
+Purpose:         List document templates (product sets that pre-fill a purchase
+                 request, usage, or item journal), show one with its products, and
+                 create one.
+Method / Path:   GET  {{base_url}}/document-template
+                 GET  {{base_url}}/document-template/{requestTemplateID}
+                 POST {{base_url}}/document-template
+                 GET  {{base_url}}/product/list, GET {{base_url}}/product/{productID}
+                      (product lookup for the create picker and the import)
+Family:          Core (group "Master Document Template")
+Query (list):    page (default 1), limit (default 20; gateway ceiling 100),
+                 requestTemplateName, requestTemplateTypeID (1 = Purchase Request,
+                 2 = Usage Management, 3 = Item Journal), flagActive (0 or 1). Sent only
+                 when set.
+Not sent:        branchID (no branch picker).
+Response (list): paginated envelope; rows carry requestTemplateID, requestTemplateName,
+                 requestTemplateTypeNames (comma-separated string), branchNames
+                 (comma-separated string), flagActive (1/0)
+Response (view): result object: requestTemplateID, requestTemplateName,
+                 requestTemplateTypeID, flagActive, flagAutoTransfer, allowZeroPricelist,
+                 branchIDs[], costCenterIDs[], supplierID, currencyID,
+                 destinationBranchID, created*/edited*, syncDate,
+                 requestTemplateDetails[] (ID, productID, productDetailID, productCode,
+                 productName, requestTemplateDetailName, uomName, categoryName,
+                 categoryTypeID, purposeID, lastHpp, stockQty, availableQty, mode,
+                 requestProcessID, flagActive)
+Errors:          EC03100001 unauthorized; documented responses 400 ("validation error or
+                 resource not found"), 401, 500. Not found is assumed to be EC03100004
+                 like the other Core detail reads (TBD); it renders as a 404.
+Retry Policy:    GET -- EsbClient retries with backoff
+Laravel Adapter: App\Integrations\ESB\Clients\DocumentTemplateClient (contract
+                 DocumentTemplateSource), DocumentTemplateMapper; canonical
+                 DocumentTemplate, DocumentTemplateSummary, DocumentTemplateLine,
+                 DocumentTemplateType, DocumentTemplateQuery, DocumentTemplatePage,
+                 DocumentTemplateDraft, DocumentTemplateDraftLine, ProductDetailOption.
+                 Create is wrapped by App\Actions\DocumentTemplates\CreateDocumentTemplate
+                 (GuardedEsbWrite: per-person lock, audit).
+Body (create):   requestTemplateName (no emoji), requestTemplateTypeID (1-3),
+                 flagActive (1/0), branchIDs[] (min 1), requestTemplateDetails[] (min 1;
+                 productDetailID unique, requestTemplateDetailName (no emoji), purposeID
+                 optional). Not sent: costCenterIDs, supplierID, currencyID,
+                 destinationBranchID, flagAutoTransfer, allowZeroPricelist, line mode and
+                 requestProcessID.
+Response (create): 201; result is a map of integers, example {}. The new id is read
+                 from result.requestTemplateID if present (TBD); otherwise the user lands
+                 on the list.
+Product lookup:  GET /product/list (picker: page=1, limit=10, productName, flagActive=1;
+                 import: page=1, limit=50, productCode) for productIDs, then
+                 GET /product/{productID} for productDetails[] (productDetailID, uomName,
+                 flagActive) -- one unit per row; inactive units are not offered.
+Retry (create):  none -- one attempt; a timeout/5xx is "may have been applied", audited
+                 as document-template.write-unconfirmed, user sent to the list
+Operations:      document-template.list, document-template.view, document-template.create,
+                 product.list, product.view (integration log)
+Routes:          GET /document-templates, GET /document-templates/{templateId},
+                 GET /document-templates/create, POST /document-templates
+Permissions:     esb.invoke (read); esb.invoke + document-templates.manage (create)
+Audit:           document-template.created, document-template.write-unconfirmed
+Tests:           tests/Feature/DocumentTemplates/DocumentTemplateTest.php,
+                 tests/Feature/DocumentTemplates/DocumentTemplateCreateTest.php,
+                 tests/Unit/Integrations/ESB/DocumentTemplateMapperTest.php
+Docs:            https://developers.esb.co.id/esb-core/#/paths/document-template/get
+                 https://developers.esb.co.id/esb-core/#/paths/document-template-requestTemplateID/get
+                 https://developers.esb.co.id/esb-core/#/paths/document-template/post
+                 https://developers.esb.co.id/esb-core/#/paths/product-list/get
+                 https://developers.esb.co.id/esb-core/#/paths/product-productID/get
+```
+
+Decisions and open points:
+
+- **Source.** Transcribed on 2026-10-15 from the vendor's OpenAPI document
+  (`esb-core/openapi.json`). The vendor's examples are zero-valued, so test fixtures use
+  realistic stand-ins with the vendor's field names and types.
+- **Template types are an enum.** The vendor documents ids 1-3 only in the list filter's
+  description; `DocumentTemplateType` holds them in one place. A detail with any other
+  id shows an unknown type rather than failing.
+- **Comma-separated names become lists** in the mapper (`typeNames`, `branchNames`).
+- **Ids without names.** The detail carries branch and cost-center ids only; resolving
+  names needs `/{id}/template-branch` and `/{id}/cost-center` (not built). Supplier,
+  currency, and destination-branch ids are not carried at all yet.
+- **Left out of lines:** `stockQty` and `availableQty` (the detail is read without a
+  branch, so the location is unstated), `mode` and `requestProcessID` (meanings
+  undocumented, TBD), `categoryTypeID`, `productID`.
+- **A successful response without a `requestTemplateID` is a 404**, as for BOMs.
+- **Template ids in URLs** are held to `[1-9][0-9]{0,9}`.
+- **Create has its own permission** (`document-templates.manage`, 2026-10-15). A
+  template decides what every assigned branch can request, so `esb.invoke` alone does
+  not grant it. No role holds it yet; only Super Admin, until the business decides.
+- **"No emoji"** is undefined by the vendor; the gateway refuses the pictographic and
+  dingbat blocks plus ZWJ/VS16 on both names. Names are capped at 255 by the gateway.
+- **ESB field errors** are mapped by the name before any index or dot, so
+  `requestTemplateDetails[0].productDetailID` shows on the lines. The vendor does not
+  document the `field` format for nested errors (TBD).
+- **Branch list** comes from `GET /branch` via `PurchaseRequestSource::listBranches()`,
+  the lookup the purchase request screen already uses. Purposes for the line picker
+  come from `PurposeSource` (active, first 100).
+- **Product lookup, found on staging (2026-10-15).** The vendor documents every
+  parameter of `GET /product-detail/browse` as optional, but the ESB refuses it with
+  `EC03100003` unless `productDetailID` or `productDetailIDs` is sent: it fetches by
+  id, it does not search. `GET /product/detail/browse` searches, but returns only
+  non-inventory products (47 of 1125 on staging). `GET /product/list` holds every
+  product, and its `productCode` filter matches **partially** and ignores case (`FC00`
+  returns every FC00xx). So the gateway lists, keeps the exact code, and reads each
+  product's units from `GET /product/{productID}`.
+- **Spreadsheet import** (ADR-023): upload into the gateway's tables, validate with
+  `GET /branch`, `GET /product/list?productCode=` + `GET /product/{productID}` (code
+  compared exactly), and `GET /document-template?requestTemplateName=` (names compared ignoring
+  case), then sync through the same create. The ESB's own
+  `POST /document-template/upload` is not used: its layout is undocumented and it gives
+  no per-template result.
+- **Not built:** update / delete / restore, ESB upload and export, push/pull to
+  child companies, `copy-template`, `find-by-type`, `list` (dropdown),
+  `detail/findOne`, `filter-data`, `validate-requestable-products`, `check-branch`.
+
+### [ESB-017] Purchase Order (list, detail, authorize / reject, delete)
+
+```
+Purpose:         List and read purchase orders from ESB Core; authorize, reject, or
+                 delete one.
+Family:          Core
+Method / Path:   GET    {{base_url}}/purchase/purchase-order
+                 GET    {{base_url}}/purchase/purchase-order/{purchaseNum}
+                 PATCH  {{base_url}}/purchase/purchase-order/{purchaseNum}/authorize
+                 PATCH  {{base_url}}/purchase/purchase-order/{purchaseNum}/reject
+                 DELETE {{base_url}}/purchase/purchase-order/{purchaseNum}
+Query (used):    page (default 1), limit (default 20, max 100), purchaseNum,
+                 dateFrom, dateTo, requiredDateFrom, requiredDateTo (YYYY-MM-DD),
+                 branchIDs (comma-separated), indexSearch
+Query (unused):  statusID, sort, branchID, supplierID, supplierIDs,
+                 purchaseRequestNums, purchaseTotal, printedBy, sendEmail, flagPOSO,
+                 additionalInfo -- see below
+Request Body:    authorize, delete: none. reject: {"reason": string}, marked required.
+Response:        list: paginated envelope; rows carry purchaseNum, purchaseDate,
+                 requiredDate, branch*, supplier*, currencyID, currencySign,
+                 purchaseTotal, statusID, statusName, purchaseRequestNums, createdBy,
+                 additionalInfo, access{canDelete, canEdit, unclose}, approval[],
+                 approvalFlow[], mapSupplierLink{}, printed*/emailed*, ...
+                 detail: header (as above plus purchaseTypeName, supplierAddress,
+                 supplierPhone1, supplierBranchName, picName, currencyName, rate,
+                 dueDay, costCenter*, project*, footNote, creator/editor/authorizer
+                 {fullName, username} with their dates), purchaseDetails[]
+                 (productDetailID, productCode, productName, qty, requestQty,
+                 uomName, price, discount, discountPercent, total, notes, vat,
+                 vatValue, dppValue, pricelist*/lastPrice*, ...), goodsReceiptHead[],
+                 purchaseInvoiceHead[], images[], supplierDefaultPIC{}
+                 writes: envelope with result null
+Errors:          400 "validation error or resource not found -- see errors array";
+                 EC03100004 -> 404 in the gateway (assumed, as for purchase invoices);
+                 EC03100001 unauthorized; EC03100032 unknown (HTTP 500)
+Retry Policy:    reads retried with backoff (three attempts); writes exactly one attempt
+Idempotency:     none documented; assume not idempotent
+Laravel Adapter: App\Integrations\ESB\Clients\PurchaseOrderClient
+Contract:        App\Integrations\Contracts\PurchaseOrderSource
+DTOs:            App\Domain\Canonical\PurchaseOrderQuery, PurchaseOrderSummary,
+                 PurchaseOrderPage, PurchaseOrder, PurchaseOrderLine,
+                 PurchaseOrderLinkedDocument, PurchaseOrderDecision
+Mapper:          App\Integrations\ESB\Mappers\PurchaseOrderMapper
+Actions:         App\Actions\PurchaseOrders\DecidePurchaseOrder, DeletePurchaseOrder
+Routes:          GET    /purchase-orders, /purchase-orders/{number}
+                 POST   /purchase-orders/{number}/decisions
+                        (decision=authorize|reject, reason required for reject)
+                 DELETE /purchase-orders/{number}
+Permissions:     read:     esb.invoke
+                 decision: esb.invoke + purchase-orders.approve
+                 delete:   esb.invoke + purchase-orders.manage
+Log operations:  purchase-order.list, .view, .authorize, .reject, .delete
+Tests:           tests/Feature/PurchaseOrders/ (List, Detail, Decision, Delete),
+                 tests/Unit/Integrations/ESB/PurchaseOrderMapperTest.php,
+                 fixture tests/Fixtures/CorePurchaseOrder.php
+```
+
+Decisions and open points for these operations:
+
+- **Source.** Transcribed on 2026-10-19 from the vendor's OpenAPI description
+  (`openapi.json`). The examples are zero-valued placeholders, so they confirm field
+  names and types only. Date formats are `TBD`; dates are displayed as sent.
+- **Reject requires a reason.** Unlike purchase requests and invoices, the vendor
+  documents a required body `{reason}` for reject. The gateway refuses a blank reason
+  before the call and caps it at 500 characters (its own ceiling; the vendor documents
+  no length, `TBD`). The reason is kept in the `purchase-order.rejected` audit row. A
+  reason sent with an authorize is dropped, not forwarded.
+- **The ERP's `access` flags are used, not re-derived.** The detail's
+  `access.canDelete` hides the Delete button when it is `false`. When the flag is
+  missing the button is shown and the ERP is left to refuse. `canEdit` is carried for
+  the future edit screen; `unclose` is not carried yet. There is no access flag for
+  authorize/reject, so those buttons are always shown.
+- **Status filter not offered.** The vendor names `1 = New, 2 = Rejected,
+  3 = Authorized` by example only and points to `GET /common/status` for the rest. The
+  filter waits for that lookup. `sort` columns are undocumented.
+- **`purchaseRequestNums` is carried as one string.** Its separator is not documented,
+  so it is not split into a list.
+- **Line tax figures are not shown**, for the same reason as purchase invoices: which of
+  `vat` / `vatValue` / `dppValue` is the tax amount is `TBD`.
+- **Not carried:** `images` (vendor-hosted URLs, ADR-006); `supplierDefaultPIC`,
+  `phoneNumber`, `address`, `emailSupplier` (a supplier person's contact details that
+  no screen needs); `approval[]` / `approvalFlow[]` (undocumented semantics);
+  `mapSupplierLink`, `flagImportDoc`, the `link*`, `printed*` and `emailed*` fields.
+- **One write at a time.** Authorize, reject, and delete go through `GuardedEsbWrite`
+  under one lock, `purchase-order-write:{number}`. An ambiguous failure is audited as
+  `purchase-order.write-unconfirmed` with the operation and correlation id.
+- **Not built:** create / update (incl. drafts, `with-asset-image`), close / unclose /
+  unfinish / auto-close, print, send-email-authorize, asset-image upload, bulk
+  `upload` and `form-import`. Create/update need supplier, currency and pricelist
+  lookups, and the same "which totals does the ERP derive" question as purchase
+  invoices.
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

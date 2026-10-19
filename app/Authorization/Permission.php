@@ -74,6 +74,32 @@ enum Permission: string
     case ManagePurchaseInvoices = 'purchase-invoices.manage';
 
     /**
+     * Permission to authorize or reject a purchase order in the ERP.
+     *
+     * Separate from approving purchase requests and invoices: authorizing an
+     * order commits the company to a supplier, and the ERP sends it on from
+     * there. No role holds it yet; which role approves orders is for the
+     * business to confirm (docs/06).
+     */
+    case ApprovePurchaseOrders = 'purchase-orders.approve';
+
+    /**
+     * Permission to delete purchase orders in the ERP. Creating and editing
+     * them is not built yet. No role holds it yet, for the same reason as
+     * ApprovePurchaseOrders.
+     */
+    case ManagePurchaseOrders = 'purchase-orders.manage';
+
+    /**
+     * Permission to create document templates in the ERP. Changing and
+     * deleting them is not built yet. A template decides which products
+     * every branch it is assigned to can request, so esb.invoke alone does
+     * not grant it. No role holds it yet: which role maintains templates is
+     * for the business to confirm (docs/06).
+     */
+    case ManageDocumentTemplates = 'document-templates.manage';
+
+    /**
      * See the sales transactions POS clients pushed through the gateway, and
      * what the ESB said about each (ADR-022). Never the card details.
      */

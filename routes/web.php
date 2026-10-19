@@ -1,7 +1,11 @@
 <?php
 
 use App\Authorization\Permission;
+use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\DocumentTemplates\DocumentTemplateController;
+use App\Http\Controllers\DocumentTemplates\DocumentTemplateFormController;
+use App\Http\Controllers\DocumentTemplates\DocumentTemplateImportController;
 use App\Http\Controllers\Endpoints\EndpointCatalogController;
 use App\Http\Controllers\EsbConnections\EsbConnectionController;
 use App\Http\Controllers\EsbConnections\EsbConnectionProbeController;
@@ -12,10 +16,13 @@ use App\Http\Controllers\Menus\MenuController;
 use App\Http\Controllers\Products\ProductController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceDecisionController;
+use App\Http\Controllers\PurchaseOrders\PurchaseOrderController;
+use App\Http\Controllers\PurchaseOrders\PurchaseOrderDecisionController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestDecisionController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestFormController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestImportController;
+use App\Http\Controllers\Purposes\PurposeController;
 use App\Http\Controllers\SalesPushes\SalesPushController;
 use App\Http\Controllers\SalesPushes\SalesPushRetryController;
 use App\Http\Controllers\Users\UserController;
@@ -52,6 +59,69 @@ Route::middleware('auth')->group(function () {
             ->where('code', '[A-Za-z0-9][A-Za-z0-9 _.-]{0,49}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('master-menus.show');
+
+        // Read-only ESB Core bills of material ([ESB-014]). Authorization for
+        // the list is on its form request (esb.invoke). The id is interpolated
+        // into the upstream path, so it is held to a positive integer here.
+        Route::get('bills-of-material', [BillOfMaterialController::class, 'index'])
+            ->name('bills-of-material.index');
+        Route::get('bills-of-material/{bomId}', [BillOfMaterialController::class, 'show'])
+            ->where('bomId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('bills-of-material.show');
+
+        // Read-only ESB Core purposes ([ESB-015]). Authorization for the list
+        // is on its form request (esb.invoke). The id is interpolated into the
+        // upstream path, so it is held to a positive integer here.
+        Route::get('purposes', [PurposeController::class, 'index'])
+            ->name('purposes.index');
+        Route::get('purposes/{purposeId}', [PurposeController::class, 'show'])
+            ->where('purposeId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('purposes.show');
+
+        // Read-only ESB Core document templates ([ESB-016]). Authorization
+        // for the list is on its form request (esb.invoke). The id is
+        // interpolated into the upstream path, so it is held to a positive
+        // integer here.
+        Route::get('document-templates', [DocumentTemplateController::class, 'index'])
+            ->name('document-templates.index');
+
+        // Creating a template decides what every assigned branch can
+        // request, so esb.invoke alone does not grant it ([ESB-016]).
+        // Registered before document-templates/{templateId}.
+        Route::middleware([
+            'can:'.Permission::InvokeEsbOperations->value,
+            'can:'.Permission::ManageDocumentTemplates->value,
+        ])->group(function () {
+            Route::get('document-templates/create', [DocumentTemplateFormController::class, 'create'])
+                ->name('document-templates.create');
+            Route::post('document-templates', [DocumentTemplateFormController::class, 'store'])
+                ->name('document-templates.store');
+
+            // Spreadsheet import (ADR-023): stored in the gateway first,
+            // validated against the ERP, then synced.
+            Route::get('document-templates/imports', [DocumentTemplateImportController::class, 'index'])
+                ->name('document-template-imports.index');
+            Route::post('document-templates/imports', [DocumentTemplateImportController::class, 'store'])
+                ->name('document-template-imports.store');
+            Route::get('document-templates/imports/template', [DocumentTemplateImportController::class, 'template'])
+                ->name('document-template-imports.template');
+            Route::get('document-templates/imports/{import}', [DocumentTemplateImportController::class, 'show'])
+                ->whereNumber('import')
+                ->name('document-template-imports.show');
+            Route::post('document-templates/imports/{import}/validate', [DocumentTemplateImportController::class, 'startValidation'])
+                ->whereNumber('import')
+                ->name('document-template-imports.validate');
+            Route::post('document-templates/imports/{import}/sync', [DocumentTemplateImportController::class, 'startSync'])
+                ->whereNumber('import')
+                ->name('document-template-imports.sync');
+        });
+
+        Route::get('document-templates/{templateId}', [DocumentTemplateController::class, 'show'])
+            ->where('templateId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('document-templates.show');
 
         Route::get('purchase-requests', [PurchaseRequestController::class, 'index'])
             ->name('purchase-requests.index');
@@ -123,6 +193,31 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-invoices/{number}/decisions', [PurchaseInvoiceDecisionController::class, 'store'])
             ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
             ->name('purchase-invoices.decisions.store');
+
+        // Authorization for the list is on its form request (esb.invoke).
+        Route::get('purchase-orders', [PurchaseOrderController::class, 'index'])
+            ->name('purchase-orders.index');
+
+        // Held to a plain document number for the same reason as purchase
+        // requests: it is interpolated into the upstream path.
+        Route::get('purchase-orders/{number}', [PurchaseOrderController::class, 'show'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('purchase-orders.show');
+
+        Route::delete('purchase-orders/{number}', [PurchaseOrderController::class, 'destroy'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware([
+                'can:'.Permission::InvokeEsbOperations->value,
+                'can:'.Permission::ManagePurchaseOrders->value,
+            ])
+            ->name('purchase-orders.destroy');
+
+        // Authorization (esb.invoke plus purchase-orders.approve) is on the
+        // form request.
+        Route::post('purchase-orders/{number}/decisions', [PurchaseOrderDecisionController::class, 'store'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('purchase-orders.decisions.store');
 
         Route::post('esb-connections/{family}/test', [EsbConnectionProbeController::class, 'store'])
             ->name('esb-connections.test');

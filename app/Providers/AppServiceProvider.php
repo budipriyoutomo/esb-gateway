@@ -2,17 +2,25 @@
 
 namespace App\Providers;
 
+use App\Integrations\Contracts\BillOfMaterialSource;
+use App\Integrations\Contracts\DocumentTemplateSource;
 use App\Integrations\Contracts\MasterMenuSource;
 use App\Integrations\Contracts\MenuSource;
 use App\Integrations\Contracts\ProductSource;
 use App\Integrations\Contracts\PurchaseInvoiceSource;
+use App\Integrations\Contracts\PurchaseOrderSource;
 use App\Integrations\Contracts\PurchaseRequestSource;
+use App\Integrations\Contracts\PurposeSource;
 use App\Integrations\Contracts\SalesDataSink;
+use App\Integrations\ESB\Clients\BillOfMaterialClient;
+use App\Integrations\ESB\Clients\DocumentTemplateClient;
 use App\Integrations\ESB\Clients\MasterMenuClient;
 use App\Integrations\ESB\Clients\MenuClient;
 use App\Integrations\ESB\Clients\ProductClient;
 use App\Integrations\ESB\Clients\PurchaseInvoiceClient;
+use App\Integrations\ESB\Clients\PurchaseOrderClient;
 use App\Integrations\ESB\Clients\PurchaseRequestClient;
+use App\Integrations\ESB\Clients\PurposeClient;
 use App\Integrations\ESB\Clients\SalesDataClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -34,8 +42,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ProductSource::class, ProductClient::class);
         $this->app->bind(MenuSource::class, MenuClient::class);
         $this->app->bind(MasterMenuSource::class, MasterMenuClient::class);
+        $this->app->bind(BillOfMaterialSource::class, BillOfMaterialClient::class);
+        $this->app->bind(PurposeSource::class, PurposeClient::class);
+        $this->app->bind(DocumentTemplateSource::class, DocumentTemplateClient::class);
         $this->app->bind(PurchaseRequestSource::class, PurchaseRequestClient::class);
         $this->app->bind(PurchaseInvoiceSource::class, PurchaseInvoiceClient::class);
+        $this->app->bind(PurchaseOrderSource::class, PurchaseOrderClient::class);
         $this->app->bind(SalesDataSink::class, SalesDataClient::class);
     }
 

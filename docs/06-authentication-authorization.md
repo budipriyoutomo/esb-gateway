@@ -65,6 +65,23 @@ Rules that the implementation enforces:
   which is a finance decision. No role holds either yet, so only Super Admin can use them
   until the business decides. Audited as `purchase-invoice.authorized` / `.rejected` /
   `.deleted`, and `.write-unconfirmed`.
+- Purchase orders have their own permissions (2026-10-19, `[ESB-017]`). Authorizing or
+  rejecting one needs `purchase-orders.approve` **and** `esb.invoke`; a rejection must
+  carry a reason. Deleting one needs `purchase-orders.manage` **and** `esb.invoke`.
+  Neither is implied by the purchase request or invoice permissions: authorizing an
+  order commits the company to a supplier. No role holds either yet, so only Super Admin
+  can use them until the business decides. Audited as `purchase-order.authorized` /
+  `.rejected` (with the reason) / `.deleted`, and `.write-unconfirmed`.
+- Document templates (2026-10-15, `[ESB-016]`). Reading them needs `esb.invoke`.
+  Creating one needs `document-templates.manage` **and** `esb.invoke`: a template
+  decides which products every branch it is assigned to can request. No role holds
+  `document-templates.manage` yet, so only Super Admin can create templates until the
+  business decides. Audited as `document-template.created`, and
+  `document-template.write-unconfirmed` when the ESB gave no definite answer.
+  Importing templates from a spreadsheet (ADR-023) needs the same two permissions.
+  It is audited as `document-template-import.uploaded`, `.validation-requested`, and
+  `.sync-requested`. Each template the sync creates is audited as
+  `document-template.created`, with the person who started the sync as the actor.
 - Sales pushes (2026-10-01, ADR-022). `sales-pushes.view` shows the history of sales
   transactions POS clients sent; IT Admin and Integration Operator hold it.
   `sales-pushes.retry` queues a failed or rejected push again; only Integration Operator
