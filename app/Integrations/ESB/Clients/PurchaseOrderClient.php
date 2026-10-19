@@ -2,8 +2,8 @@
 
 namespace App\Integrations\ESB\Clients;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\PurchaseOrder;
-use App\Domain\Canonical\PurchaseOrderDecision;
 use App\Domain\Canonical\PurchaseOrderPage;
 use App\Domain\Canonical\PurchaseOrderQuery;
 use App\Integrations\Contracts\PurchaseOrderSource;
@@ -86,11 +86,11 @@ class PurchaseOrderClient implements PurchaseOrderSource
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-purchase-order-purchaseNum--authorize/patch
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-purchase-order-purchaseNum--reject/patch
      */
-    public function decidePurchaseOrder(string $number, PurchaseOrderDecision $decision, ?string $reason = null): void
+    public function decidePurchaseOrder(string $number, ApprovalDecision $decision, ?string $reason = null): void
     {
         [$segment, $body] = match ($decision) {
-            PurchaseOrderDecision::Authorize => ['authorize', []],
-            PurchaseOrderDecision::Reject => ['reject', ['reason' => (string) $reason]],
+            ApprovalDecision::Authorize => ['authorize', []],
+            ApprovalDecision::Reject => ['reject', ['reason' => (string) $reason]],
         };
 
         $this->client->patch(

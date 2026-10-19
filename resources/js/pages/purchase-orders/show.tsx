@@ -33,6 +33,12 @@ import type {
     PurchaseOrder,
     PurchaseOrderLinkedDocument,
 } from '@/types/purchase-order';
+import {
+    formatAmount,
+    formatDate,
+    formatDateTime,
+    formatQuantity,
+} from '@/lib/format';
 
 type Props = {
     purchaseOrder: PurchaseOrder;
@@ -44,30 +50,14 @@ const REASON_MAX = 500;
 const textareaClass =
     'border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
 
-const quantity = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-});
-
-const money = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-function formatQty(value: number | null): string {
-    return value === null ? '—' : quantity.format(value);
-}
-
-// Display only: the ERP is the authority on every amount.
-function formatMoney(value: number | null): string {
-    return value === null ? '—' : money.format(value);
-}
-
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
         return '—';
     }
 
-    return [name, at].filter((part) => part !== null).join(' · ');
+    return [name, at === null ? null : formatDateTime(at)]
+        .filter((part) => part !== null)
+        .join(' · ');
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -336,12 +326,12 @@ function LinkedDocuments({
                         )}
                         {document.date && (
                             <span className="text-muted-foreground">
-                                {document.date}
+                                {formatDate(document.date)}
                             </span>
                         )}
                         {document.total !== null && (
                             <span className="tabular-nums">
-                                {formatMoney(document.total)}
+                                {formatAmount(document.total)}
                             </span>
                         )}
                         {document.statusName && (
@@ -419,8 +409,11 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                         value={po.supplierAddress}
                     />
                     <Field label="Branch" value={po.branchName} />
-                    <Field label="Order date" value={po.date} />
-                    <Field label="Required date" value={po.requiredDate} />
+                    <Field label="Order date" value={formatDate(po.date)} />
+                    <Field
+                        label="Required date"
+                        value={formatDate(po.requiredDate)}
+                    />
                     <Field label="Purchase type" value={po.purchaseTypeName} />
                     <Field
                         label="Payment terms"
@@ -432,7 +425,7 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                     <Field
                         label="Rate"
                         value={
-                            po.rate === null ? null : quantity.format(po.rate)
+                            po.rate === null ? null : formatQuantity(po.rate)
                         }
                     />
                     <Field label="Cost center" value={po.costCenterName} />
@@ -520,24 +513,24 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
-                                        {formatQty(line.requestedQty)}
+                                        {formatQuantity(line.requestedQty)}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatQty(line.qty)}
+                                        {formatQuantity(line.qty)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.uomName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.price)}
+                                        {formatAmount(line.price)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
                                         {line.discount
-                                            ? formatMoney(line.discount)
+                                            ? formatAmount(line.discount)
                                             : '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.total)}
+                                        {formatAmount(line.total)}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -573,7 +566,7 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
                             <dt>Order total</dt>
                             <dd className="tabular-nums">
                                 {po.currencySign ? `${po.currencySign} ` : ''}
-                                {formatMoney(po.total)}
+                                {formatAmount(po.total)}
                             </dd>
                         </div>
                     </dl>

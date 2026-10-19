@@ -20,6 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
+import { formatDateTime } from '@/lib/format';
 
 type LogRow = {
     id: number;
@@ -201,11 +202,7 @@ export default function IntegrationLogsIndex({
                             {logs.data.map((log) => (
                                 <TableRow key={log.id}>
                                     <TableCell className="text-muted-foreground text-xs">
-                                        {log.createdAt
-                                            ? new Date(
-                                                  log.createdAt,
-                                              ).toLocaleString()
-                                            : '—'}
+                                        {formatDateTime(log.createdAt)}
                                     </TableCell>
                                     <TableCell className="font-medium">
                                         {log.operation}

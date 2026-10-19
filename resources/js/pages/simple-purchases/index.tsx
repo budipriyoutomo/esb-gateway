@@ -18,20 +18,11 @@ import {
     show as simplePurchasesShow,
 } from '@/routes/simple-purchases';
 import type { SimplePurchaseSummary } from '@/types/simple-purchase';
+import type { DocumentFilters, Pagination } from '@/types/pagination';
+import { formatAmount, formatDate } from '@/lib/format';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    search?: string;
+type Filters = DocumentFilters & {
     supplierInvoiceNumber?: string;
-    dateFrom?: string;
-    dateTo?: string;
     [key: string]: string | number | undefined;
 };
 
@@ -40,20 +31,6 @@ type Props = {
     pagination: Pagination | null;
     filters: Filters;
 };
-
-const amount = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-// Display only: the ERP is the authority on every total.
-function formatAmount(value: number | null, sign: string | null): string {
-    if (value === null) {
-        return '—';
-    }
-
-    return sign ? `${sign} ${amount.format(value)}` : amount.format(value);
-}
 
 export default function SimplePurchasesIndex({
     simplePurchases,
@@ -217,7 +194,7 @@ export default function SimplePurchasesIndex({
                                         {purchase.supplierInvoiceNumber ?? '—'}
                                     </TableCell>
                                     <TableCell>
-                                        {purchase.date ?? '—'}
+                                        {formatDate(purchase.date)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {purchase.branchName ?? '—'}

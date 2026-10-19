@@ -28,6 +28,7 @@ import {
     ENTRY_STATUS_LABELS,
     ENTRY_STATUS_VARIANTS,
 } from '@/types/document-template-import';
+import { formatDateTime } from '@/lib/format';
 
 const SHOWN: ImportEntryStatus[] = [
     'synced',
@@ -38,10 +39,6 @@ const SHOWN: ImportEntryStatus[] = [
     'failed',
     'unconfirmed',
 ];
-
-function formatDate(value: string | null): string {
-    return value === null ? '—' : new Date(value).toLocaleString();
-}
 
 export default function DocumentTemplateImportsIndex({
     imports,
@@ -156,7 +153,7 @@ export default function DocumentTemplateImportsIndex({
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-sm">
-                                        {formatDate(item.createdAt)}
+                                        {formatDateTime(item.createdAt)}
                                         <span className="text-muted-foreground block text-xs">
                                             {item.uploadedBy ?? '—'}
                                         </span>

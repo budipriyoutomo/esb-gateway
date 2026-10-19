@@ -3,12 +3,10 @@
 namespace App\Http\Controllers\PurchaseOrders;
 
 use App\Actions\PurchaseOrders\DeletePurchaseOrder;
-use App\Actions\Support\WriteAlreadyInFlight;
+use App\Http\Controllers\Concerns\HandlesDocumentWrites;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PurchaseOrders\ListPurchaseOrdersRequest;
 use App\Integrations\Contracts\PurchaseOrderSource;
-use App\Integrations\ESB\Exceptions\EsbException;
-use App\Integrations\ESB\Exceptions\EsbNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,6 +20,8 @@ use Inertia\Response;
  */
 class PurchaseOrderController extends Controller
 {
+    use HandlesDocumentWrites;
+
     public function index(ListPurchaseOrdersRequest $request, PurchaseOrderSource $purchaseOrders): Response
     {
         $page = $purchaseOrders->listPurchaseOrders($request->toQuery());
@@ -46,32 +46,6 @@ class PurchaseOrderController extends Controller
      */
     public function destroy(string $number, DeletePurchaseOrder $delete): RedirectResponse
     {
-        try {
-            $delete->handle($number);
-        } catch (WriteAlreadyInFlight) {
-            $this->toast('warning', sprintf('Another change to %s is still being processed. Check it before trying again.', $number));
-
-            return redirect()->route('purchase-orders.show', $number);
-        } catch (EsbNotFoundException $exception) {
-            throw $exception;
-        } catch (EsbException $exception) {
-            if ($exception->mayHaveBeenApplied()) {
-                $this->toast('warning', sprintf(
-                    'The ERP did not confirm deleting %s. It may or may not be gone -- check the list before trying again. (reference: %s)',
-                    $number,
-                    $exception->context->correlationId,
-                ));
-
-                return redirect()->route('purchase-orders.index');
-            }
-
-            $this->toast('error', sprintf('Could not delete %s. %s', $number, $exception->safeMessage()));
-
-            return redirect()->route('purchase-orders.show', $number);
-        }
-
-        $this->toast('success', sprintf('Purchase order %s was deleted.', $number));
-
-        return redirect()->route('purchase-orders.index');
+        return $this->deleteOutcome('Purchase order', 'purchase-orders', $number, fn () => $delete->handle($number));
     }
 }

@@ -3,6 +3,7 @@ import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
 import { dashboard } from '@/routes';
+import { formatDateTime } from '@/lib/format';
 
 type Metrics = {
     windowHours: number;
@@ -230,9 +231,9 @@ export default function Dashboard({
                                         )}
                                         <span className="text-muted-foreground text-xs">
                                             {failure.createdAt
-                                                ? new Date(
+                                                ? formatDateTime(
                                                       failure.createdAt,
-                                                  ).toLocaleString()
+                                                  )
                                                 : ''}
                                         </span>
                                     </div>

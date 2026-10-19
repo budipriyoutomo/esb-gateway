@@ -3,7 +3,7 @@
 namespace App\Http\Requests\SimplePurchases;
 
 use App\Authorization\Permission;
-use App\Domain\Canonical\SimplePurchaseDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Http\Requests\BaseFormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,11 +30,11 @@ class DecideSimplePurchaseRequest extends BaseFormRequest
     public function rules(): array
     {
         return [
-            'decision' => ['required', 'string', Rule::enum(SimplePurchaseDecision::class)],
+            'decision' => ['required', 'string', Rule::enum(ApprovalDecision::class)],
             // The vendor marks the reject body as required. TrimStrings has
             // already turned a blank reason into null.
             'reason' => [
-                Rule::requiredIf($this->input('decision') === SimplePurchaseDecision::Reject->value),
+                Rule::requiredIf($this->input('decision') === ApprovalDecision::Reject->value),
                 'nullable',
                 'string',
                 'max:'.self::REASON_MAX,
@@ -52,9 +52,9 @@ class DecideSimplePurchaseRequest extends BaseFormRequest
         ];
     }
 
-    public function decision(): SimplePurchaseDecision
+    public function decision(): ApprovalDecision
     {
-        return SimplePurchaseDecision::from((string) $this->validated('decision'));
+        return ApprovalDecision::from((string) $this->validated('decision'));
     }
 
     public function reason(): ?string

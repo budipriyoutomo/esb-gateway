@@ -4,7 +4,7 @@ namespace App\Http\Controllers\PurchaseRequests;
 
 use App\Actions\PurchaseRequests\DecidePurchaseRequest;
 use App\Actions\Support\WriteAlreadyInFlight;
-use App\Domain\Canonical\PurchaseRequestDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PurchaseRequests\DecidePurchaseRequestRequest;
 use App\Integrations\ESB\Exceptions\EsbException;
@@ -27,7 +27,7 @@ class PurchaseRequestDecisionController extends Controller
         DecidePurchaseRequest $decide,
     ): RedirectResponse {
         $decision = $request->decision();
-        $verb = $decision === PurchaseRequestDecision::Authorize ? 'authorize' : 'reject';
+        $verb = $decision === ApprovalDecision::Authorize ? 'authorize' : 'reject';
 
         try {
             $decide->handle($number, $decision);
@@ -35,7 +35,7 @@ class PurchaseRequestDecisionController extends Controller
             $this->toast('success', sprintf(
                 'Purchase request %s was %s.',
                 $number,
-                $decision === PurchaseRequestDecision::Authorize ? 'authorized' : 'rejected',
+                $decision === ApprovalDecision::Authorize ? 'authorized' : 'rejected',
             ));
         } catch (WriteAlreadyInFlight) {
             $this->toast('warning', sprintf(

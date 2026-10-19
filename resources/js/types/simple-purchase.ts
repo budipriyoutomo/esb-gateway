@@ -2,8 +2,9 @@
  * Mirrors App\Domain\Canonical\SimplePurchase, SimplePurchaseSummary, and
  * their nested DTOs.
  *
- * Dates are the strings the ERP sent. Their format is not documented, so
- * they are displayed as-is rather than parsed. Amounts are display-only: the
+ * Dates are the strings the ERP sent (format not documented). formatDate()
+ * in @/lib/format formats the shapes it recognises and shows anything else
+ * as-is. Amounts are display-only: the
  * ERP is the authority on every total.
  */
 

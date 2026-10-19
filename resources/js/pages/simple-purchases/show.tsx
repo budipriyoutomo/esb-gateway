@@ -29,6 +29,12 @@ import {
 } from '@/routes/simple-purchases';
 import { store as storeDecision } from '@/routes/simple-purchases/decisions';
 import type { SimplePurchase } from '@/types/simple-purchase';
+import {
+    formatAmount,
+    formatDate,
+    formatDateTime,
+    formatQuantity,
+} from '@/lib/format';
 
 type Props = {
     simplePurchase: SimplePurchase;
@@ -40,30 +46,14 @@ const REASON_MAX = 500;
 const textareaClass =
     'border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
 
-const quantity = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-});
-
-const money = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-function formatQty(value: number | null): string {
-    return value === null ? '—' : quantity.format(value);
-}
-
-// Display only: the ERP is the authority on every amount.
-function formatMoney(value: number | null): string {
-    return value === null ? '—' : money.format(value);
-}
-
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
         return '—';
     }
 
-    return [name, at].filter((part) => part !== null).join(' · ');
+    return [name, at === null ? null : formatDateTime(at)]
+        .filter((part) => part !== null)
+        .join(' · ');
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -351,8 +341,8 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                     <Field label="Supplier phone" value={sp.supplierPhone} />
                     <Field label="Branch" value={sp.branchName} />
                     <Field label="Location" value={sp.locationName} />
-                    <Field label="Date" value={sp.date} />
-                    <Field label="Due date" value={sp.dueDate} />
+                    <Field label="Date" value={formatDate(sp.date)} />
+                    <Field label="Due date" value={formatDate(sp.dueDate)} />
                     <Field label="Purchase type" value={sp.purchaseTypeName} />
                     <Field
                         label="Payment method"
@@ -362,7 +352,7 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                     <Field
                         label="Rate"
                         value={
-                            sp.rate === null ? null : quantity.format(sp.rate)
+                            sp.rate === null ? null : formatQuantity(sp.rate)
                         }
                     />
                     <Field label="Cost center" value={sp.costCenterName} />
@@ -444,24 +434,24 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatQty(line.qty)}
+                                        {formatQuantity(line.qty)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.uomName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.price)}
+                                        {formatAmount(line.price)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
                                         {line.discount
-                                            ? formatMoney(line.discount)
+                                            ? formatAmount(line.discount)
                                             : '—'}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.taxName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.total)}
+                                        {formatAmount(line.total)}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -497,7 +487,7 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                                             {cost.notes ?? '—'}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            {formatMoney(cost.amount)}
+                                            {formatAmount(cost.amount)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -521,7 +511,7 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                                         </span>
                                         {payment.date && (
                                             <span className="text-muted-foreground">
-                                                {payment.date}
+                                                {formatDate(payment.date)}
                                             </span>
                                         )}
                                         {payment.accountName && (
@@ -530,7 +520,7 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                                             </span>
                                         )}
                                         <span className="tabular-nums">
-                                            {formatMoney(payment.amount)}
+                                            {formatAmount(payment.amount)}
                                         </span>
                                         {payment.statusName && (
                                             <Badge variant="secondary">
@@ -549,14 +539,14 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
                         <div className="flex justify-between gap-4">
                             <dt className="text-muted-foreground">Costs</dt>
                             <dd className="tabular-nums">
-                                {formatMoney(sp.costTotal)}
+                                {formatAmount(sp.costTotal)}
                             </dd>
                         </div>
                         <div className="flex justify-between gap-4 border-t pt-2 font-medium">
                             <dt>Total</dt>
                             <dd className="tabular-nums">
                                 {sp.currencySign ? `${sp.currencySign} ` : ''}
-                                {formatMoney(sp.total)}
+                                {formatAmount(sp.total)}
                             </dd>
                         </div>
                     </dl>

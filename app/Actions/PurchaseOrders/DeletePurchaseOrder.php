@@ -2,21 +2,21 @@
 
 namespace App\Actions\PurchaseOrders;
 
-use App\Actions\Support\GuardedEsbWrite;
+use App\Actions\Support\DocumentWrites;
 use App\Actions\Support\WriteAlreadyInFlight;
-use App\Audit\AuditAction;
 use App\Integrations\Contracts\PurchaseOrderSource;
 use App\Integrations\ESB\Exceptions\EsbException;
-use App\Models\AuditLog;
 
 /**
  * Delete a purchase order in the ERP, on behalf of a person.
+ *
+ * The write and audit rules are DocumentWrites'.
  */
 class DeletePurchaseOrder
 {
     public function __construct(
         private readonly PurchaseOrderSource $purchaseOrders,
-        private readonly GuardedEsbWrite $guard,
+        private readonly DocumentWrites $writes,
     ) {}
 
     /**
@@ -25,20 +25,9 @@ class DeletePurchaseOrder
      */
     public function handle(string $number): void
     {
-        $provider = $this->purchaseOrders->provider();
-
-        $this->guard->run(
-            PurchaseOrderLocks::document($number),
+        $this->writes->delete(
+            PurchaseOrderDocument::approvable(), $this->purchaseOrders->provider(), $number,
             fn () => $this->purchaseOrders->deletePurchaseOrder($number),
-            fn (EsbException $exception) => UnconfirmedWrite::record($provider, 'delete', $number, $exception),
-        );
-
-        AuditLog::record(
-            action: AuditAction::PurchaseOrderDeleted,
-            metadata: [
-                'provider' => $provider,
-                'number' => $number,
-            ],
         );
     }
 }

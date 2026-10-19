@@ -24,18 +24,9 @@ import {
     show as bomsShow,
 } from '@/routes/bills-of-material';
 import type { BillOfMaterialSummary } from '@/types/bill-of-material';
+import type { Pagination, PagingFilters } from '@/types/pagination';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    page?: number;
-    limit?: number;
+type Filters = PagingFilters & {
     bomName?: string;
     bomCode?: string;
     productName?: string;

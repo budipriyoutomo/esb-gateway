@@ -3,7 +3,7 @@
 namespace App\Http\Requests\PurchaseRequests;
 
 use App\Authorization\Permission;
-use App\Domain\Canonical\PurchaseRequestDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Http\Requests\BaseFormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,12 +28,12 @@ class DecidePurchaseRequestRequest extends BaseFormRequest
     public function rules(): array
     {
         return [
-            'decision' => ['required', 'string', Rule::enum(PurchaseRequestDecision::class)],
+            'decision' => ['required', 'string', Rule::enum(ApprovalDecision::class)],
         ];
     }
 
-    public function decision(): PurchaseRequestDecision
+    public function decision(): ApprovalDecision
     {
-        return PurchaseRequestDecision::from((string) $this->validated('decision'));
+        return ApprovalDecision::from((string) $this->validated('decision'));
     }
 }

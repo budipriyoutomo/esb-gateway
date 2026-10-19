@@ -2,9 +2,9 @@
 
 namespace App\Integrations\Contracts;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\Branch;
 use App\Domain\Canonical\PurchaseRequest;
-use App\Domain\Canonical\PurchaseRequestDecision;
 use App\Domain\Canonical\PurchaseRequestDraft;
 use App\Domain\Canonical\PurchaseRequestPage;
 use App\Domain\Canonical\PurchaseRequestQuery;
@@ -54,7 +54,7 @@ interface PurchaseRequestSource extends OutboundAdapter
      *
      * @throws EsbException
      */
-    public function decidePurchaseRequest(string $number, PurchaseRequestDecision $decision): void;
+    public function decidePurchaseRequest(string $number, ApprovalDecision $decision): void;
 
     /**
      * Create a purchase request.

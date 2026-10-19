@@ -30,6 +30,7 @@ import {
     store as storePurchaseRequest,
     update as updatePurchaseRequest,
 } from '@/routes/purchase-requests';
+import { formatQuantity } from '@/lib/format';
 
 type Branch = { id: number; name: string; code: string | null };
 
@@ -108,14 +109,6 @@ type FormData = {
     isTemplate: boolean;
     lines: FormLine[];
 };
-
-const quantity = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-});
-
-function formatQty(value: number | null): string {
-    return value === null ? '—' : quantity.format(value);
-}
 
 /**
  * A date input's value, from the string the ERP sent. The format is not
@@ -592,10 +585,10 @@ export default function PurchaseRequestForm({
                                             {line.uomName ?? '—'}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-right tabular-nums">
-                                            {formatQty(line.stock)}
+                                            {formatQuantity(line.stock)}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-right tabular-nums">
-                                            {formatQty(line.suggestionQty)}
+                                            {formatQuantity(line.suggestionQty)}
                                         </TableCell>
                                         <TableCell>
                                             <Input

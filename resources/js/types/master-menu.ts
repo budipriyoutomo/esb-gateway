@@ -75,16 +75,6 @@ export type MasterMenu = {
     relatedMenus: MasterMenuReference[];
 };
 
-const amountFormat = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-});
-
-// Display only: the ERP is the authority on every price.
-export function formatAmount(value: number | null): string {
-    return value === null ? '—' : amountFormat.format(value);
-}
-
 export function formatFlag(value: boolean | null): string {
     if (value === null) {
         return '—';

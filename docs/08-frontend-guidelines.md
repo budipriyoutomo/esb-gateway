@@ -72,3 +72,47 @@ ERP UI should prioritize:
 Use a modern, professional enterprise dashboard style. Prefer the established
 Tailwind/shadcn-ui design tokens and components consistently across the app rather than
 introducing one-off styles per page.
+
+### Design tokens (`resources/css/app.css`)
+
+- Colours come from tokens only (`bg-background`, `text-muted-foreground`, …). No raw
+  palette classes (`text-green-600`) in new code.
+- Status colours: `text-success` / `text-warning` / `text-info` / `text-destructive-foreground`
+  for text and icons; tint surfaces with the same token, e.g.
+  `bg-success/10 border-success/30`.
+- Every token is defined for both `:root` and `.dark`, and every text-on-surface pair
+  meets WCAG AA (4.5:1). `resources/js/test/theme-tokens.test.ts` enforces both — add
+  a pair there when adding a token.
+- Accent colour: still the neutral shadcn palette. A brand accent is a business
+  decision (`TODO-modules.md` UI-1); do not invent one.
+
+### Type scale
+
+| Role | Classes |
+| --- | --- |
+| Page title | `text-xl font-semibold tracking-tight` (`Heading`) |
+| Section title | `text-base font-medium` (`Heading variant="small"`) |
+| Body, table cells, form fields | `text-sm` |
+| Caption, metadata, timestamps | `text-xs text-muted-foreground` |
+| Numbers in tables | `text-right tabular-nums` |
+
+### Spacing and radius
+
+- Page body: `flex h-full flex-1 flex-col gap-6 p-4`.
+- Radius as the shadcn components already use it: `rounded-xl` (cards, notices),
+  `rounded-lg` (dialogs), `rounded-md` (inputs, buttons, badges). `--radius` drives
+  `rounded-lg` / `-md` / `-sm`.
+
+### Formatting (`resources/js/lib/format.ts`)
+
+Never call `Intl.*` or `toLocaleString()` in a page. Use:
+
+- `formatAmount(value, sign?)` — money, `id-ID`, two decimals (`Rp 1.500,00`).
+- `formatQuantity(value)` — up to four decimals (`2,5`).
+- `formatDate(value)` — `dd MMM yyyy` (`20 Mar 2026`).
+- `formatDateTime(value)` — `dd MMM yyyy HH:mm`, 24-hour.
+
+All return `—` for no value. Dates: a zoneless ERP value keeps its wall clock; a zoned
+timestamp (the gateway's own, `toIso8601String()`) is shown in Asia/Jakarta; an
+unrecognised value is shown unchanged, never hidden. Display only — the ERP is the
+authority on every amount and date.

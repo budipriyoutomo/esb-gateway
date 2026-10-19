@@ -147,7 +147,7 @@ export default function EsbConnectionsIndex({
                 </p>
 
                 {flash.status && (
-                    <p className="rounded-xl border border-green-600/30 bg-green-600/10 p-3 text-sm">
+                    <p className="border-success/30 bg-success/10 rounded-xl border p-3 text-sm">
                         {flash.status}
                     </p>
                 )}

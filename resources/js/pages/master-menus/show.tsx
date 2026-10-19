@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/table';
 import { index as menusIndex } from '@/routes/master-menus';
 import type { MasterMenu } from '@/types/master-menu';
-import { formatAmount, formatFlag } from '@/types/master-menu';
+import { formatAmount, formatQuantity } from '@/lib/format';
+import { formatFlag } from '@/types/master-menu';
 
 function Field({ label, value }: { label: string; value: string }) {
     return (
@@ -206,8 +207,8 @@ export default function MasterMenuShow({ menu }: { menu: MasterMenu }) {
                                             {group.name}
                                         </span>
                                         <span className="text-muted-foreground text-xs">
-                                            pick {formatAmount(group.minQty)}–
-                                            {formatAmount(group.maxQty)}
+                                            pick {formatQuantity(group.minQty)}–
+                                            {formatQuantity(group.maxQty)}
                                         </span>
                                         <ActiveBadge active={group.active} />
                                     </div>
@@ -278,8 +279,8 @@ export default function MasterMenuShow({ menu }: { menu: MasterMenu }) {
                                             {formatAmount(extra.price)}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {formatAmount(extra.minQty)}–
-                                            {formatAmount(extra.maxQty)}
+                                            {formatQuantity(extra.minQty)}–
+                                            {formatQuantity(extra.maxQty)}
                                         </TableCell>
                                         <TableCell>
                                             <ActiveBadge

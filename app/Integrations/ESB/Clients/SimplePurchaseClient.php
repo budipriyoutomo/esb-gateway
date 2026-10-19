@@ -2,8 +2,8 @@
 
 namespace App\Integrations\ESB\Clients;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\SimplePurchase;
-use App\Domain\Canonical\SimplePurchaseDecision;
 use App\Domain\Canonical\SimplePurchasePage;
 use App\Domain\Canonical\SimplePurchaseQuery;
 use App\Integrations\Contracts\SimplePurchaseSource;
@@ -86,11 +86,11 @@ class SimplePurchaseClient implements SimplePurchaseSource
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-simple-purchase-cashPurchaseNum--authorize/patch
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-simple-purchase-cashPurchaseNum--reject/patch
      */
-    public function decideSimplePurchase(string $number, SimplePurchaseDecision $decision, ?string $reason = null): void
+    public function decideSimplePurchase(string $number, ApprovalDecision $decision, ?string $reason = null): void
     {
         [$segment, $body] = match ($decision) {
-            SimplePurchaseDecision::Authorize => ['authorize', []],
-            SimplePurchaseDecision::Reject => ['reject', ['reason' => (string) $reason]],
+            ApprovalDecision::Authorize => ['authorize', []],
+            ApprovalDecision::Reject => ['reject', ['reason' => (string) $reason]],
         };
 
         $this->client->patch(

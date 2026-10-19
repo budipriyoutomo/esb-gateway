@@ -5,7 +5,7 @@ namespace App\Actions\PurchaseRequests;
 use App\Actions\Support\GuardedEsbWrite;
 use App\Actions\Support\WriteAlreadyInFlight;
 use App\Audit\AuditAction;
-use App\Domain\Canonical\PurchaseRequestDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Integrations\Contracts\PurchaseRequestSource;
 use App\Integrations\ESB\Exceptions\EsbException;
 use App\Models\AuditLog;
@@ -29,7 +29,7 @@ class DecidePurchaseRequest
      * @throws WriteAlreadyInFlight when another write on this document is still running
      * @throws EsbException when the ESB call fails; see mayHaveBeenApplied()
      */
-    public function handle(string $number, PurchaseRequestDecision $decision): void
+    public function handle(string $number, ApprovalDecision $decision): void
     {
         $this->guard->run(
             PurchaseRequestLocks::document($number),
@@ -50,8 +50,8 @@ class DecidePurchaseRequest
 
         AuditLog::record(
             action: match ($decision) {
-                PurchaseRequestDecision::Authorize => AuditAction::PurchaseRequestAuthorized,
-                PurchaseRequestDecision::Reject => AuditAction::PurchaseRequestRejected,
+                ApprovalDecision::Authorize => AuditAction::PurchaseRequestAuthorized,
+                ApprovalDecision::Reject => AuditAction::PurchaseRequestRejected,
             },
             metadata: [
                 'provider' => $this->purchaseRequests->provider(),

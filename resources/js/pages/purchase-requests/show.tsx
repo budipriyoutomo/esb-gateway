@@ -27,6 +27,7 @@ import {
     index as purchaseRequestsIndex,
 } from '@/routes/purchase-requests';
 import { store as storeDecision } from '@/routes/purchase-requests/decisions';
+import { formatDate, formatDateTime, formatQuantity } from '@/lib/format';
 
 type PurchaseRequestLine = {
     productId: number | null;
@@ -69,20 +70,14 @@ type Props = {
     purchaseRequest: PurchaseRequest;
 };
 
-const quantity = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-});
-
-function formatQty(value: number | null): string {
-    return value === null ? '—' : quantity.format(value);
-}
-
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
         return '—';
     }
 
-    return [name, at].filter((part) => part !== null).join(' · ');
+    return [name, at === null ? null : formatDateTime(at)]
+        .filter((part) => part !== null)
+        .join(' · ');
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -333,8 +328,11 @@ export default function PurchaseRequestShow({ purchaseRequest: pr }: Props) {
                 </div>
 
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Field label="Request date" value={pr.date} />
-                    <Field label="Required date" value={pr.requiredDate} />
+                    <Field label="Request date" value={formatDate(pr.date)} />
+                    <Field
+                        label="Required date"
+                        value={formatDate(pr.requiredDate)}
+                    />
                     <Field label="Branch" value={pr.branchName} />
                     <Field label="Cost center" value={pr.costCenterName} />
                     <Field label="Project" value={pr.projectName} />
@@ -405,16 +403,16 @@ export default function PurchaseRequestShow({ purchaseRequest: pr }: Props) {
                                         {line.productName || '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatQty(line.qty)}
+                                        {formatQuantity(line.qty)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.uomName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
-                                        {formatQty(line.stock)}
+                                        {formatQuantity(line.stock)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
-                                        {formatQty(line.suggestionQty)}
+                                        {formatQuantity(line.suggestionQty)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.notes ?? '—'}

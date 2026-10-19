@@ -31,8 +31,8 @@
 
 ## Testing
 
-Use the project's Laravel testing framework (Pest/PHPUnit) and frontend test tooling
-selected during scaffolding.
+Use the project's Laravel testing framework (PHPUnit). Frontend component tests run with
+`vp test` (Vitest bundled in vite-plus) + React Testing Library + jsdom (ADR-024).
 
 ## Dependency Policy
 

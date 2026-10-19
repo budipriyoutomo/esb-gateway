@@ -1110,6 +1110,156 @@ the vendor's `openapi.json` on 2026-10-19.
 - `phpstan analyse` — same 2 pre-existing errors in `EsbConnectionInspector.php`.
 - Not run against a real ESB — faked HTTP only. Not checked in a browser.
 
+## Update 2026-10-19 — Approval decision enums merged (`TODO-modules.md` §1)
+
+**Selesai**
+
+- Added `App\Domain\Canonical\ApprovalDecision` (`authorize` / `reject`), test-first
+  (`tests/Unit/Domain/Canonical/ApprovalDecisionTest.php`).
+- Removed `PurchaseRequestDecision`, `PurchaseInvoiceDecision`, `PurchaseOrderDecision`,
+  `SimplePurchaseDecision`. Their contracts, clients, actions, FormRequests and decision
+  controllers now take `ApprovalDecision`. Enum values are unchanged, so the pages and
+  routes are untouched. DTO lists of the purchase order and simple purchase entries
+  in `docs/05-api-integration.md` updated. Pure rename — no behaviour change.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 809 tests (3825 assertions); existing tests unchanged.
+- `pint --test` — pass.
+- `phpstan analyse --memory-limit=1G` — same 2 pre-existing errors in
+  `EsbConnectionInspector.php` (default 128M limit crashes the worker).
+- No frontend change, so `tsc` / `vp check` / `npm run build` not re-run.
+
+## Update 2026-10-19 — Shared decide/delete for approvable documents (`TODO-modules.md` §1)
+
+**Selesai**
+
+- `App\Actions\Support\ApprovableDocument` — lock prefix + authorized / rejected /
+  deleted / write-unconfirmed audit actions; `lock($number)` keeps the existing
+  `<prefix>-write:<number>` keys.
+- `App\Actions\Support\DocumentWrites` — `decide()` (drops the reason on authorize,
+  audits it on reject) and `delete()` on top of `GuardedEsbWrite`, with the shared
+  unconfirmed-write audit.
+- `App\Http\Controllers\Concerns\HandlesDocumentWrites` — `decisionOutcome()` /
+  `deleteOutcome()`: the toast + redirect rules, same message text as before.
+- Migrated purchase order, simple purchase, purchase invoice: `Decide*` / `Delete*`
+  are now thin wrappers; `<X>Document::approvable()` replaces `<X>Locks` and the
+  per-module `UnconfirmedWrite` (both removed for those three modules).
+- Tests written first: `tests/Feature/Actions/Support/DocumentWritesTest.php` (10),
+  `tests/Feature/Http/HandlesDocumentWritesTest.php` (11, dummy controller + test
+  routes, asserts exact toast text). Existing module tests unchanged and green.
+
+**Tersisa**
+
+- Purchase request not migrated: its unconfirmed decision audit is
+  `purchase-request.decision-unconfirmed` with a `decision` key, not
+  `*.write-unconfirmed` / `operation`. Unifying changes the audit trail — needs a
+  decision. Its create/update/import still use `PurchaseRequests\UnconfirmedWrite`.
+- Decision/delete page controls not extracted yet (UI-2 `ApprovalActions`).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 830 tests (3877 assertions).
+- `pint --test` — pass.
+- `phpstan analyse --memory-limit=1G` — same 2 pre-existing errors in
+  `EsbConnectionInspector.php`.
+- No frontend change; `tsc` / `vp check` / `npm run build` not re-run.
+
+## Update 2026-10-19 — Shared list types in the frontend (`TODO-modules.md` P2)
+
+**Selesai**
+
+- `resources/js/types/pagination.ts`: `Pagination` (mirrors
+  `Pagination::jsonSerialize()`, shape locked by `PaginationTest`), `PagingFilters`
+  (`page` / `limit`), `DocumentFilters` (`search` / `dateFrom` / `dateTo`). Re-exported
+  from `@/types`.
+- Ten list pages under `resources/js/pages/*/index.tsx` drop their local `Pagination`
+  copy; their `Filters` now extend `PagingFilters` (bills-of-material,
+  document-templates, menus, purposes) or `DocumentFilters` (purchase requests, orders,
+  invoices, simple purchases). Module-specific fields and index signatures stay local.
+- Types only — no runtime change. No frontend test runner yet (P3), so `tsc` is the
+  gate.
+
+**Commit**
+
+- User commits manually per phase (`TODO-modules.md` §0.4). P1 and P2 are both in the
+  working tree, uncommitted; suggested messages are in §0.4.
+
+**Checks dijalankan**
+
+- `tsc --noEmit` — pass. `vp check` — pass. `npm run build` — pass.
+- PHP untouched by this phase; last `php artisan test` run 830 pass (P1).
+
+## Update 2026-10-19 — Frontend component tests (ADR-024, `TODO-modules.md` P3)
+
+**New decision:** ADR-024 in `DECISIONS.md`.
+
+**Selesai**
+
+- `vp test` (Vitest 4.1.11 bundled in vite-plus 0.3.0) configured in the `test` block
+  of `vite.config.ts`: `jsdom`, `resources/js/**/*.test.{ts,tsx}`, setup
+  `resources/js/test/setup.ts` (jest-dom matchers + cleanup).
+- devDependencies (exact): `@testing-library/react` 16.3.3, `@testing-library/dom`
+  10.4.2, `@testing-library/user-event` 14.6.7, `@testing-library/jest-dom` 6.9.1,
+  `jsdom` 29.1.1. Newest that run on Node 20.19 (local) and 22 (CI).
+- `npm run test:ui`; added to `composer ci:check`, so CI runs it.
+- First test, written before the config: `resources/js/components/heading.test.tsx`
+  failed with `document is not defined`, passed once jsdom was configured.
+- Docs synced: `docs/12-testing.md` (Frontend components), `docs/03-technology-stack.md`,
+  `AGENT.md` testing rules, CI workflow comment.
+
+**Known issues**
+
+- `npm install` with jsdom 30 failed locally (`Cannot read properties of null (reading
+  'edgesOut')`, npm 10.8.2) and jsdom 30 needs Node 22 anyway — hence 29.1.1.
+- `npm audit`: advisories in existing deps (`@rolldown/plugin-babel`, `concurrently`,
+  `@tailwindcss/vite`, `vite-plus`), not introduced here, not fixed. Tracked in
+  `TODO-modules.md` UI-0.
+- A jsdom cold start takes ~20 s on this Windows machine; the suite itself is fast.
+
+**Checks dijalankan**
+
+- `npm run test:ui` — pass, 1 file, 2 tests.
+- `tsc --noEmit`, `vp check`, `npm run build` — pass. `composer validate` — valid.
+- `composer ci:check` as a whole not run locally (needs PostgreSQL/Redis per CI env).
+
+## Update 2026-10-19 — Design foundation: formatting + theme tokens (`TODO-modules.md` P4)
+
+**Selesai**
+
+- `resources/js/lib/format.ts`: `formatAmount(value, sign?)` (id-ID, 2 decimals),
+  `formatQuantity` (≤ 4 decimals), `formatDate` (`dd MMM yyyy`), `formatDateTime`
+  (`dd MMM yyyy HH:mm`). `—` for no value. Dates: zoneless ERP value keeps its wall
+  clock; zoned timestamp → Asia/Jakarta; unrecognised shape returned unchanged.
+  Test-first: `resources/js/lib/format.test.ts` (14 tests, failed on missing module).
+- 19 pages migrated off per-page `Intl.NumberFormat` / `toLocaleString`. Master menu and
+  BOM now split prices (`formatAmount`) from quantities/weights (`formatQuantity`);
+  `formatAmount` removed from `types/master-menu.ts`.
+- **Visible change:** numbers follow `id-ID` (`1.234,56`) instead of the browser locale;
+  ERP dates on purchase pages show `20 Mar 2026` instead of the raw string; master menu
+  prices now always show two decimals.
+- Theme tokens (`resources/css/app.css`): added `success` / `warning` / `info` (light +
+  dark, `--color-*` in `@theme`); fixed dark `sidebar-primary-foreground` (1:1 on
+  `sidebar-primary`, masked by a `text-white dark:text-black` override in `app-logo`,
+  now removed) and light `muted-foreground` (0.556 → 0.54, was 4.34:1 on `muted`).
+  `esb-connections` status notice uses the `success` token.
+- `resources/js/test/theme-tokens.test.ts`: dark defines every light token; 15 text /
+  surface pairs meet WCAG AA in both modes (written first: 9 failures, now 32 pass).
+- `docs/08-frontend-guidelines.md`: tokens, type scale, spacing/radius, formatting rules.
+
+**Tersisa / blocked (business)**
+
+- Brand accent colour and UI language — `[!]` in `TODO-modules.md` UI-1.
+- Hard-coded palette colours left in starter-kit pages (auth, `input-error`,
+  `delete-user`) → UI-6.
+
+**Checks dijalankan**
+
+- `npm run test:ui` — pass, 3 files, 48 tests.
+- `tsc --noEmit`, `vp check`, `npm run build` — pass.
+- PHP untouched; `php artisan test` not re-run (last: 830 pass, P1).
+- Not checked in a browser.
+
 ## Known Unknowns / TBD
 
 Resolved by the 2026-09-09 contract import:

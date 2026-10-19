@@ -26,6 +26,12 @@ import {
     index as purchaseInvoicesIndex,
 } from '@/routes/purchase-invoices';
 import { store as storeDecision } from '@/routes/purchase-invoices/decisions';
+import {
+    formatAmount,
+    formatDate,
+    formatDateTime,
+    formatQuantity,
+} from '@/lib/format';
 
 type PurchaseInvoiceLine = {
     productDetailId: number | null;
@@ -84,30 +90,14 @@ type Props = {
     purchaseInvoice: PurchaseInvoice;
 };
 
-const quantity = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-});
-
-const money = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-function formatQty(value: number | null): string {
-    return value === null ? '—' : quantity.format(value);
-}
-
-// Display only: the ERP is the authority on every amount.
-function formatMoney(value: number | null): string {
-    return value === null ? '—' : money.format(value);
-}
-
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
         return '—';
     }
 
-    return [name, at].filter((part) => part !== null).join(' · ');
+    return [name, at === null ? null : formatDateTime(at)]
+        .filter((part) => part !== null)
+        .join(' · ');
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -360,20 +350,23 @@ export default function PurchaseInvoiceShow({ purchaseInvoice: pi }: Props) {
                         value={pi.taxInvoiceNumber}
                     />
                     <Field label="Branch" value={pi.branchName} />
-                    <Field label="Invoice date" value={pi.date} />
-                    <Field label="Due date" value={pi.dueDate} />
+                    <Field label="Invoice date" value={formatDate(pi.date)} />
+                    <Field label="Due date" value={formatDate(pi.dueDate)} />
                     <Field
                         label="Payment terms"
                         value={
                             pi.dueDays === null ? null : `${pi.dueDays} days`
                         }
                     />
-                    <Field label="Reference date" value={pi.referenceDate} />
+                    <Field
+                        label="Reference date"
+                        value={formatDate(pi.referenceDate)}
+                    />
                     <Field label="Currency" value={currency} />
                     <Field
                         label="Rate"
                         value={
-                            pi.rate === null ? null : quantity.format(pi.rate)
+                            pi.rate === null ? null : formatQuantity(pi.rate)
                         }
                     />
                     <Field
@@ -455,24 +448,24 @@ export default function PurchaseInvoiceShow({ purchaseInvoice: pi }: Props) {
                                         {line.productName || '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatQty(line.qty)}
+                                        {formatQuantity(line.qty)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.uomName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.price)}
+                                        {formatAmount(line.price)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-right tabular-nums">
                                         {line.discount
-                                            ? formatMoney(line.discount)
+                                            ? formatAmount(line.discount)
                                             : '—'}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {line.taxName ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {formatMoney(line.total)}
+                                        {formatAmount(line.total)}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -504,7 +497,7 @@ export default function PurchaseInvoiceShow({ purchaseInvoice: pi }: Props) {
                                             {cost.accountName ?? '—'}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            {formatMoney(cost.amount)}
+                                            {formatAmount(cost.amount)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -519,20 +512,20 @@ export default function PurchaseInvoiceShow({ purchaseInvoice: pi }: Props) {
                             Reference total
                         </dt>
                         <dd className="tabular-nums">
-                            {formatMoney(pi.referenceTotal)}
+                            {formatAmount(pi.referenceTotal)}
                         </dd>
                     </div>
                     <div className="flex justify-between gap-4">
                         <dt className="text-muted-foreground">Costs</dt>
                         <dd className="tabular-nums">
-                            {formatMoney(pi.costTotal)}
+                            {formatAmount(pi.costTotal)}
                         </dd>
                     </div>
                     <div className="flex justify-between gap-4 border-t pt-2 font-medium">
                         <dt>Invoice total</dt>
                         <dd className="tabular-nums">
                             {pi.currencySign ? `${pi.currencySign} ` : ''}
-                            {formatMoney(pi.total)}
+                            {formatAmount(pi.total)}
                         </dd>
                     </div>
                 </dl>

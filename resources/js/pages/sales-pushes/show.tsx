@@ -11,6 +11,7 @@ import {
     index as salesPushesIndex,
     retry as retrySalesPush,
 } from '@/routes/sales-pushes';
+import { formatAmount, formatDateTime } from '@/lib/format';
 
 type SalesPush = {
     id: string;
@@ -42,14 +43,6 @@ type SalesPush = {
         payments: number;
     };
 };
-
-function dateTime(value: string | null): string {
-    return value ? new Date(value).toLocaleString() : '—';
-}
-
-function amount(value: number | null): string {
-    return value === null ? '—' : value.toLocaleString();
-}
 
 function Field({ label, value }: { label: string; value: string }) {
     return (
@@ -167,11 +160,11 @@ export default function SalesPushShow({ push }: { push: SalesPush }) {
                             />
                             <Field
                                 label="Grand total"
-                                value={amount(push.summary.grandTotal)}
+                                value={formatAmount(push.summary.grandTotal)}
                             />
                             <Field
                                 label="Payment total"
-                                value={amount(push.summary.paymentTotal)}
+                                value={formatAmount(push.summary.paymentTotal)}
                             />
                             <Field
                                 label="Menu lines"
@@ -189,7 +182,7 @@ export default function SalesPushShow({ push }: { push: SalesPush }) {
                         <dl className="grid grid-cols-2 gap-3">
                             <Field
                                 label="Received"
-                                value={dateTime(push.createdAt)}
+                                value={formatDateTime(push.createdAt)}
                             />
                             <Field
                                 label="Attempts"
@@ -197,11 +190,11 @@ export default function SalesPushShow({ push }: { push: SalesPush }) {
                             />
                             <Field
                                 label="Last attempt"
-                                value={dateTime(push.lastAttemptedAt)}
+                                value={formatDateTime(push.lastAttemptedAt)}
                             />
                             <Field
                                 label="Accepted by the ERP"
-                                value={dateTime(push.pushedAt)}
+                                value={formatDateTime(push.pushedAt)}
                             />
                             <Field
                                 label="ERP sync date"

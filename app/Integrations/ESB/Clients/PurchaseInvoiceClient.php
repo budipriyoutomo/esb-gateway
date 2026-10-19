@@ -2,8 +2,8 @@
 
 namespace App\Integrations\ESB\Clients;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\PurchaseInvoice;
-use App\Domain\Canonical\PurchaseInvoiceDecision;
 use App\Domain\Canonical\PurchaseInvoicePage;
 use App\Domain\Canonical\PurchaseInvoiceQuery;
 use App\Integrations\Contracts\PurchaseInvoiceSource;
@@ -86,11 +86,11 @@ class PurchaseInvoiceClient implements PurchaseInvoiceSource
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-purchase-invoices-purchaseInvoiceNum--authorize/patch
      * @see https://developers.esb.co.id/esb-core/#/paths/purchase-purchase-invoices-purchaseInvoiceNum--reject/patch
      */
-    public function decidePurchaseInvoice(string $number, PurchaseInvoiceDecision $decision): void
+    public function decidePurchaseInvoice(string $number, ApprovalDecision $decision): void
     {
         $segment = match ($decision) {
-            PurchaseInvoiceDecision::Authorize => 'authorize',
-            PurchaseInvoiceDecision::Reject => 'reject',
+            ApprovalDecision::Authorize => 'authorize',
+            ApprovalDecision::Reject => 'reject',
         };
 
         $this->client->patch(

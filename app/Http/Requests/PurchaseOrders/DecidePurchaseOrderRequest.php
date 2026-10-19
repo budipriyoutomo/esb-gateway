@@ -3,7 +3,7 @@
 namespace App\Http\Requests\PurchaseOrders;
 
 use App\Authorization\Permission;
-use App\Domain\Canonical\PurchaseOrderDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Http\Requests\BaseFormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,11 +30,11 @@ class DecidePurchaseOrderRequest extends BaseFormRequest
     public function rules(): array
     {
         return [
-            'decision' => ['required', 'string', Rule::enum(PurchaseOrderDecision::class)],
+            'decision' => ['required', 'string', Rule::enum(ApprovalDecision::class)],
             // The vendor marks the reject body as required. TrimStrings has
             // already turned a blank reason into null.
             'reason' => [
-                Rule::requiredIf($this->input('decision') === PurchaseOrderDecision::Reject->value),
+                Rule::requiredIf($this->input('decision') === ApprovalDecision::Reject->value),
                 'nullable',
                 'string',
                 'max:'.self::REASON_MAX,
@@ -52,9 +52,9 @@ class DecidePurchaseOrderRequest extends BaseFormRequest
         ];
     }
 
-    public function decision(): PurchaseOrderDecision
+    public function decision(): ApprovalDecision
     {
-        return PurchaseOrderDecision::from((string) $this->validated('decision'));
+        return ApprovalDecision::from((string) $this->validated('decision'));
     }
 
     public function reason(): ?string

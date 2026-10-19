@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import { index as documentTemplatesIndex } from '@/routes/document-templates';
 import type { DocumentTemplate } from '@/types/document-template';
+import { formatAmount } from '@/lib/format';
 
 function Field({ label, value }: { label: string; value: string }) {
     return (
@@ -37,8 +38,6 @@ function yesNo(value: boolean | null): string {
 function idList(ids: number[]): string {
     return ids.length === 0 ? '—' : ids.join(', ');
 }
-
-const money = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 
 export default function DocumentTemplateShow({
     template,
@@ -167,9 +166,7 @@ export default function DocumentTemplateShow({
                                         {line.purposeId ?? '—'}
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
-                                        {line.lastCost === null
-                                            ? '—'
-                                            : money.format(line.lastCost)}
+                                        {formatAmount(line.lastCost)}
                                     </TableCell>
                                     <TableCell>
                                         {line.active !== null && (

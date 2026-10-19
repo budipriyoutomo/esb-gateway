@@ -80,6 +80,7 @@ jobs:
         run: composer setup
 
       # composer ci:check runs the formatter and linter (vp check), the
-      # TypeScript type check (tsc --noEmit), Pint, PHPStan, and the test suite.
+      # TypeScript type check (tsc --noEmit), the component tests (vp test,
+      # ADR-024), Pint, PHPStan, and the test suite.
       - name: Run CI Checks
         run: composer ci:check

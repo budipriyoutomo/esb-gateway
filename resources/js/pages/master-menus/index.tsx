@@ -14,15 +14,8 @@ import {
 } from '@/components/ui/table';
 import { index as menusIndex, show as menusShow } from '@/routes/master-menus';
 import type { MasterMenu } from '@/types/master-menu';
-import { formatAmount } from '@/types/master-menu';
-
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
+import { formatAmount } from '@/lib/format';
+import type { Pagination } from '@/types/pagination';
 
 type Props = {
     menus: MasterMenu[];

@@ -3,7 +3,7 @@
 namespace App\Http\Requests\PurchaseInvoices;
 
 use App\Authorization\Permission;
-use App\Domain\Canonical\PurchaseInvoiceDecision;
+use App\Domain\Canonical\ApprovalDecision;
 use App\Http\Requests\BaseFormRequest;
 use Illuminate\Validation\Rule;
 
@@ -24,12 +24,12 @@ class DecidePurchaseInvoiceRequest extends BaseFormRequest
     public function rules(): array
     {
         return [
-            'decision' => ['required', 'string', Rule::enum(PurchaseInvoiceDecision::class)],
+            'decision' => ['required', 'string', Rule::enum(ApprovalDecision::class)],
         ];
     }
 
-    public function decision(): PurchaseInvoiceDecision
+    public function decision(): ApprovalDecision
     {
-        return PurchaseInvoiceDecision::from((string) $this->validated('decision'));
+        return ApprovalDecision::from((string) $this->validated('decision'));
     }
 }

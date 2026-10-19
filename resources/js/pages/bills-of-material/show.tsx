@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { index as bomsIndex } from '@/routes/bills-of-material';
 import type { BillOfMaterial } from '@/types/bill-of-material';
-import { formatAmount } from '@/types/master-menu';
+import { formatAmount, formatQuantity } from '@/lib/format';
 
 function Field({ label, value }: { label: string; value: string }) {
     return (
@@ -43,7 +43,7 @@ function Empty({ children }: { children: string }) {
 }
 
 function percent(value: number | null): string {
-    return value === null ? '—' : `${formatAmount(value)}%`;
+    return value === null ? '—' : `${formatQuantity(value)}%`;
 }
 
 export default function BillOfMaterialShow({ bom }: { bom: BillOfMaterial }) {
@@ -91,7 +91,7 @@ export default function BillOfMaterialShow({ bom }: { bom: BillOfMaterial }) {
                         />
                         <Field
                             label="Weight factor total"
-                            value={formatAmount(bom.weightFactorTotal)}
+                            value={formatQuantity(bom.weightFactorTotal)}
                         />
                         <Field
                             label="Created"
@@ -156,7 +156,7 @@ export default function BillOfMaterialShow({ bom }: { bom: BillOfMaterial }) {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {formatAmount(line.qty)}
+                                                {formatQuantity(line.qty)}
                                             </TableCell>
                                             <TableCell>
                                                 {line.uomName ?? '—'}
@@ -263,7 +263,7 @@ export default function BillOfMaterialShow({ bom }: { bom: BillOfMaterial }) {
                                                 '—'}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {formatAmount(replacement.qty)}
+                                            {formatQuantity(replacement.qty)}
                                         </TableCell>
                                         <TableCell>
                                             {replacement.uomName ?? '—'}

@@ -20,18 +20,9 @@ import {
 } from '@/components/ui/table';
 import { index as menusIndex } from '@/routes/menus';
 import type { Menu } from '@/types/menu';
+import type { Pagination, PagingFilters } from '@/types/pagination';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    page?: number;
-    limit?: number;
+type Filters = PagingFilters & {
     menuName?: string;
     menuCode?: string;
     flagActive?: number;

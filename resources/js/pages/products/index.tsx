@@ -13,6 +13,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index as productsIndex } from '@/routes/products';
+import type { Pagination } from '@/types/pagination';
 
 type Product = {
     // Which provider supplied the row. Two providers may reuse an id, so a
@@ -26,14 +27,6 @@ type Product = {
     categoryTypeName: string | null;
     bomName: string | null;
     isActive: boolean;
-};
-
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
 };
 
 type Props = {

@@ -6,6 +6,9 @@ application. Read `AGENT.md` and `docs/project-state.md` before starting any ite
 Update `docs/project-state.md` when a phase completes — this file tracks tasks, that file
 tracks state.
 
+The next batch of modules (Inventory, Finance, Accounting, Master Data, POS) and the UI
+modernization plan are tracked separately in `TODO-modules.md`.
+
 ## Ground rules for every task
 
 - Smallest coherent change, one focused commit.
@@ -326,11 +329,11 @@ Built test-first. Operations documented as `[ESB-017]` in `docs/05-api-integrati
       status filter backed by `GET /common/status`, supplier filter.
 - [ ] Not built: create / update / drafts, print, send-email-authorize, asset images,
       bulk upload and form-import.
-- [ ] Refactor (separate change): `PurchaseRequestDecision`, `PurchaseInvoiceDecision`,
-      `PurchaseOrderDecision` and `SimplePurchaseDecision` are four two-case enums.
-      Merge them into one approval-decision enum, as the Purchase Invoice entry planned
-      for the third. The PO and simple purchase decision actions/controllers/pages are
-      also near-identical; extract shared pieces in the same change.
+- [x] Refactor (2026-10-19): the four two-case decision enums were merged into
+      `App\Domain\Canonical\ApprovalDecision`.
+- [x] Refactor (2026-10-19): PO, simple purchase and purchase invoice decide/delete
+      actions and controllers now share `DocumentWrites` / `HandlesDocumentWrites`.
+      Pages not extracted yet (UI-2 `ApprovalActions`). See `TODO-modules.md` §1.
 
 ### Module — Simple Purchase
 

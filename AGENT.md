@@ -232,7 +232,8 @@ Test types:
 - Feature tests for Laravel application behavior.
 - Integration tests for ESB adapters using mocks/fakes where real ESB access is
   unavailable.
-- Frontend tests for complex interactions when the project test setup supports them.
+- Frontend component tests (`npm run test:ui`, ADR-024) for shared components and
+  complex interactions — see `docs/12-testing.md`.
 
 Before considering a task complete:
 

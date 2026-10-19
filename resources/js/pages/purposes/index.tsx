@@ -24,18 +24,9 @@ import {
     show as purposesShow,
 } from '@/routes/purposes';
 import type { PurposeSummary } from '@/types/purpose';
+import type { Pagination, PagingFilters } from '@/types/pagination';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    page?: number;
-    limit?: number;
+type Filters = PagingFilters & {
     purposeName?: string;
     purposeCoaNo?: string;
     flagActive?: number;

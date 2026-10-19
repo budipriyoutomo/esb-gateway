@@ -2,8 +2,8 @@
 
 namespace App\Integrations\Contracts;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\PurchaseInvoice;
-use App\Domain\Canonical\PurchaseInvoiceDecision;
 use App\Domain\Canonical\PurchaseInvoicePage;
 use App\Domain\Canonical\PurchaseInvoiceQuery;
 use App\Integrations\ESB\Exceptions\EsbException;
@@ -47,7 +47,7 @@ interface PurchaseInvoiceSource extends OutboundAdapter
      *
      * @throws EsbException
      */
-    public function decidePurchaseInvoice(string $number, PurchaseInvoiceDecision $decision): void;
+    public function decidePurchaseInvoice(string $number, ApprovalDecision $decision): void;
 
     /**
      * @param  string  $number  A document number already validated by the caller.

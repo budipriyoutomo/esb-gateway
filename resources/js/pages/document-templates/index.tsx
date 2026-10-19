@@ -31,18 +31,9 @@ import type {
     DocumentTemplateSummary,
     DocumentTemplateTypeOption,
 } from '@/types/document-template';
+import type { Pagination, PagingFilters } from '@/types/pagination';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    page?: number;
-    limit?: number;
+type Filters = PagingFilters & {
     requestTemplateName?: string;
     requestTemplateTypeID?: number;
     flagActive?: number;

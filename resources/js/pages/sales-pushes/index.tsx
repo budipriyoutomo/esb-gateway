@@ -23,6 +23,7 @@ import {
     index as salesPushesIndex,
     show as showSalesPush,
 } from '@/routes/sales-pushes';
+import { formatDateTime } from '@/lib/format';
 
 export type SalesPushStatus =
     | 'queued'
@@ -178,11 +179,7 @@ export default function SalesPushesIndex({ pushes, filters, statuses }: Props) {
                             {pushes.data.map((push) => (
                                 <TableRow key={push.id}>
                                     <TableCell className="text-muted-foreground text-xs">
-                                        {push.createdAt
-                                            ? new Date(
-                                                  push.createdAt,
-                                              ).toLocaleString()
-                                            : '—'}
+                                        {formatDateTime(push.createdAt)}
                                     </TableCell>
                                     <TableCell className="font-medium">
                                         <Link

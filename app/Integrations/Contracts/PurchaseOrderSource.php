@@ -2,8 +2,8 @@
 
 namespace App\Integrations\Contracts;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\PurchaseOrder;
-use App\Domain\Canonical\PurchaseOrderDecision;
 use App\Domain\Canonical\PurchaseOrderPage;
 use App\Domain\Canonical\PurchaseOrderQuery;
 use App\Integrations\ESB\Exceptions\EsbException;
@@ -49,7 +49,7 @@ interface PurchaseOrderSource extends OutboundAdapter
      *
      * @throws EsbException
      */
-    public function decidePurchaseOrder(string $number, PurchaseOrderDecision $decision, ?string $reason = null): void;
+    public function decidePurchaseOrder(string $number, ApprovalDecision $decision, ?string $reason = null): void;
 
     /**
      * @param  string  $number  A document number already validated by the caller.

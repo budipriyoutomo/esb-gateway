@@ -28,6 +28,7 @@ import {
     ENTRY_STATUS_LABELS,
     ENTRY_STATUS_VARIANTS,
 } from '@/types/document-template-import';
+import { formatDateTime } from '@/lib/format';
 
 type Props = {
     import: DocumentTemplateImport;
@@ -48,10 +49,6 @@ const ORDER: ImportEntryStatus[] = [
     'failed',
     'unconfirmed',
 ];
-
-function formatDate(value: string | null): string {
-    return value === null ? '—' : new Date(value).toLocaleString();
-}
 
 function EntryRow({ entry }: { entry: ImportEntry }) {
     return (
@@ -198,7 +195,7 @@ export default function DocumentTemplateImportShow({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title={current.filename}
-                        description={`Import #${String(current.id)} · uploaded ${formatDate(current.createdAt)} by ${current.uploadedBy ?? '—'}`}
+                        description={`Import #${String(current.id)} · uploaded ${formatDateTime(current.createdAt)} by ${current.uploadedBy ?? '—'}`}
                     />
                     <div className="flex gap-2">
                         <Button
@@ -253,8 +250,8 @@ export default function DocumentTemplateImportShow({
                         ),
                     )}
                     <span className="text-muted-foreground text-xs">
-                        Validated {formatDate(current.validatedAt)} · Synced{' '}
-                        {formatDate(current.syncedAt)}
+                        Validated {formatDateTime(current.validatedAt)} · Synced{' '}
+                        {formatDateTime(current.syncedAt)}
                     </span>
                 </div>
 

@@ -39,6 +39,13 @@ export default defineConfig({
             ],
         },
     },
+    // Component tests (ADR-024). `vp test` reads this block; there is no
+    // vitest.config.ts.
+    test: {
+        environment: 'jsdom',
+        include: ['resources/js/**/*.test.{ts,tsx}'],
+        setupFiles: ['resources/js/test/setup.ts'],
+    },
     lint: {
         ignorePatterns: [
             'vendor/**',

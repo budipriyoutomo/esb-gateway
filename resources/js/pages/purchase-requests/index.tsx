@@ -21,12 +21,14 @@ import {
     show as purchaseRequestsShow,
 } from '@/routes/purchase-requests';
 import { create as purchaseRequestsImport } from '@/routes/purchase-requests/import';
+import type { DocumentFilters, Pagination } from '@/types/pagination';
+import { formatDate } from '@/lib/format';
 
 type PurchaseRequestSummary = {
     provider: string;
     number: string;
-    // Dates are the strings the ERP sent. Their format is not documented, so
-    // they are displayed as-is rather than parsed.
+    // Dates are the strings the ERP sent (format not documented). formatDate()
+    // formats the shapes it recognises and shows anything else as-is.
     date: string | null;
     requiredDate: string | null;
     createdAt: string | null;
@@ -39,18 +41,7 @@ type PurchaseRequestSummary = {
     notes: string | null;
 };
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
+type Filters = DocumentFilters & {
     [key: string]: string | number | number[] | undefined;
 };
 
@@ -208,9 +199,11 @@ export default function PurchaseRequestsIndex({
                                             '—'
                                         )}
                                     </TableCell>
-                                    <TableCell>{request.date ?? '—'}</TableCell>
                                     <TableCell>
-                                        {request.requiredDate ?? '—'}
+                                        {formatDate(request.date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(request.requiredDate)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {request.branchName ?? '—'}

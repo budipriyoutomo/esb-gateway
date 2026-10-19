@@ -18,19 +18,10 @@ import {
     show as purchaseOrdersShow,
 } from '@/routes/purchase-orders';
 import type { PurchaseOrderSummary } from '@/types/purchase-order';
+import type { DocumentFilters, Pagination } from '@/types/pagination';
+import { formatAmount, formatDate } from '@/lib/format';
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
+type Filters = DocumentFilters & {
     requiredDateFrom?: string;
     requiredDateTo?: string;
     [key: string]: string | number | number[] | undefined;
@@ -41,20 +32,6 @@ type Props = {
     pagination: Pagination | null;
     filters: Filters;
 };
-
-const amount = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-// Display only: the ERP is the authority on every total.
-function formatAmount(value: number | null, sign: string | null): string {
-    if (value === null) {
-        return '—';
-    }
-
-    return sign ? `${sign} ${amount.format(value)}` : amount.format(value);
-}
 
 export default function PurchaseOrdersIndex({
     purchaseOrders,
@@ -230,9 +207,11 @@ export default function PurchaseOrdersIndex({
                                     <TableCell className="font-medium">
                                         {order.supplierName ?? '—'}
                                     </TableCell>
-                                    <TableCell>{order.date ?? '—'}</TableCell>
                                     <TableCell>
-                                        {order.requiredDate ?? '—'}
+                                        {formatDate(order.date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(order.requiredDate)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {order.branchName ?? '—'}

@@ -1184,7 +1184,7 @@ Laravel Adapter: App\Integrations\ESB\Clients\PurchaseOrderClient
 Contract:        App\Integrations\Contracts\PurchaseOrderSource
 DTOs:            App\Domain\Canonical\PurchaseOrderQuery, PurchaseOrderSummary,
                  PurchaseOrderPage, PurchaseOrder, PurchaseOrderLine,
-                 PurchaseOrderLinkedDocument, PurchaseOrderDecision
+                 PurchaseOrderLinkedDocument, ApprovalDecision
 Mapper:          App\Integrations\ESB\Mappers\PurchaseOrderMapper
 Actions:         App\Actions\PurchaseOrders\DecidePurchaseOrder, DeletePurchaseOrder
 Routes:          GET    /purchase-orders, /purchase-orders/{number}
@@ -1275,7 +1275,7 @@ Laravel Adapter: App\Integrations\ESB\Clients\SimplePurchaseClient
 Contract:        App\Integrations\Contracts\SimplePurchaseSource
 DTOs:            App\Domain\Canonical\SimplePurchaseQuery, SimplePurchaseSummary,
                  SimplePurchasePage, SimplePurchase, SimplePurchaseLine,
-                 SimplePurchaseCost, SimplePurchasePayment, SimplePurchaseDecision
+                 SimplePurchaseCost, SimplePurchasePayment, ApprovalDecision
 Mapper:          App\Integrations\ESB\Mappers\SimplePurchaseMapper
 Actions:         App\Actions\SimplePurchases\DecideSimplePurchase, DeleteSimplePurchase
 Routes:          GET    /simple-purchases, /simple-purchases/{number}

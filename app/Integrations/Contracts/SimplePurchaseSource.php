@@ -2,8 +2,8 @@
 
 namespace App\Integrations\Contracts;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\SimplePurchase;
-use App\Domain\Canonical\SimplePurchaseDecision;
 use App\Domain\Canonical\SimplePurchasePage;
 use App\Domain\Canonical\SimplePurchaseQuery;
 use App\Integrations\ESB\Exceptions\EsbException;
@@ -50,7 +50,7 @@ interface SimplePurchaseSource extends OutboundAdapter
      *
      * @throws EsbException
      */
-    public function decideSimplePurchase(string $number, SimplePurchaseDecision $decision, ?string $reason = null): void;
+    public function decideSimplePurchase(string $number, ApprovalDecision $decision, ?string $reason = null): void;
 
     /**
      * @param  string  $number  A document number already validated by the caller.

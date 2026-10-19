@@ -904,3 +904,69 @@ Facts that shaped the design:
   error reads as empty.
 - The create result's id key (assumed `requestTemplateID`, see `[ESB-016]`).
 - Editing imported rows in the gateway instead of re-uploading. Not requested yet.
+
+## ADR-024 — Frontend Component Tests With `vp test` and React Testing Library
+
+**Status:** Accepted
+
+**Context**
+- The UI is tested only through Inertia props asserted in PHPUnit. Nothing exercises
+  what a page renders or how a component responds to the keyboard or a click.
+- `TODO-modules.md` UI-2 adds shared components (`DataTable`, `FilterBar`,
+  `ApprovalActions`, pickers) used by ~24 new modules. AGENT.md requires test-first
+  work, and `AGENT.md` › Testing allows frontend tests "when the project test setup
+  supports them". It does not yet.
+- `vite-plus` 0.3.0 (already a devDependency; it provides `vp build` / `vp check`)
+  ships Vitest 4.1.11 as `vp test`. Its docs: "Vitest APIs are available from
+  `vite-plus/test`, so a single `vite-plus` install is enough — you do not need to
+  install `vitest` directly", and "Put test configuration directly in the `test`
+  block in `vite.config.ts` … We do not recommend using `vitest.config.ts`."
+- Vitest has no DOM. Rendering React needs a DOM implementation and a renderer.
+
+**Decision**
+- Frontend tests run with `vp test` (script `npm run test:ui`). Configuration lives
+  in the `test` block of `vite.config.ts`; there is no `vitest.config.ts`.
+- Test files are `resources/js/**/*.test.{ts,tsx}`, next to the code they test.
+  Environment `jsdom`. Setup file `resources/js/test/setup.ts` registers the
+  jest-dom matchers and cleans up after each test.
+- Test APIs are imported from `vite-plus/test`, not `vitest`.
+- New devDependencies, pinned to exact versions (all MIT):
+  `@testing-library/react` 16.3.3, `@testing-library/dom` 10.4.2,
+  `@testing-library/user-event` 14.6.7, `@testing-library/jest-dom` 6.9.1,
+  `jsdom` 29.1.1. These are the newest releases that still run on Node 20.19 (local
+  development) as well as Node 22 (CI): jsdom 30 requires Node `^22.22.2`, and
+  jest-dom from 6.10 requires Node `>=22`.
+- `composer ci:check` runs `npm run test:ui`, so CI runs the frontend tests.
+- Tests assert behaviour a user sees — role, accessible name, text, keyboard — not
+  implementation details or class names. Prefer `getByRole`.
+
+**Reason**
+- `vp test` reuses the toolchain already installed and its Vite config. No second
+  runner and no `vitest` dependency to keep in step with vite-plus.
+- React Testing Library is the standard way to test React through what the user
+  sees. Role-based queries also check basic accessibility for free (UI-5).
+- jsdom is the most complete DOM for Vitest. It is a devDependency only.
+- Exact pins: these packages only run in development and CI; a pin means an update is
+  a deliberate change, reviewed like any other.
+
+**Consequences**
+- `npm install` grows by jsdom and the Testing Library packages (dev only; nothing
+  reaches the production bundle).
+- Shared components in UI-2 are built test-first in Vitest. Page-level behaviour that
+  depends on Laravel (routes, permissions, ESB) stays in PHPUnit.
+- Updating vite-plus can change the bundled Vitest version; re-run `npm run test:ui`
+  after any vite-plus upgrade.
+- Moving local development to Node 22 unlocks jsdom 30 / jest-dom 7. That upgrade is
+  a separate change.
+- `npm audit` reports advisories in existing dependencies (`@rolldown/plugin-babel`,
+  `concurrently`, `@tailwindcss/vite`, `vite-plus`). None comes from this change, and
+  they are not fixed here.
+
+**Rejected**
+- Installing `vitest` directly with its own `vitest.config.ts` — duplicates what
+  vite-plus already ships, against its documented recommendation.
+- `happy-dom` — faster, but less complete DOM behaviour (focus, layout-free events);
+  speed does not matter at this suite size.
+- Vitest browser mode / Playwright component tests — need a real browser in CI.
+  Playwright stays an optional later step for end-to-end smoke tests (UI-0).
+- Snapshot tests as the main assertion — they pin markup, not behaviour.

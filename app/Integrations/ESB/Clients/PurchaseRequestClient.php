@@ -2,8 +2,8 @@
 
 namespace App\Integrations\ESB\Clients;
 
+use App\Domain\Canonical\ApprovalDecision;
 use App\Domain\Canonical\PurchaseRequest;
-use App\Domain\Canonical\PurchaseRequestDecision;
 use App\Domain\Canonical\PurchaseRequestDraft;
 use App\Domain\Canonical\PurchaseRequestPage;
 use App\Domain\Canonical\PurchaseRequestQuery;
@@ -95,11 +95,11 @@ class PurchaseRequestClient implements PurchaseRequestSource
      * @see https://developers.esb.co.id/esb-core/#api-Purchase_Request-authorize-purchase-request
      * @see https://developers.esb.co.id/esb-core/#api-Purchase_Request-reject-purchase-request
      */
-    public function decidePurchaseRequest(string $number, PurchaseRequestDecision $decision): void
+    public function decidePurchaseRequest(string $number, ApprovalDecision $decision): void
     {
         $segment = match ($decision) {
-            PurchaseRequestDecision::Authorize => 'authorize',
-            PurchaseRequestDecision::Reject => 'reject',
+            ApprovalDecision::Authorize => 'authorize',
+            ApprovalDecision::Reject => 'reject',
         };
 
         $this->client->patch(

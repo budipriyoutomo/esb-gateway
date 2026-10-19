@@ -2,21 +2,21 @@
 
 namespace App\Actions\PurchaseInvoices;
 
-use App\Actions\Support\GuardedEsbWrite;
+use App\Actions\Support\DocumentWrites;
 use App\Actions\Support\WriteAlreadyInFlight;
-use App\Audit\AuditAction;
 use App\Integrations\Contracts\PurchaseInvoiceSource;
 use App\Integrations\ESB\Exceptions\EsbException;
-use App\Models\AuditLog;
 
 /**
  * Delete a purchase invoice in the ERP, on behalf of a person.
+ *
+ * The write and audit rules are DocumentWrites'.
  */
 class DeletePurchaseInvoice
 {
     public function __construct(
         private readonly PurchaseInvoiceSource $purchaseInvoices,
-        private readonly GuardedEsbWrite $guard,
+        private readonly DocumentWrites $writes,
     ) {}
 
     /**
@@ -25,20 +25,9 @@ class DeletePurchaseInvoice
      */
     public function handle(string $number): void
     {
-        $provider = $this->purchaseInvoices->provider();
-
-        $this->guard->run(
-            PurchaseInvoiceLocks::document($number),
+        $this->writes->delete(
+            PurchaseInvoiceDocument::approvable(), $this->purchaseInvoices->provider(), $number,
             fn () => $this->purchaseInvoices->deletePurchaseInvoice($number),
-            fn (EsbException $exception) => UnconfirmedWrite::record($provider, 'delete', $number, $exception),
-        );
-
-        AuditLog::record(
-            action: AuditAction::PurchaseInvoiceDeleted,
-            metadata: [
-                'provider' => $provider,
-                'number' => $number,
-            ],
         );
     }
 }

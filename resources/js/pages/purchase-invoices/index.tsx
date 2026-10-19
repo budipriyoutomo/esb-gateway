@@ -17,13 +17,15 @@ import {
     index as purchaseInvoicesIndex,
     show as purchaseInvoicesShow,
 } from '@/routes/purchase-invoices';
+import type { DocumentFilters, Pagination } from '@/types/pagination';
+import { formatAmount, formatDate } from '@/lib/format';
 
 type PurchaseInvoiceSummary = {
     provider: string;
     number: string;
     supplierInvoiceNumber: string | null;
-    // Dates are the strings the ERP sent. Their format is not documented, so
-    // they are displayed as-is rather than parsed.
+    // Dates are the strings the ERP sent (format not documented). formatDate()
+    // formats the shapes it recognises and shows anything else as-is.
     date: string | null;
     dueDate: string | null;
     branchId: number | null;
@@ -39,19 +41,8 @@ type PurchaseInvoiceSummary = {
     notes: string | null;
 };
 
-type Pagination = {
-    page: number;
-    limit: number;
-    count: number;
-    lastPage: number;
-    hasMorePages: boolean;
-};
-
-type Filters = {
-    search?: string;
+type Filters = DocumentFilters & {
     supplierInvoiceNumber?: string;
-    dateFrom?: string;
-    dateTo?: string;
     [key: string]: string | number | number[] | undefined;
 };
 
@@ -60,20 +51,6 @@ type Props = {
     pagination: Pagination | null;
     filters: Filters;
 };
-
-const amount = new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-// Display only: the ERP is the authority on every total.
-function formatAmount(value: number | null, sign: string | null): string {
-    if (value === null) {
-        return '—';
-    }
-
-    return sign ? `${sign} ${amount.format(value)}` : amount.format(value);
-}
 
 export default function PurchaseInvoicesIndex({
     purchaseInvoices,
@@ -238,9 +215,11 @@ export default function PurchaseInvoicesIndex({
                                     <TableCell className="text-muted-foreground font-mono text-xs">
                                         {invoice.supplierInvoiceNumber ?? '—'}
                                     </TableCell>
-                                    <TableCell>{invoice.date ?? '—'}</TableCell>
                                     <TableCell>
-                                        {invoice.dueDate ?? '—'}
+                                        {formatDate(invoice.date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(invoice.dueDate)}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {invoice.branchName ?? '—'}

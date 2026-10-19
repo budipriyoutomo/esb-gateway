@@ -2,21 +2,21 @@
 
 namespace App\Actions\SimplePurchases;
 
-use App\Actions\Support\GuardedEsbWrite;
+use App\Actions\Support\DocumentWrites;
 use App\Actions\Support\WriteAlreadyInFlight;
-use App\Audit\AuditAction;
 use App\Integrations\Contracts\SimplePurchaseSource;
 use App\Integrations\ESB\Exceptions\EsbException;
-use App\Models\AuditLog;
 
 /**
  * Delete a simple purchase in the ERP, on behalf of a person.
+ *
+ * The write and audit rules are DocumentWrites'.
  */
 class DeleteSimplePurchase
 {
     public function __construct(
         private readonly SimplePurchaseSource $simplePurchases,
-        private readonly GuardedEsbWrite $guard,
+        private readonly DocumentWrites $writes,
     ) {}
 
     /**
@@ -25,20 +25,9 @@ class DeleteSimplePurchase
      */
     public function handle(string $number): void
     {
-        $provider = $this->simplePurchases->provider();
-
-        $this->guard->run(
-            SimplePurchaseLocks::document($number),
+        $this->writes->delete(
+            SimplePurchaseDocument::approvable(), $this->simplePurchases->provider(), $number,
             fn () => $this->simplePurchases->deleteSimplePurchase($number),
-            fn (EsbException $exception) => UnconfirmedWrite::record($provider, 'delete', $number, $exception),
-        );
-
-        AuditLog::record(
-            action: AuditAction::SimplePurchaseDeleted,
-            metadata: [
-                'provider' => $provider,
-                'number' => $number,
-            ],
         );
     }
 }
