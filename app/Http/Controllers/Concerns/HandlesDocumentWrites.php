@@ -25,6 +25,10 @@ trait HandlesDocumentWrites
      * @param  string  $label  Sentence-case document name, e.g. "Purchase order".
      * @param  string  $routePrefix  Route name prefix, e.g. "purchase-orders".
      * @param  Closure(): void  $decide
+     * @param  bool  $authorizeConsumesDocument  The provider removes the document
+     *                                           when it is authorized (e.g. a temporary
+     *                                           pricelist), so an authorization -- or an
+     *                                           unconfirmed one -- lands on the list.
      */
     protected function decisionOutcome(
         string $label,
@@ -32,11 +36,15 @@ trait HandlesDocumentWrites
         string $number,
         ApprovalDecision $decision,
         Closure $decide,
+        bool $authorizeConsumesDocument = false,
     ): RedirectResponse {
         $verb = $decision === ApprovalDecision::Authorize ? 'authorize' : 'reject';
+        $consumed = false;
 
         try {
             $decide();
+
+            $consumed = $authorizeConsumesDocument && $decision === ApprovalDecision::Authorize;
 
             $this->toast('success', sprintf(
                 '%s %s was %s.',
@@ -59,12 +67,15 @@ trait HandlesDocumentWrites
                     $number,
                     $exception->context->correlationId,
                 ));
+                $consumed = $authorizeConsumesDocument && $decision === ApprovalDecision::Authorize;
             } else {
                 $this->toast('error', sprintf('Could not %s %s. %s', $verb, $number, $exception->safeMessage()));
             }
         }
 
-        return redirect()->route($routePrefix.'.show', $number);
+        return $consumed
+            ? redirect()->route($routePrefix.'.index')
+            : redirect()->route($routePrefix.'.show', $number);
     }
 
     /**
@@ -101,5 +112,53 @@ trait HandlesDocumentWrites
         $this->toast('success', sprintf('%s %s was deleted.', $label, $number));
 
         return redirect()->route($routePrefix.'.index');
+    }
+
+    /**
+     * A one-shot state change other than a decision or delete, e.g.
+     * finishing a goods transfer request. It always lands back on the detail
+     * page, which re-reads the document.
+     *
+     * @param  string  $label  Sentence-case document name, e.g. "Goods transfer request".
+     * @param  string  $routePrefix  Route name prefix, e.g. "goods-transfer-requests".
+     * @param  string  $verb  e.g. "finish".
+     * @param  string  $done  e.g. "finished".
+     * @param  Closure(): void  $write
+     * @param  string|null  $success  Replaces "<label> <number> was <done>."
+     */
+    protected function transitionOutcome(
+        string $label,
+        string $routePrefix,
+        string $number,
+        string $verb,
+        string $done,
+        Closure $write,
+        ?string $success = null,
+    ): RedirectResponse {
+        try {
+            $write();
+
+            $this->toast('success', $success ?? sprintf('%s %s was %s.', $label, $number, $done));
+        } catch (WriteAlreadyInFlight) {
+            $this->toast('warning', sprintf(
+                'Another change to %s is still being processed. Check its status before trying again.',
+                $number,
+            ));
+        } catch (EsbNotFoundException $exception) {
+            throw $exception;
+        } catch (EsbException $exception) {
+            if ($exception->mayHaveBeenApplied()) {
+                $this->toast('warning', sprintf(
+                    'The ERP did not confirm the request to %s %s. It may or may not have been applied -- check the status below before trying again. (reference: %s)',
+                    $verb,
+                    $number,
+                    $exception->context->correlationId,
+                ));
+            } else {
+                $this->toast('error', sprintf('Could not %s %s. %s', $verb, $number, $exception->safeMessage()));
+            }
+        }
+
+        return redirect()->route($routePrefix.'.show', $number);
     }
 }

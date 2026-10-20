@@ -2,6 +2,9 @@
 
 namespace App\Integrations\ESB\Clients;
 
+use App\Actions\Support\CreatedRecord;
+use App\Domain\Canonical\ProductDetail;
+use App\Domain\Canonical\ProductDraft;
 use App\Domain\Canonical\ProductPage;
 use App\Domain\Canonical\ProductQuery;
 use App\Integrations\Contracts\ProductSource;
@@ -68,6 +71,18 @@ class ProductClient implements ProductSource
     }
 
     /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-productID/get
+     */
+    public function findProduct(int $id): ?ProductDetail
+    {
+        $envelope = $this->client->get(self::FAMILY, '/product/'.$id, operation: 'product.view');
+
+        return $this->mapper->fromDetail($envelope->resultArray());
+    }
+
+    /**
      * Translate the canonical filters into the vendor's parameter names.
      *
      * Anything null is omitted: sending an empty filter would make the ESB
@@ -90,5 +105,47 @@ class ProductClient implements ProductSource
             // The vendor expresses "active" as 1/0, not as a boolean.
             'flagActive' => $query->activeOnly === null ? null : (int) $query->activeOnly,
         ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-productID/delete
+     */
+    public function deleteProduct(int $id): void
+    {
+        $this->client->delete(self::FAMILY, '/product/'.$id, operation: 'product.delete');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-productID--restore/patch
+     */
+    public function restoreProduct(int $id): void
+    {
+        $this->client->patch(self::FAMILY, '/product/'.$id.'/restore', operation: 'product.restore');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product/post
+     */
+    public function createProduct(ProductDraft $draft): CreatedRecord
+    {
+        $envelope = $this->client->post(self::FAMILY, '/product', $this->mapper->requestFrom($draft), operation: 'product.create');
+
+        return $this->mapper->createdFrom($envelope->resultArray());
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-productID/put
+     */
+    public function updateProduct(int $id, ProductDraft $draft, ProductDetail $current): void
+    {
+        $this->client->put(self::FAMILY, '/product/'.$id, $this->mapper->requestFrom($draft, $current), operation: 'product.update');
     }
 }

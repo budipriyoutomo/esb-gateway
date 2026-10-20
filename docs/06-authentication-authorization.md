@@ -87,6 +87,57 @@ Rules that the implementation enforces:
   It is audited as `document-template-import.uploaded`, `.validation-requested`, and
   `.sync-requested`. Each template the sync creates is audited as
   `document-template.created`, with the person who started the sync as the actor.
+- Master data writes (2026-10-19, `TODO-modules.md` §2 S2). Deleting, deactivating, and
+  restoring a unit, product category, product sub-category, or supplier category needs
+  the module's own permission — `units.manage`, `product-categories.manage`,
+  `product-sub-categories.manage`, `supplier-categories.manage` — **and**
+  `esb.invoke`. Reading is not enough. No role holds them yet; only Super Admin can use
+  them until the business decides who maintains each list. Audited as
+  `<module>.deleted` / `.deactivated` / `.restored`, and `<module>.write-unconfirmed`
+  when the ESB gave no definite answer.
+- Master data create / update (2026-10-19, §2 S3, `[ESB-030]`): the same
+  `<module>.manage` **and** `esb.invoke` cover the create and edit forms for units,
+  product categories, product sub-categories and supplier categories. Audited as
+  `<module>.created` / `.updated`, plus `<module>.write-unconfirmed` (operation
+  `create` / `update`).
+- Products, pricelists, COA (2026-10-19, `[ESB-031]`): creating / editing products
+  needs `products.manage`; proposing a pricelist and editing a proposal needs
+  `pricelists.manage`; moving a COA account up / down needs `coa.manage` — each **and**
+  `esb.invoke`. Audited as `product.created` / `.updated`, `pricelist.created` /
+  `.updated`, `coa.moved`, plus `*.write-unconfirmed`.
+- Master data imports and attachments (2026-10-19, `[ESB-032]`): importing a sheet needs
+  `esb.invoke` **and** the module's own manage permission (units, product categories,
+  sub-categories, products, pricelists, suppliers, COA — checked per kind); audited as
+  `master-data.imported` / `master-data.import-unconfirmed`. Attaching or removing
+  supplier files needs `suppliers.manage` **and** `esb.invoke`; audited as
+  `supplier.attachments-uploaded` / `.attachments-deleted`. Reading pricelist helper
+  prices needs `esb.invoke` only.
+- Suppliers and COA accounts (2026-10-19): deactivating and restoring need
+  `suppliers.manage` or `coa.manage` **and** `esb.invoke`. The vendor's delete for both
+  is a deactivation (COA: the account *and its active sub-accounts*), so the gateway
+  offers no permanent delete. `coa.manage` is deliberately separate from every other
+  master data permission. Audited as `supplier.deactivated` / `.restored` and
+  `coa.deactivated` / `.restored`, plus `*.write-unconfirmed`.
+- Proposed (temporary) pricelists (2026-10-19): authorizing or rejecting needs
+  `pricelists.approve` **and** `esb.invoke`; deleting needs `pricelists.manage` **and**
+  `esb.invoke`. Authorizing makes the proposed prices the active supplier prices.
+  Audited as `pricelist.authorized` / `.rejected` / `.deleted`, plus
+  `pricelist.write-unconfirmed`.
+- Products (2026-10-19): deleting and restoring a product needs `products.manage`
+  **and** `esb.invoke`. Audited as `product.deleted` / `.restored`, plus
+  `product.write-unconfirmed`. Temporary-product authorize / reject is not built.
+- Inventory documents (2026-10-20, `[ESB-034]`): goods transfer requests, goods
+  deliveries, goods receipts, item journals and simple transfers each have their own
+  `<kind>.approve` (authorize / reject) and `<kind>.manage` (delete; for transfer
+  requests also finish / reopen) — e.g. `goods-deliveries.approve` — each **and**
+  `esb.invoke`. One document's permissions never grant another's. No role holds them
+  yet; only Super Admin can use them. Audited as `<document>.authorized` / `.rejected` /
+  `.deleted`, `goods-transfer-request.finished` / `.reopened`, plus
+  `<document>.write-unconfirmed`. `<kind>.manage` also creates and edits transfer
+  requests, item journals and simple transfers (`[ESB-035]`), attaches and removes files
+  (`[ESB-036]`), and imports simple transfer sheets — audited as `<document>.created` /
+  `.updated`, `.attachments-uploaded` / `.attachments-deleted`, and
+  `master-data.imported` (kind `simple-transfers`).
 - Sales pushes (2026-10-01, ADR-022). `sales-pushes.view` shows the history of sales
   transactions POS clients sent; IT Admin and Integration Operator hold it.
   `sales-pushes.retry` queues a failed or rejected push again; only Integration Operator

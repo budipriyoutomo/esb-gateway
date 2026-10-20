@@ -1,4 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ImportLinks } from '@/components/import-links';
 import { useState } from 'react';
 import { DataTable } from '@/components/data-table';
 import { FilterBar } from '@/components/filter-bar';
@@ -53,6 +55,8 @@ export default function CoaAccountsIndex({
             : [{ key: 'level', label: `Level ${filters.level}` }]),
     ];
 
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Chart of accounts" />
@@ -61,6 +65,14 @@ export default function CoaAccountsIndex({
                 <PageHeader
                     title="Chart of accounts"
                     description="Active accounts in chart order, read live from the ERP."
+                    actions={
+                        <ImportLinks
+                            canImport={can('esb.invoke') && can('coa.manage')}
+                            imports={[
+                                { kind: 'coa-accounts', label: 'Import' },
+                            ]}
+                        />
+                    }
                 />
 
                 <FilterBar

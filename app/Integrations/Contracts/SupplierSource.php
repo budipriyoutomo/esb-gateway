@@ -24,4 +24,36 @@ interface SupplierSource extends OutboundAdapter
      * @throws EsbException a not-found refusal surfaces as EsbNotFoundException
      */
     public function findSupplier(int $id): ?Supplier;
+
+    /**
+     * Deactivate a supplier. The ERP refuses while it has ongoing
+     * transactions. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function deactivateSupplier(int $id): void;
+
+    /**
+     * Reactivate a deactivated supplier. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function restoreSupplier(int $id): void;
+
+    /**
+     * Add attachment files to a supplier. One attempt.
+     *
+     * @param  list<array{contents: string, filename: string}>  $files
+     *
+     * @throws EsbException
+     */
+    public function attachFiles(int $id, array $files): void;
+
+    /**
+     * Remove every attachment of a supplier (the vendor offers no single
+     * delete). One attempt.
+     *
+     * @throws EsbException
+     */
+    public function deleteAttachments(int $id): void;
 }

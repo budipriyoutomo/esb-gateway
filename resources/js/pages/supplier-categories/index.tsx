@@ -1,9 +1,12 @@
 import { Head, Link } from '@inertiajs/react';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
 import {
     index as categoriesIndex,
     show as categoriesShow,
+    create as createRoute,
 } from '@/routes/supplier-categories';
 import type { SupplierCategorySummary } from '@/types/master-data';
 import type { Pagination } from '@/types/pagination';
@@ -19,11 +22,22 @@ export default function SupplierCategoriesIndex({
     pagination,
     filters,
 }: Props) {
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Supplier categories" />
 
             <ReferenceDataIndex
+                actions={
+                    can('esb.invoke') && can('supplier-categories.manage') ? (
+                        <Button asChild>
+                            <Link href={createRoute()}>
+                                New supplier category
+                            </Link>
+                        </Button>
+                    ) : undefined
+                }
                 id="supplier-categories"
                 title="Supplier categories"
                 description="Supplier categories, read live from the ERP."

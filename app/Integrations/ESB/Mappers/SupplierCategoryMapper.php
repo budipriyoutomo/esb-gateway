@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Mappers;
 
 use App\Domain\Canonical\SupplierCategory;
+use App\Domain\Canonical\SupplierCategoryDraft;
 use App\Domain\Canonical\SupplierCategorySummary;
 use App\Integrations\ESB\Clients\SupplierCategoryClient;
 use App\Integrations\ESB\Mappers\Concerns\ReadsEsbValues;
@@ -60,5 +61,28 @@ class SupplierCategoryMapper
             editedBy: $this->nullableString($result['editedBy'] ?? null),
             editedAt: $this->nullableString($result['editedDate'] ?? null),
         );
+    }
+
+    /**
+     * The body of POST /supplier/category/ and PUT .../{supplierCategoryID}
+     * (the id is taken from the path).
+     *
+     * @return array<string, string>
+     */
+    public function requestFrom(SupplierCategoryDraft $draft): array
+    {
+        return ['supplierCategoryName' => $draft->name];
+    }
+
+    /**
+     * The new id from a create's result, or null when it carries none.
+     *
+     * @param  array<mixed>  $result
+     */
+    public function createdIdFrom(array $result): ?int
+    {
+        $id = $result['supplierCategoryID'] ?? null;
+
+        return is_int($id) && $id > 0 ? $id : null;
     }
 }

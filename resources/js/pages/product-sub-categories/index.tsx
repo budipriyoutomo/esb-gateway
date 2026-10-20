@@ -1,10 +1,14 @@
 import { Head, Link } from '@inertiajs/react';
+import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
 import { formatQuantity } from '@/lib/format';
 import {
     index as subCategoriesIndex,
     show as subCategoriesShow,
+    create as createRoute,
 } from '@/routes/product-sub-categories';
 import type { ProductSubCategorySummary } from '@/types/master-data';
 import type { Pagination } from '@/types/pagination';
@@ -20,11 +24,34 @@ export default function ProductSubCategoriesIndex({
     pagination,
     filters,
 }: Props) {
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Product sub-categories" />
 
             <ReferenceDataIndex
+                actions={
+                    can('esb.invoke') &&
+                    can('product-sub-categories.manage') ? (
+                        <>
+                            <ImportLinks
+                                canImport
+                                imports={[
+                                    {
+                                        kind: 'product-sub-categories',
+                                        label: 'Import',
+                                    },
+                                ]}
+                            />
+                            <Button asChild>
+                                <Link href={createRoute()}>
+                                    New sub-category
+                                </Link>
+                            </Button>
+                        </>
+                    ) : undefined
+                }
                 id="product-sub-categories"
                 title="Product sub-categories"
                 description="Product sub-categories, read live from the ERP."

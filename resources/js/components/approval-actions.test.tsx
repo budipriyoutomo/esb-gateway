@@ -124,6 +124,27 @@ describe('ApprovalActions', () => {
         });
     });
 
+    it('lets an optional reason be left blank', async () => {
+        const post = fakePost(succeed);
+        setup({ rejectReason: { max: 500, required: false } });
+
+        await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
+        const dialog = screen.getByRole('dialog');
+
+        expect(
+            within(dialog).getByLabelText('Reason (optional)'),
+        ).toBeVisible();
+
+        await userEvent.click(
+            within(dialog).getByRole('button', { name: 'Reject' }),
+        );
+
+        expect(post.mock.calls[0][1]).toEqual({
+            decision: 'reject',
+            reason: '',
+        });
+    });
+
     it('rejects without a reason field when the document takes none', async () => {
         const post = fakePost(succeed);
         setup({ rejectReason: undefined });

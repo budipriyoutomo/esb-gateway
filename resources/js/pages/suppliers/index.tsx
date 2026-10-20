@@ -1,4 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
 import {
@@ -27,12 +29,26 @@ export default function SuppliersIndex({
     pagination,
     filters,
 }: Props) {
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Suppliers" />
 
             <ReferenceDataIndex
                 id="suppliers"
+                actions={
+                    <ImportLinks
+                        canImport={can('esb.invoke') && can('suppliers.manage')}
+                        imports={[
+                            { kind: 'suppliers-create', label: 'Import new' },
+                            {
+                                kind: 'suppliers-update',
+                                label: 'Import changes',
+                            },
+                        ]}
+                    />
+                }
                 title="Suppliers"
                 description="Suppliers, read live from the ERP."
                 url={suppliersIndex().url}

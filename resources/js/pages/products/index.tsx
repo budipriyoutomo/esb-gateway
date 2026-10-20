@@ -1,4 +1,5 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import { ImportLinks } from '@/components/import-links';
 import { useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { index as productsIndex } from '@/routes/products';
+import { usePermissions } from '@/hooks/use-permissions';
+import {
+    create as createProduct,
+    index as productsIndex,
+    show as productsShow,
+} from '@/routes/products';
 import type { Pagination } from '@/types/pagination';
 
 type Product = {
@@ -63,15 +69,39 @@ export default function ProductsIndex({
         );
     }
 
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Products" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
-                    title="Products"
-                    description="Product master data, read live from the ERP."
-                />
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <Heading
+                        title="Products"
+                        description="Product master data, read live from the ERP."
+                    />
+                    {can('esb.invoke') && can('products.manage') && (
+                        <div className="flex flex-wrap gap-2">
+                            <ImportLinks
+                                canImport
+                                imports={[
+                                    {
+                                        kind: 'products-create',
+                                        label: 'Import new',
+                                    },
+                                    {
+                                        kind: 'products-update',
+                                        label: 'Import changes',
+                                    },
+                                ]}
+                            />
+                            <Button asChild>
+                                <Link href={createProduct()}>New product</Link>
+                            </Button>
+                        </div>
+                    )}
+                </div>
 
                 <form onSubmit={applySearch} className="flex max-w-md gap-2">
                     <Input
@@ -117,7 +147,16 @@ export default function ProductsIndex({
                                         {product.code}
                                     </TableCell>
                                     <TableCell className="font-medium">
-                                        {product.name}
+                                        {product.id > 0 ? (
+                                            <Link
+                                                href={productsShow(product.id)}
+                                                className="underline-offset-4 hover:underline"
+                                            >
+                                                {product.name}
+                                            </Link>
+                                        ) : (
+                                            product.name
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
                                         {product.categoryName ?? '—'}

@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Clients;
 
 use App\Domain\Canonical\UnitOfMeasure;
+use App\Domain\Canonical\UnitOfMeasureDraft;
 use App\Domain\Canonical\UnitOfMeasurePage;
 use App\Domain\Canonical\UnitOfMeasureQuery;
 use App\Integrations\Contracts\UnitOfMeasureSource;
@@ -66,5 +67,49 @@ class UnitOfMeasureClient implements UnitOfMeasureSource
         $envelope = $this->client->get(self::FAMILY, self::PATH.'/'.$id, operation: 'unit.view');
 
         return $this->mapper->fromDetail($envelope->resultArray());
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/units-uomID/delete
+     */
+    public function deleteUnit(int $id): ?bool
+    {
+        $envelope = $this->client->delete(self::FAMILY, self::PATH.'/'.$id, operation: 'unit.delete');
+
+        $hard = $envelope->resultArray()['hardDelete'] ?? null;
+
+        return is_bool($hard) ? $hard : null;
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/units-uomID--restore/patch
+     */
+    public function restoreUnit(int $id): void
+    {
+        $this->client->patch(self::FAMILY, self::PATH.'/'.$id.'/restore', operation: 'unit.restore');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/units/post
+     */
+    public function createUnit(UnitOfMeasureDraft $draft): void
+    {
+        $this->client->post(self::FAMILY, self::PATH, $this->mapper->requestFrom($draft), operation: 'unit.create');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/units-uomID/put
+     */
+    public function updateUnit(int $id, UnitOfMeasureDraft $draft): void
+    {
+        $this->client->put(self::FAMILY, self::PATH.'/'.$id, $this->mapper->requestFrom($draft), operation: 'unit.update');
     }
 }

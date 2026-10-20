@@ -59,6 +59,12 @@ describe('ReferenceDataIndex', () => {
         expect(within(table).getByText('Inactive')).toBeVisible();
     });
 
+    it('shows the page actions it is given', () => {
+        renderIndex({ actions: <a href="/units/create">New unit</a> });
+
+        expect(screen.getByRole('link', { name: 'New unit' })).toBeVisible();
+    });
+
     it('opens a row that has an id, and only those', async () => {
         const { visit } = renderIndex();
 

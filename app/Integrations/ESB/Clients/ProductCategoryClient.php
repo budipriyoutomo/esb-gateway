@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Clients;
 
 use App\Domain\Canonical\ProductCategory;
+use App\Domain\Canonical\ProductCategoryDraft;
 use App\Domain\Canonical\ProductCategoryPage;
 use App\Domain\Canonical\ProductCategoryQuery;
 use App\Integrations\Contracts\ProductCategorySource;
@@ -67,5 +68,55 @@ class ProductCategoryClient implements ProductCategorySource
         $envelope = $this->client->get(self::FAMILY, self::PATH.'/'.$id, operation: 'product-category.view');
 
         return $this->mapper->fromDetail($envelope->resultArray());
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category-categoryID/delete
+     */
+    public function deleteCategory(int $id): void
+    {
+        $this->client->delete(self::FAMILY, self::PATH.'/'.$id, operation: 'product-category.delete');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category-categoryID--inactive/patch
+     */
+    public function deactivateCategory(int $id): void
+    {
+        $this->client->patch(self::FAMILY, self::PATH.'/'.$id.'/inactive', operation: 'product-category.deactivate');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category-categoryID--restore/patch
+     */
+    public function restoreCategory(int $id): void
+    {
+        $this->client->patch(self::FAMILY, self::PATH.'/'.$id.'/restore', operation: 'product-category.restore');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category/post
+     */
+    public function createCategory(ProductCategoryDraft $draft): void
+    {
+        $this->client->post(self::FAMILY, self::PATH, $this->mapper->requestFrom($draft), operation: 'product-category.create');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category-categoryID/put
+     */
+    public function updateCategory(int $id, ProductCategoryDraft $draft): void
+    {
+        $this->client->put(self::FAMILY, self::PATH.'/'.$id, $this->mapper->requestFrom($draft), operation: 'product-category.update');
     }
 }

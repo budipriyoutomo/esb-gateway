@@ -1022,3 +1022,58 @@ Facts that shaped the design:
   `/report/.../export`-style jobs sooner or later.
 - Leaving POST reads at one attempt — a picker or report fails on the first network
   blip for no safety gain.
+
+---
+
+## ADR-026 — One Canonical Shape for the Inventory Documents
+
+**Status:** Accepted
+
+**Context**
+- TODO-modules.md §3 adds five inventory documents at once: goods transfer request,
+  goods delivery, goods receipt, item journal and simple transfer ([ESB-033]). Each has
+  a paginated list and a detail by number, and each will later get authorize / reject /
+  delete, create / update and attachments (S2–S4).
+- Their payloads differ in field names (`transferNum`, `goodsDeliveryNum`,
+  `simpleTransferNum`…) but not in meaning: a number, a date, a status, where the goods
+  come from and go to (branch and / or location, or a customer or supplier), a
+  reference document, notes, product lines with quantities, and who created, edited
+  and authorized it.
+- Purchase orders, simple purchases and purchase invoices each got their own canonical
+  classes, mapper, controller and pages. Repeating that five more times is ~50 near
+  copies. ADR-015 asks for a shared base only on proven duplication; five documents with
+  the same shape, built in one phase, is that proof.
+
+**Decision**
+- `App\Domain\Canonical\InventoryKind` names the five documents (the route segment, e.g.
+  `goods-deliveries`) and carries what differs between them that the gateway needs:
+  label, documented statuses, which list filters the vendor offers.
+- One canonical shape: `InventoryDocumentSummary` (list row), `InventoryDocument`
+  (detail), `InventoryLine`, `InventoryParty` (a branch / location / customer /
+  supplier side), `InventoryDocumentQuery`, `InventoryDocumentPage`. A field a document
+  does not have is null; the frontend hides empty fields.
+- One contract `InventoryDocumentSource` and one ESB adapter, with one mapper that
+  `match`es on the kind for field names. Kind-specific reads (outstanding quantity,
+  stock check) are optional parts of the detail.
+- One controller and two pages (`inventory/index`, `inventory/show`), routed per kind
+  with the kind as a route default, so every document keeps its own URLs and route
+  names (`goods-deliveries.index`, `.show`).
+- Writes (S2+) stay per kind where the vendor differs (finish / unfinished on transfer
+  requests, create-from-reference on deliveries and receipts) and share
+  `DocumentWrites` where it does not.
+
+**Reason**
+- One mapping of "where from / where to / lines" read the same way for every document is
+  easier to keep correct than five; a fix to, say, zero-as-none handling lands once.
+- Separate URLs, route names, permissions and audit actions per kind keep the documents
+  distinct where people and audits see them.
+
+**Consequences**
+- Adding a field one document has means a nullable field on the shared shape. If a
+  document grows many fields nobody else has, it gets its own detail class then.
+- Tests are a base test case with one subclass per kind (as with the master data writes).
+
+**Rejected**
+- Per-document classes like purchase orders — five times the code for the same shape.
+- A loose `array` payload passed through to the browser — loses the canonical boundary
+  (ADR-016) and the defensive reads.

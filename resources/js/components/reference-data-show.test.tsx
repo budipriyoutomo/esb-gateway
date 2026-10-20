@@ -80,4 +80,27 @@ describe('ReferenceDataShow', () => {
 
         expect(fields()[0]).toEqual(['Status', '—']);
     });
+
+    it('shows the page actions next to the title', () => {
+        render(
+            <ReferenceDataShow
+                title="KG"
+                back={{ href: '/units', label: 'Units' }}
+                record={{
+                    active: true,
+                    createdBy: null,
+                    createdAt: null,
+                    editedBy: null,
+                    editedAt: null,
+                }}
+                actions={<button type="button">Delete</button>}
+            >
+                {null}
+            </ReferenceDataShow>,
+        );
+
+        expect(
+            screen.getByRole('group', { name: 'Page actions' }),
+        ).toContainElement(screen.getByRole('button', { name: 'Delete' }));
+    });
 });

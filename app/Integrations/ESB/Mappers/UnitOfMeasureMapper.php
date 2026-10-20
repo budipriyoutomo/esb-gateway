@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Mappers;
 
 use App\Domain\Canonical\UnitOfMeasure;
+use App\Domain\Canonical\UnitOfMeasureDraft;
 use App\Domain\Canonical\UnitOfMeasureSummary;
 use App\Integrations\ESB\Clients\UnitOfMeasureClient;
 use App\Integrations\ESB\Mappers\Concerns\ReadsEsbValues;
@@ -68,5 +69,22 @@ class UnitOfMeasureMapper
             editedBy: $this->nullableString($result['editedBy'] ?? null),
             editedAt: $this->nullableString($result['editedDate'] ?? null),
         );
+    }
+
+    /**
+     * The body of POST /units and PUT /units/{uomID}. Without a tax the
+     * reference is left out rather than sent as 0, which the ERP may check
+     * against its taxes ("must exist" is documented for the metric).
+     *
+     * @return array<string, int|string>
+     */
+    public function requestFrom(UnitOfMeasureDraft $draft): array
+    {
+        return [
+            'uomName' => $draft->name,
+            'metricID' => $draft->metricId,
+            'notes' => $draft->notes ?? '',
+            ...($draft->taxId === null ? [] : ['refTaxID' => $draft->taxId]),
+        ];
     }
 }

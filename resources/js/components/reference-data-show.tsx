@@ -38,6 +38,7 @@ export function ReferenceDataShow({
     record,
     children,
     extra,
+    actions,
 }: {
     title: string;
     back: { href: NonNullable<InertiaLinkProps['href']>; label: string };
@@ -46,6 +47,8 @@ export function ReferenceDataShow({
     children: ReactNode;
     /** Further sections below the fields. */
     extra?: ReactNode;
+    /** Page actions next to the title (e.g. RecordActions). */
+    actions?: ReactNode;
 }) {
     return (
         <div className="flex h-full flex-1 flex-col gap-6 p-4">
@@ -53,6 +56,7 @@ export function ReferenceDataShow({
                 title={title}
                 description="Read live from the ERP."
                 back={back}
+                actions={actions}
             />
 
             <DetailFields>

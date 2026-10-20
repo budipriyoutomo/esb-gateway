@@ -1,9 +1,20 @@
 import { Head } from '@inertiajs/react';
+import { AttachmentActions } from '@/components/attachment-actions';
 import { DataTable } from '@/components/data-table';
 import { DetailField } from '@/components/detail-fields';
+import { RecordActions } from '@/components/record-actions';
 import { ReferenceDataShow } from '@/components/reference-data-show';
+import { usePermissions } from '@/hooks/use-permissions';
 import { Badge } from '@/components/ui/badge';
-import { index as suppliersIndex } from '@/routes/suppliers';
+import {
+    index as suppliersIndex,
+    deactivate as deactivateRoute,
+    restore as restoreRoute,
+} from '@/routes/suppliers';
+import {
+    destroy as destroyAttachments,
+    store as storeAttachments,
+} from '@/routes/suppliers/attachments';
 import type { Supplier } from '@/types/master-data';
 
 function yesNo(value: boolean | null): string | null {
@@ -15,6 +26,7 @@ function yesNo(value: boolean | null): string | null {
 }
 
 export default function SupplierShow({ supplier }: { supplier: Supplier }) {
+    const { can } = usePermissions();
     const location = [
         supplier.city,
         supplier.state,
@@ -32,8 +44,33 @@ export default function SupplierShow({ supplier }: { supplier: Supplier }) {
                 title={supplier.name || 'Supplier'}
                 back={{ href: suppliersIndex(), label: 'Suppliers' }}
                 record={supplier}
+                actions={
+                    <RecordActions
+                        kind="supplier"
+                        name={supplier.name || 'Supplier'}
+                        active={supplier.active}
+                        canManage={can('esb.invoke') && can('suppliers.manage')}
+                        urls={{
+                            deactivate: deactivateRoute(supplier.id).url,
+                            restore: restoreRoute(supplier.id).url,
+                        }}
+                        warnings={{
+                            deactivate:
+                                'The ERP refuses while the supplier has ongoing transactions.',
+                        }}
+                    />
+                }
                 extra={
                     <>
+                        <AttachmentActions
+                            name={supplier.name || 'Supplier'}
+                            count={supplier.attachmentCount}
+                            canManage={
+                                can('esb.invoke') && can('suppliers.manage')
+                            }
+                            uploadUrl={storeAttachments(supplier.id).url}
+                            deleteUrl={destroyAttachments(supplier.id).url}
+                        />
                         <section className="grid gap-3">
                             <h2 className="text-base font-medium">Contacts</h2>
                             <DataTable

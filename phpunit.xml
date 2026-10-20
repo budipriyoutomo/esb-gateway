@@ -18,6 +18,8 @@
         </include>
     </source>
     <php>
+        <!-- The suite outgrew the 128M default in one process (2026-10-20). -->
+        <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

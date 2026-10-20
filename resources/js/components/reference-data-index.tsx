@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { DataTable } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
 import { FilterBar } from '@/components/filter-bar';
@@ -42,6 +43,8 @@ type Props<T extends ReferenceRow> = {
     /** Plural noun, e.g. "units". */
     noun: string;
     searchPlaceholder: string;
+    /** Page actions, e.g. a "New" button, right of the title. */
+    actions?: ReactNode;
     extraFilter?: ExtraFilter;
 };
 
@@ -80,6 +83,7 @@ export function ReferenceDataIndex<T extends ReferenceRow>({
     noun,
     searchPlaceholder,
     extraFilter,
+    actions,
 }: Props<T>) {
     const list = useListQuery(url, filters);
     const [search, setSearch] = useState(filters.search ?? '');
@@ -141,7 +145,11 @@ export function ReferenceDataIndex<T extends ReferenceRow>({
 
     return (
         <div className="flex h-full flex-1 flex-col gap-6 p-4">
-            <PageHeader title={title} description={description} />
+            <PageHeader
+                title={title}
+                description={description}
+                actions={actions}
+            />
 
             <FilterBar
                 id={id}

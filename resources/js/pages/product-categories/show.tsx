@@ -1,8 +1,16 @@
 import { Head } from '@inertiajs/react';
 import { DetailField, DetailFields } from '@/components/detail-fields';
+import { RecordActions } from '@/components/record-actions';
 import { ReferenceDataShow } from '@/components/reference-data-show';
+import { usePermissions } from '@/hooks/use-permissions';
 import { formatQuantity } from '@/lib/format';
-import { index as categoriesIndex } from '@/routes/product-categories';
+import {
+    index as categoriesIndex,
+    destroy as destroyRoute,
+    deactivate as deactivateRoute,
+    restore as restoreRoute,
+    edit as editRoute,
+} from '@/routes/product-categories';
 import type { ProductCategory } from '@/types/master-data';
 
 function months(value: number | null): string | null {
@@ -22,6 +30,7 @@ export default function ProductCategoryShow({
 }: {
     category: ProductCategory;
 }) {
+    const { can } = usePermissions();
     // Depreciation applies to asset categories only.
     const depreciated =
         category.depreciationCoaNo !== null ||
@@ -36,6 +45,23 @@ export default function ProductCategoryShow({
                 title={category.name || 'Product category'}
                 back={{ href: categoriesIndex(), label: 'Product categories' }}
                 record={category}
+                actions={
+                    <RecordActions
+                        kind="product category"
+                        name={category.name || 'Product category'}
+                        active={category.active}
+                        canManage={
+                            can('esb.invoke') &&
+                            can('product-categories.manage')
+                        }
+                        editUrl={editRoute(category.id).url}
+                        urls={{
+                            delete: destroyRoute(category.id).url,
+                            deactivate: deactivateRoute(category.id).url,
+                            restore: restoreRoute(category.id).url,
+                        }}
+                    />
+                }
                 extra={
                     <>
                         <section className="grid gap-3">

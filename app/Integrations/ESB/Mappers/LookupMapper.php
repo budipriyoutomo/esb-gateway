@@ -37,6 +37,24 @@ class LookupMapper
                 LookupKind::CoaAccounts => $this->account($row, []),
                 LookupKind::CashBankAccounts => $this->account($row, ['branchId' => $this->intOrNull($row['branchID'] ?? null)]),
                 LookupKind::Statuses => $this->option($this->id($row['statusID'] ?? null), $row['statusName'] ?? null),
+                LookupKind::Metrics => $this->option($this->id($row['metricID'] ?? null), $row['metricName'] ?? null),
+                LookupKind::CategoryTypes => $this->option($this->id($row['categoryTypeID'] ?? null), $row['categoryTypeName'] ?? null),
+                LookupKind::Taxes => ($row['flagActive'] ?? null) === false ? null : $this->option(
+                    $this->id($row['taxID'] ?? null),
+                    $row['taxName'] ?? null,
+                    meta: ['rate' => is_numeric($row['taxRate'] ?? null) ? $row['taxRate'] + 0 : null],
+                ),
+                LookupKind::ProductCategories => $this->inactive($row) ? null : $this->option($this->id($row['categoryID'] ?? null), $row['categoryName'] ?? null, $row['categoryCode'] ?? null),
+                LookupKind::ProductSubCategories => $this->inactive($row) ? null : $this->option($this->id($row['subCategoryID'] ?? null), $row['subCategoryName'] ?? null),
+                LookupKind::Units => $this->option($this->id($row['uomID'] ?? null), $row['uomName'] ?? null),
+                LookupKind::Currencies => $this->option($this->id($row['currencyID'] ?? null), $row['currencyName'] ?? null, $row['currencySign'] ?? null),
+                LookupKind::ProductDetails => $this->option(
+                    $this->id($row['productDetailID'] ?? null),
+                    $row['productName'] ?? null,
+                    $row['productCode'] ?? null,
+                    ['productId' => $this->intOrNull($row['productID'] ?? null), 'uomName' => $this->text($row['uomName'] ?? null)],
+                ),
+                LookupKind::Purposes => $this->inactive($row) ? null : $this->option($this->id($row['purposeID'] ?? null), $row['purposeName'] ?? null, $row['purposeCoaNo'] ?? null),
                 LookupKind::TransferProducts => $this->option(
                     $this->id($row['productDetailID'] ?? null),
                     $row['productName'] ?? null,
@@ -55,6 +73,19 @@ class LookupMapper
         }
 
         return $options;
+    }
+
+    /**
+     * Whether the row says it is inactive (0 / false). A row that does not
+     * say is offered.
+     *
+     * @param  array<mixed>  $row
+     */
+    private function inactive(array $row): bool
+    {
+        $flag = $row['flagActive'] ?? null;
+
+        return $flag === 0 || $flag === false || $flag === '0';
     }
 
     /**

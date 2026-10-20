@@ -1323,7 +1323,9 @@ Decisions and open points for these operations:
 ```
 Purpose:         Reference data for searchable pickers used by many modules
                  (TODO-modules.md §1): branches, suppliers, locations, COA accounts,
-                 document statuses, products for a transfer.
+                 document statuses, products for a transfer; metrics, category
+                 types and taxes (added with [ESB-030]); product categories,
+                 sub-categories, units, currencies, product details ([ESB-031]).
 Family:          Core
 Method / Path:   GET {{base_url}}/branch?flagActive=1
                  GET {{base_url}}/supplier/list?flagActive=1
@@ -1334,6 +1336,15 @@ Method / Path:   GET {{base_url}}/branch?flagActive=1
                  GET {{base_url}}/common/status
                  GET {{base_url}}/product/browse-transfer
                      ?branchID= (required)&productName=&page=&limit=  (paginated)
+                 GET {{base_url}}/common/metrics
+                 GET {{base_url}}/common/category-types/list
+                 GET {{base_url}}/tax/list   (inactive rows dropped by the mapper)
+                 GET {{base_url}}/product/category/all   (inactive rows dropped)
+                 GET {{base_url}}/product/sub-category/all?flagActive=1
+                 GET {{base_url}}/units/list?flagActive=1
+                 GET {{base_url}}/common/currency/active
+                 GET {{base_url}}/product-detail/browse?productName=&page=&limit=  (paginated)
+                 GET {{base_url}}/purpose?purposeName=&flagActive=1&page=&limit=  (paginated)
 Response:        bare arrays (all rows, "no pagination") except the two marked
                  paginated, which use the standard paginated envelope.
                  /branch:          branchID, branchCode, branchName
@@ -1346,6 +1357,9 @@ Response:        bare arrays (all rows, "no pagination") except the two marked
                  browse-transfer:  productDetailID, productID, productCode,
                                    productName, uomID, uomName, stockQty, pendingQty,
                                    categoryName, subCategoryName, ...
+                 /common/metrics:  metricID, metricName
+                 category-types:   categoryTypeID, categoryTypeName
+                 /tax/list:        taxID, taxName, taxRate (-> meta.rate), flagActive, ...
 Retry Policy:    read -- retried with backoff, up to three attempts
 Idempotency:     n/a (reads)
 Laravel Adapter: App\Integrations\ESB\Clients\LookupClient
@@ -1354,10 +1368,15 @@ DTOs:            App\Domain\Canonical\LookupKind, LookupQuery, LookupOption, Loo
 Mapper:          App\Integrations\ESB\Mappers\LookupMapper
 Routes:          GET /lookups/{kind}?search=&page=&branchId=   (JSON)
                  kind = branches | suppliers | locations | coa-accounts |
-                        cash-bank-accounts | statuses | transfer-products
+                        cash-bank-accounts | statuses | transfer-products |
+                        metrics | category-types | taxes | product-categories |
+                        product-sub-categories | units | currencies | product-details |
+                        purposes ([ESB-035])
 Permissions:     esb.invoke; throttle:esb (per user)
 Log operations:  lookup.branches, .suppliers, .locations, .coa-accounts,
-                 .cash-bank-accounts, .statuses, .transfer-products
+                 .cash-bank-accounts, .statuses, .transfer-products, .metrics,
+                 .category-types, .taxes, .product-categories, .product-sub-categories,
+                 .units, .currencies, .product-details
 Tests:           tests/Unit/Integrations/ESB/LookupMapperTest.php,
                  tests/Feature/Lookups/LookupTest.php, fixture tests/Fixtures/CoreLookup.php
 ```
@@ -1617,6 +1636,700 @@ Decisions and open points:
 - **`branchID` 0** is carried as null ("not branch-specific", assumed).
 - **Mapping rows** are shown as key / type id / currency id; the type and currency ids
   have no documented legend here.
+
+### [ESB-026] Product Detail
+
+```
+Purpose:         Read one product with its units (product details), for the product
+                 detail page. Extends [ESB-001], which stays the list.
+Family:          Core
+Method / Path:   GET {{base_url}}/product/{productID}
+Response:        productID, productCode, productName, categoryID, categoryName,
+                 subCategoryID, subCategoryName, bomID, bomName, purchasable,
+                 saleable, requestable, VAT, flagLuxuryItem (1/0), receiptTolerance,
+                 coretaxProductCode, notes, flagActive (boolean), customFields
+                 {field1..field5}, createdBy/Date, editedBy/Date,
+                 productDetails[] (productDetailID, uomID, uomName, qty, baseUnit,
+                 isBase, isPurchase, isSales, isStock, isTransfer, SKU, basePrice,
+                 weight, cubication, flagActive, menuID, menuName, ...)
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\ProductClient::findProduct()
+Contract:        App\Integrations\Contracts\ProductSource::findProduct()
+DTOs:            App\Domain\Canonical\ProductDetail, ProductUnit
+Routes:          GET /products/{productId}
+Permissions:     esb.invoke
+Log operations:  product.view (the same operation DocumentTemplateClient uses for its
+                 import check, [ESB-016])
+Tests:           tests/Feature/Products/ProductDetailTest.php,
+                 tests/Unit/Integrations/ESB/ProductDetailMapperTest.php,
+                 fixture tests/Fixtures/CoreProductDetail.php
+```
+
+Decisions and open points:
+
+- **The list stays on `/product/list`** (`[ESB-001]`). `GET /product` returns a subset
+  of its fields (no category / sub-category / BOM ids, no BOM or unit filter), so it
+  is not used.
+- **Two adapters read this endpoint.** `DocumentTemplateClient` maps it to the narrow
+  `ProductUnits` for the template import (`[ESB-016]`); `ProductClient` maps the whole
+  product for the detail page. Same upstream call, different canonical shapes.
+- **`basePrice` is display-only** (the ERP is the authority on prices); amounts shown
+  with `formatAmount`.
+- **Not carried:** `customFields` (labels undocumented), `coretaxProductCodeID`,
+  `canEditSKU`, `goAppProduct`, `isUsedInTransaction`, `productDetailMenus[]` (the
+  unit's single `menuName` is shown).
+
+### [ESB-027] Pricelist (active list; temporary list and detail)
+
+```
+Purpose:         Read supplier prices: the active pricelist rows, and temporary
+                 pricelists (proposed prices waiting for approval, or rejected).
+Family:          Core
+Method / Path:   GET {{base_url}}/pricelist                       (paginated)
+                 GET {{base_url}}/pricelist/temp                  (paginated)
+                 GET {{base_url}}/pricelist/temp/{pricelistNum}
+Query (used):    /pricelist: page, limit, indexSearch
+                 /pricelist/temp: page, limit, indexSearch, statusID
+                 (38 = Waiting For Approval, 2 = Rejected)
+Query (unused):  priceDate, supplierName, productName, productCode, unit, currencyID,
+                 expireDate, price, currencyIDs / unitIDs (comma-separated),
+                 branchID, branchName, pricelistNum, sort
+Response:        /pricelist rows: ID ("pricelist detail row ID"), pricelistNum,
+                 productID, productDetailID, productCode, productName, uomID, unit,
+                 supplierID, supplierName, currencyID, currencyName, price,
+                 priceDate (YYYY-MM-DD), expireDate, applicableBranch {type
+                 ALL|SPECIFIC, branches[]}
+                 /pricelist/temp rows: pricelistNum, supplierName, currencyName,
+                 priceDate, expireDate, statusID, statusName, applicableBranch
+                 temp detail: the above plus supplierID, currencyID, pricelistDetails[]
+                 (productDetailID, productCode, productName, unitName, price,
+                 lastPrice), createdBy/Date, editedBy/Date, rejectedBy/Date,
+                 applicableBranch.branches[] (branchID, branchCode, branchName,
+                 flagActive)
+Errors:          EC03100004 -> 404 (assumed)
+Retry Policy:    read -- retried with backoff, up to three attempts
+Laravel Adapter: App\Integrations\ESB\Clients\PricelistClient
+Contract:        App\Integrations\Contracts\PricelistSource
+DTOs:            App\Domain\Canonical\PricelistQuery, PricelistEntry, PricelistPage,
+                 TempPricelistQuery, TempPricelistSummary, TempPricelistPage,
+                 TempPricelist, TempPricelistLine, BranchScope
+Routes:          GET /pricelists, /pricelists/temp, /pricelists/temp/{pricelistNum}
+Permissions:     esb.invoke
+Log operations:  pricelist.list, pricelist.temp-list, pricelist.temp-view
+Tests:           tests/Feature/Pricelists/PricelistTest.php,
+                 tests/Unit/Integrations/ESB/PricelistMapperTest.php,
+                 fixture tests/Fixtures/CorePricelist.php
+```
+
+Decisions and open points:
+
+- **No detail for active pricelist rows yet.** List rows carry `ID`, documented as the
+  "pricelist detail row ID"; `GET /pricelist/{pricelistID}` takes the "master pricelist
+  ID". Whether they are the same is not documented, and guessing could open the wrong
+  record. The rows already carry everything the detail does except `lastPrice` and
+  the audit fields. `[!]` ask the ESB team.
+- **`pricelistNum` must contain a digit.** `/pricelist/temp/{pricelistNum}` shares its
+  segment with the literal `/pricelist/temp/export`; a number without a digit is
+  refused before the call. The value is URL-encoded.
+- **Prices are display-only** (`formatAmount` with the currency name); the ERP is the
+  authority.
+- **`applicableBranch`** becomes a `BranchScope`: `all` (type `ALL`) or the listed
+  branch names (`SPECIFIC`). Any other type is unknown (null).
+- **Temporary → active flow** (authorize / reject) is S2 and `[!]` in TODO §2.5.
+
+### [ESB-028] Payment Method (OMS Master POS) — documented, NOT built
+
+```
+Purpose:         List the payment methods configured for one branch.
+Family:          POS (production https://esbcore.co.id, staging
+                 https://int-erp.esb.co.id, staging-int TBD)
+Method / Path:   POST {{base_url}}/external/general/get-payment-method
+Auth:            Authorization: Basic base64(backend_username:backend_password)
+                 -- NOT the gateway's shared bearer token (ADR-009)
+Request Body:    {"filterBranchCode": "OUT1"}  (required: "Branch Code cannot be
+                 blank.")
+Response:        NOT the ESB envelope. A top-level object keyed "1", "2", ...:
+                 { "1": { "paymentMethodType": "CASH",
+                          "paymentMethods": [ { "paymentMethodID": 9,
+                            "paymentMethodCode": "CASH",
+                            "paymentMethodName": "CASH" } ] } }
+Errors:          validation: {"errors": {"branchCode": ["..."]}} (documented under
+                 "success"); auth: [{"name": "Unauthorized", "status": 401, ...}]
+Retry Policy:    would be a read via POST (ADR-025) once built
+Source:          vendor apiDoc esb-oms/api_data.json, group Master_POS, downloaded
+                 2026-10-19
+```
+
+Why it is not built (`TODO-modules.md` §2.8, `[!]`):
+
+- **Different credentials.** HTTP Basic with a "backend" username and password. The
+  gateway holds one ESB service credential used to obtain a bearer token (ADR-009,
+  ADR-018); it has no POS backend credential, and how such a second credential would
+  be stored and rotated is an architecture decision (ADR needed), and the credential
+  itself must come from the ESB team / business.
+- **No envelope.** `EsbClient` and `ErrorClassifier` classify responses by the
+  envelope's `code` (`TODO-modules.md` §0.3); this response has none, and its
+  validation error is shaped differently again. Reading it needs its own, explicitly
+  designed response handling — part of the same ADR.
+- **No staging-int host** for the POS family (`config/esb.php`).
+- Open: whether payment methods are also exposed by ESB Core (none found in the
+  2026-10-19 OpenAPI under that name).
+
+### [ESB-029] Master Data Writes, S2 (delete / deactivate / restore / decide)
+
+```
+Purpose:         Change the state of an existing master data record from the gateway
+                 (TODO-modules.md §2, S2).
+Family:          Core
+Method / Path:   units                 DELETE /units/{uomID}            -> delete
+                                       PATCH  /units/{uomID}/restore    -> restore
+                 product categories    DELETE /product/category/{id}    -> delete
+                                       PATCH  .../{id}/inactive         -> deactivate
+                                       PATCH  .../{id}/restore          -> restore
+                 product sub-categories  same shape under /product/sub-category
+                 supplier categories   GET    /supplier/category/{id}/check-delete (pre-check)
+                                       DELETE /supplier/category/{id}   -> delete
+                                       PATCH  .../{id}/restore          -> restore
+                 suppliers             DELETE /supplier/{id}            -> deactivate
+                                       PATCH  /supplier/{id}/restore    -> restore
+                 COA accounts          DELETE /accounting/coa/{coaNo}   -> deactivate
+                                       PATCH  .../{coaNo}/restore       -> restore
+                 products              DELETE /product/{id}             -> delete
+                                       PATCH  /product/{id}/restore     -> restore
+                 temporary pricelists  PATCH  /pricelist/temp/{num}/authorize | /reject
+                                       DELETE /pricelist/temp/{num}
+Request Body:    none for any of them
+Response:        envelope with result null; DELETE /units also documents `hardDelete`
+                 (removed vs deactivated) and the unit name in result
+Errors:          400 validation / not found (EC03100004 -> 404); supplier deactivate
+                 answers a conflict while transactions are ongoing; COA delete is
+                 blocked by system-generated descendants; unit restore fails when
+                 another unit has the same name and metric
+Retry Policy:    writes -- exactly one attempt; check-delete is a read (retried)
+Idempotency:     none documented; assume not idempotent
+Laravel:         App\Actions\Support\RecordWrites (+ MasterRecord, RecordOperation),
+                 App\Actions\<Module>\<X>Writes; temporary pricelists reuse
+                 DocumentWrites (DecideTempPricelist, DeleteTempPricelist)
+Routes:          DELETE /<module>/{id}, PATCH /<module>/{id}/deactivate|restore;
+                 POST /pricelists/temp/{num}/decisions, DELETE /pricelists/temp/{num}
+Permissions:     esb.invoke + units.manage | product-categories.manage |
+                 product-sub-categories.manage | supplier-categories.manage |
+                 suppliers.manage | coa.manage | products.manage |
+                 pricelists.approve / pricelists.manage
+Audit:           <module>.deleted | .deactivated | .restored, pricelist.authorized |
+                 .rejected | .deleted, and <module>.write-unconfirmed
+Tests:           tests/Feature/MasterData/MasterDataWriteTestCase.php (+ one per module),
+                 tests/Feature/Actions/Support/RecordWritesTest.php,
+                 tests/Feature/Http/HandlesRecordWritesTest.php,
+                 tests/Feature/Pricelists/TempPricelistWriteTest.php
+```
+
+Decisions and open points:
+
+- **Names follow what the ERP does, not the HTTP verb.** The vendor's `DELETE` on
+  suppliers and COA accounts deactivates (COA: with its active sub-accounts), so the
+  gateway calls it *deactivate* and offers no permanent delete for them.
+- **One write per record at a time** (`<prefix>-write:{id}`), whatever the operation.
+- **The supplier-category pre-check runs before the guarded write.** It is a read;
+  inside the guard, its timeout would be audited as an unconfirmed delete that never
+  happened. `result: true` is the only "yes"; false → "still in use", nothing sent.
+- **A deleted unit may only have been deactivated** (`hardDelete: false`); the flag is
+  audited when the ERP sends it.
+- **Authorizing a temporary pricelist removes it**, so the outcome lands on the list,
+  not on its (now missing) page. Decisions are offered only for status 38 ("Waiting For
+  Approval"), the one the vendor accepts.
+- **The ERP's own reasons are shown** with a refusal (up to three `errors[]` messages,
+  ADR-021); the envelope `message` is not.
+- **Not built:** temporary-product authorize / reject / update / delete
+  (`PATCH /product/authorize|reject`, `/product/{id}/temp`) — `[!]` TODO §2.1: the
+  difference between "pending" and "temp" products and who authorizes them is
+  undocumented.
+
+### [ESB-030] Master Data Writes, S3 (create / update)
+
+```
+Purpose:         Create and edit master data records from the gateway
+                 (TODO-modules.md §2, S3). First batch: units, product sub-categories,
+                 supplier categories, product categories.
+Family:          Core
+Method / Path:   units                   POST /units, PUT /units/{uomID}
+                 product sub-categories  POST /product/sub-category, PUT .../{id}
+                 supplier categories     POST /supplier/category/  (trailing slash, as
+                                         documented), PUT /supplier/category/{id}
+                 product categories      POST /product/category, PUT .../{id}
+Request Body:    units:          uomName* (<=50, unique), metricID* (must exist),
+                                 refTaxID, notes (<=100)
+                 sub-categories: subCategoryName* (<=50), deadStockThreshold* (>=1 day),
+                                 notes (<=100); flagActive not sent
+                 supplier cat.:  supplierCategoryName* (<=50, ASCII only, unique)
+                 categories:     categoryName* (<=50, unique), categoryTypeID*,
+                                 categoryCode (<=3), notes (<=100), coaNo, cogsCoaNo,
+                                 accrualBasisCoaNo, opnameCoaNo, productSalesCoaNo,
+                                 depCoaNo, depExpenseCoaNo (each <=20), depLength,
+                                 depLengthFiscal, depreciationTypeID,
+                                 depreciationTypeIDFiscal, flagAssetTax (0/1)
+Response:        envelope; result [] / null for all but the supplier-category create,
+                 whose result is {supplierCategoryID}
+Errors:          400 validation with errors[] (attribute = request field); not found
+                 EC03100004 -> 404 on update
+Retry Policy:    writes -- exactly one attempt
+Idempotency:     none documented; assume not idempotent
+Laravel:         App\Actions\Support\RecordWrites::create() / run(Update);
+                 App\Actions\<Module>\<X>Writes::create() / update();
+                 App\Http\Controllers\Concerns\HandlesRecordForms;
+                 drafts App\Domain\Canonical\<X>Draft; mappers ::requestFrom()
+Routes:          GET /<module>/create, POST /<module>, GET /<module>/{id}/edit,
+                 PUT /<module>/{id}
+Permissions:     esb.invoke + the module's manage permission (as [ESB-029])
+Audit:           <module>.created (provider, name, id when returned) | .updated
+                 (provider, id), and <module>.write-unconfirmed (operation create:
+                 id null + name)
+Tests:           tests/Feature/MasterData/MasterDataFormTestCase.php (+ one per module),
+                 tests/Feature/Actions/Support/RecordWritesTest.php,
+                 tests/Feature/Http/HandlesRecordFormsTest.php,
+                 resources/js/components/record-form.test.tsx, pages/*/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Validated here first.** Each form request mirrors the vendor schema (required
+  fields, lengths, ASCII for supplier categories, COA number shape), so a bad value is
+  a field error before anything reaches the ESB.
+- **The ERP's field errors go back to the form.** `errors[].attribute` is mapped from
+  the vendor field to the form field; anything unmapped, or a refusal without field
+  errors, is shown for the form as a whole.
+- **Where a create lands.** The ERP returns no id for most creates, so the person goes
+  back to the list; a supplier-category create returns its id and lands on it. An
+  unconfirmed create lands on the list with its correlation id.
+- **One create per person at a time** (`<prefix>-create:{userId}`) — a new record has
+  no id to lock on; it stops a double submit. Updates share the per-record lock.
+- **Product category: every field is sent.** `PUT` replaces the record, so empty
+  fields go as the vendor's own "none" (`""` / `0`, as its detail returns them) rather
+  than being left out. Depreciation type ids have no documented legend; the form takes
+  the id.
+- **Unit: no tax → no `refTaxID`.** Sending `0` might fail a "must exist" check;
+  whether leaving it out on update clears an existing reference is `TBD`.
+- **Sub-category: `flagActive` is not sent**; deactivate / restore own it. Whether
+  `PUT` without it resets the flag is `TBD`.
+- **Not in this batch:** suppliers (`PATCH`, contacts / banks), products, COA accounts
+  (+ reorder), pricelists — P9c.
+
+### [ESB-031] Master Data Writes, S3 batch 2 (product, pricelist, COA reorder)
+
+```
+Purpose:         Create / edit products and proposed pricelists, and move COA accounts
+                 (TODO-modules.md §2, S3 batch 2).
+Family:          Core
+Method / Path:   products              POST /product, PUT /product/{productID}
+                                       (the update first GETs /product/{productID})
+                 pricelists            POST /pricelist, PUT /pricelist/temp/{num}
+                 COA accounts          PATCH /accounting/coa/reorder {coaNo, type: up|down}
+Request Body:    product:   productName* (<=100), productCode (<=50), categoryID*,
+                            subCategoryID*, notes (<=100), purchasable, saleable,
+                            requestable, vat, flagLuxuryItem, receiptTolerance,
+                            bomID, coretaxProductCodeID, customFields,
+                            productDetails[]* {productDetailID, uomID*, qty, isBase,
+                            isPurchase, isSales, isStock, isTransfer, sku (<=50),
+                            basePrice, weight, flagActive, menuID, cubication}
+                 pricelist: supplierID*, currencyID*, priceDate*, expireDate*
+                            (YYYY-MM-DD), branchIDs (empty = all), pricelistDetails[]*
+                            {productDetailID* (unique), price (>=0, decimal(20,4))}
+Response:        product create: {isTemp, productID}; others [] / null;
+                 reorder echoes {coaNo, type}
+Errors:          400 validation with errors[]; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt; the product GET before an update is a
+                 read (retried) and runs outside the write lock
+Idempotency:     none documented; assume not idempotent
+Laravel:         App\Actions\Products\ProductWrites::create()/update(),
+                 App\Actions\Pricelists\PricelistWrites, CoaAccountWrites::move();
+                 App\Actions\Support\CreatedRecord (id + pendingApproval)
+Routes:          GET /products/create, POST /products, GET /products/{id}/edit,
+                 PUT /products/{id}; GET /pricelists/create, POST /pricelists,
+                 GET /pricelists/temp/{num}/edit, PUT /pricelists/temp/{num};
+                 PATCH /coa-accounts/{coaNo}/move {direction}
+Permissions:     esb.invoke + products.manage | pricelists.manage | coa.manage
+Audit:           product.created (id, pending_approval, name, units) | .updated;
+                 pricelist.created (name, supplier_id, lines) | .updated; coa.moved
+                 (direction); plus *.write-unconfirmed
+Tests:           tests/Feature/Products/ProductFormTest.php,
+                 tests/Unit/Integrations/ESB/ProductRequestMapperTest.php,
+                 tests/Feature/Pricelists/PricelistFormTest.php,
+                 tests/Feature/CoaAccounts/CoaAccountMoveTest.php, page tests
+```
+
+Decisions and open points:
+
+- **Product update is read-modify-write.** PUT replaces the product, but the form does
+  not edit BOM, CoreTax code, custom fields, or a unit's menu and cubication. The
+  gateway reads the product just before the write (outside the lock, so a read
+  failure is never an "unconfirmed update") and carries those over. A unit id must be
+  one of the product's own. `pushToGoApp` is never read, so never sent (`TBD`).
+- **A new product may wait for approval.** `isTemp: true` → the toast says so and the
+  person lands on the list (the product's page may not show it yet).
+  Authorizing / rejecting such products is still `[!]` (TODO §2.1).
+- **Exactly one base unit, each unit of measure once** — assumed; the vendor states
+  neither.
+- **A new pricelist lands on the proposals.** The ERP returns no number; authorizing
+  copies a proposal into the active prices. Whether *every* create becomes a proposal
+  is still `[!]` (TODO §2.5). Editing a proposal shares the lock with authorize /
+  reject / delete (`pricelist-write:{num}`). The temp detail now carries `currencyId`
+  and branch ids so an edit can send them back. Active pricelists are not editable:
+  their detail id is ambiguous (`[!]`).
+- **COA reorder:** the vendor lists `coaNo` as a "path parameter" of a path that has
+  none; it is sent in the body. No confirmation in the UI — the opposite move undoes it.
+- **Not built (`[!]`):**
+  - Supplier create / update: `supplierPic[].greetingID` is required and must exist,
+    and no endpoint lists greetings; `paymentID` belongs to Payment Method (blocked,
+    [ESB-028]); the update is a PATCH whose effect on omitted `supplierBank[]` is
+    undocumented, and the gateway only holds masked account numbers to send back.
+  - COA create / update: `coaNo` is "ignored on create" (how the number is assigned is
+    undocumented), the parent account is not in the schema, and the detail carries a
+    currency name but no `currencyID` to send back.
+
+### [ESB-032] Master Data S4 (imports, pricelist prices, supplier attachments)
+
+```
+Purpose:         Hand the ERP master data spreadsheets, show prices that help fill a
+                 pricelist, and manage supplier attachments (TODO-modules.md §2, S4).
+Family:          Core
+Method / Path:   imports (multipart, field "file"):
+                   units                  POST  /units/import
+                   product categories     POST  /product/category/upload
+                   product sub-categories POST  /product/sub-category/upload
+                   new products           POST  /product/import
+                   product changes        PUT   /product/import
+                   pricelists             POST  /pricelist/import
+                   new suppliers          POST  /supplier/upload
+                   supplier changes       PATCH /supplier/upload
+                   COA + account mappings POST  /accounting/coa/upload
+                 prices (reads):
+                   GET /pricelist/last-price?supplierID&currencyID&productDetailIDs=1,2&priceDate
+                   GET /pricelist/history/purchase-invoice?supplierID&currencyID
+                       &productDetailID&flagShowAll=0|1
+                 supplier attachments:
+                   PATCH  /supplier/{id}/attachment  (multipart, field "files", repeated)
+                   DELETE /supplier/{id}/attachment  (removes every attachment)
+Response:        imports: result null (queued) except COA {coaCount, accountMappingCount};
+                 last-price [{productDetailID, price}] (unknown -> 0);
+                 history [{purchaseInvoiceNum, purchaseInvoiceDate, price, supplierID,
+                 supplierName}] (up to 5); attachment upload {urls}
+Errors:          400 with errors[] (row / attribute for sheets); EC03100004 -> 404
+Retry Policy:    imports and attachments -- writes, exactly one attempt; price lookups
+                 are GETs (retried)
+Idempotency:     none; importing the same sheet twice may create every row twice
+Laravel:         App\Actions\MasterData\ImportMasterData (+ MasterDataImport enum,
+                 MasterDataImportSource / MasterDataImportClient);
+                 App\Http\Requests\Concerns\ValidatesExcelUpload (shared with the
+                 purchase request import); PricelistSource::lastPrices() /
+                 purchasePrices(); SupplierWrites::attach() / deleteAttachments();
+                 EsbClient::upload(method:) / uploadFiles()
+Routes:          GET|POST /imports/{kind}; GET /pricelists/last-prices,
+                 GET /pricelists/purchase-history (JSON); POST|DELETE
+                 /suppliers/{id}/attachments
+Permissions:     imports: esb.invoke + the module's manage permission (checked per kind);
+                 prices: esb.invoke; attachments: esb.invoke + suppliers.manage
+Audit:           master-data.imported (kind, filename, bytes, sha256, saved counts) /
+                 master-data.import-unconfirmed; supplier.attachments-uploaded (each
+                 file's name, size, sha256) / .attachments-deleted; supplier.write-unconfirmed
+Tests:           tests/Feature/MasterData/MasterDataImportTest.php,
+                 tests/Feature/Pricelists/PricelistPriceReadTest.php,
+                 tests/Feature/Suppliers/SupplierAttachmentTest.php, EsbClientTest
+                 (verb + several files), page / component tests
+```
+
+Decisions and open points:
+
+- **The gateway neither parses nor stores a sheet** (as for purchase requests). It
+  checks size (2 MB — documented for products and pricelists, applied to all), the
+  extensions the vendor names (.xlsx; products and COA also .xls), and the leading
+  bytes. One import per kind per person at a time.
+- **Most imports are queued by the ERP.** "Success" only means the ERP took the file;
+  rows it rejects later are not reported back, and the toast says so. Only the COA upload
+  saves in the request and returns counts. The import templates are the ERP's; no
+  endpoint serves them (`TBD`: link to where users get them).
+- **Last price 0 is "no active price"**: the vendor answers 0 for an unknown product, so a
+  real price of 0 cannot be told apart.
+- **Supplier attachments are counted, not shown.** The detail's `imageAttachments` are URLs
+  in the ERP's file storage; see exports below. Upload uses POST on the gateway route
+  (PHP parses multipart only on POST) and PATCH upstream. The vendor removes all
+  attachments at once, so the UI confirms "remove all". Accepted: PDF / JPEG / PNG, up to
+  5 files of 5 MB — assumed, the vendor documents no limit.
+- **Exports are not built (`[!]`).** Every export (`/units/export`, `/product/category/export`,
+  `/product/sub-category/export`, `POST /product/export`, `/pricelist/export`,
+  `/supplier/export/{mode}`, `/accounting/coa/export`) makes the ERP write a file and answer
+  with its location — under `result.path`, `result.url` or `url` depending on the endpoint,
+  and on an undocumented host. Letting the browser follow that URL bypasses ADR-006
+  (browser never calls the ESB); proxying it means the gateway fetching a URL the ERP
+  chose. Needs: where the files live, whether the URL is signed / authenticated / expiring,
+  and a decision (ADR) between proxying (restricted to the ESB hosts) and generating
+  exports in the gateway from the lists.
+
+### [ESB-033] Inventory Documents, S1 (list, detail)
+
+```
+Purpose:         Read the five inventory documents (TODO-modules.md §3, S1): goods
+                 transfer requests, goods deliveries, goods receipts, item journals,
+                 simple transfers. One canonical shape for all five (ADR-026).
+Family:          Core
+Method / Path:   GTR   GET /inventory/goods-transfer-request      ?transferNum&originBranchID
+                       &statusID&dateFrom&dateTo&indexSearch&page&limit
+                       GET /inventory/goods-transfer-request/{transferNum}
+                 GD    GET /inventory/goods-delivery              ?goodsDeliveryNum&branchID
+                       &statusID&dateFrom&dateTo&page&limit
+                       GET /inventory/goods-delivery/{goodsDeliveryNum}
+                       GET /inventory/goods-delivery/get-details-outstanding-qty
+                           ?goodsDeliveryNum&refNum*&transType*   (outstanding per line)
+                 GR    GET /inventory/goods-receipt               ?goodsReceiptNum&branchID
+                       &statusID&dateFrom&dateTo&page&limit
+                       GET /inventory/goods-receipt/{goodsReceiptNum}
+                       GET /inventory/goods-receipt/stock-check/{goodsReceiptNum}
+                 IJ    GET /inventory/item-journal                ?itemJournalNum&branchID
+                       &statusID&dateFrom&dateTo&page&limit
+                       GET /inventory/item-journal/{itemJournalNum}
+                 ST    GET /simple-transfer                       ?simpleTransferNum&statusID
+                       &dateFrom&dateTo&page&limit
+                       GET /simple-transfer/{simpleTransferNum}
+                       GET /simple-transfer/stock-check/{simpleTransferNum}
+Response:        lists: standard paginated envelope; details: one object with a lines
+                 array (transferDetails / goodsDeliveryDetails / goodsReceiptDetail /
+                 itemJournalDetails / simpleTransferDetails); stock-check
+                 {isStockHasBeenUsed}; outstanding [{productDetailID, qty}]
+Statuses:        GTR 1 New, 2 Rejected, 3 Authorized, 6 Delivering, 8 Finished;
+                 GD 1, 2, 3, 8 Finished, 27 Released;
+                 GR 1, 2, 3, 4 Receiving, 5 Received, 8 Finished, 11 Invoice, 25 Closed;
+                 IJ 1, 2, 3, 38 Waiting For Approval, 53 Approved; ST 1, 2, 3
+Errors:          EC03100004 -> 404
+Retry Policy:    reads -- retried with backoff, up to three attempts
+Idempotency:     n/a (reads)
+Laravel:         App\Domain\Canonical\InventoryKind, InventoryDocument(Summary),
+                 InventoryLine, InventoryParty, InventoryDocumentQuery / Page;
+                 App\Integrations\Contracts\InventoryDocumentSource;
+                 App\Integrations\ESB\Clients\InventoryDocumentClient;
+                 App\Integrations\ESB\Mappers\InventoryDocumentMapper
+Routes:          GET /goods-transfer-requests, /goods-deliveries, /goods-receipts,
+                 /item-journals, /simple-transfers, and /{kind}/{number}
+Permissions:     esb.invoke
+Tests:           tests/Unit/Integrations/ESB/InventoryDocumentMapperTest.php,
+                 tests/Feature/Inventory/InventoryDocumentTestCase.php (+ one per kind),
+                 fixture tests/Fixtures/CoreInventory.php
+```
+
+Decisions and open points:
+
+- **Source.** Transcribed on 2026-10-19 from the vendor's `openapi.json`; the examples are
+  zero-valued, so 0 / "" are "none".
+- **Numbers must contain a digit.** Every detail path shares its segment with literal
+  vendor paths (`/goods-receipt/initialize`, `/browse-return`, `/goods-delivery/create`,
+  `/get-details-outstanding-qty`, `/goods-transfer-request/detail`), so a number
+  without a digit is a 404 before anything is sent.
+- **Common list filters only:** number, date range, status, and branch where the vendor
+  offers one (origin branch for transfer requests; none for simple transfers, which
+  filter by location). Free-text `indexSearch` exists only on transfer requests.
+- **Where from / where to.** Transfer requests and simple transfers have an origin and a
+  destination; a delivery goes from a branch (+ location) to a branch or a customer; a
+  receipt comes from a source (supplier, branch or customer — `sourceName`) into a branch
+  and location; an item journal has one branch and location.
+- **Extra reads on the detail.** A goods delivery with a reference also asks for the
+  outstanding quantity per line; a goods receipt and a simple transfer ask the stock
+  check (whether the received / transferred stock has been used since — it blocks a
+  delete later). A failure of these extra reads leaves their column / notice empty rather
+  than failing the page.
+- **Attachments are counted, not shown** (`imageAttachments`, `goodsDeliveryURLAttachments`
+  are URLs in the ERP's storage; same open point as [ESB-032] exports).
+- **Not read yet:** GTR product details (`POST /detail`, needed for S3 create), item
+  journal approval flow rows (`approval[]`, `approvalFlow[]` — the levels' meaning is
+  undocumented), goods receipt expirations and assets, goods delivery multi-address.
+
+### [ESB-034] Inventory Documents, S2 (authorize, reject, delete, finish)
+
+```
+Purpose:         Change the state of the five inventory documents (TODO-modules.md §3,
+                 S2): authorize, reject, delete; finish / reopen a goods transfer request.
+Family:          Core
+Method / Path:   PATCH  {path}/{number}/authorize          (no body)
+                 PATCH  {path}/{number}/reject             (no body; item journal:
+                                                            optional {reason})
+                 DELETE {path}/{number}
+                 PATCH  /inventory/goods-transfer-request/{transferNum}/finish
+                 PATCH  /inventory/goods-transfer-request/{transferNum}/unfinished
+                 {path}: /inventory/goods-transfer-request, /inventory/goods-delivery,
+                 /inventory/goods-receipt, /inventory/item-journal, /simple-transfer
+Response:        result null (a goods receipt delete echoes {goodsReceiptNum}); ignored
+Statuses:        documented for transfer requests only: authorize / reject while New,
+                 finish while Authorized or Delivering, reopen ("unfinished") while
+                 Finished; delete is blocked once a goods delivery exists (ERP refusal)
+Errors:          400 with errors[] -> the ERP's message in the toast; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt, never retried
+Idempotency:     none documented; an unknown outcome is audited as *.write-unconfirmed
+                 and the person is sent to re-read the document
+Laravel:         App\Actions\Inventory\{DecideInventoryDocument, DeleteInventoryDocument,
+                 CompleteGoodsTransferRequest, InventoryDocuments}; DocumentWrites::
+                 transition(); InventoryDocumentSource::decideDocument() /
+                 deleteDocument() / completeTransferRequest();
+                 App\Http\Controllers\Inventory\InventoryDocumentWriteController;
+                 App\Authorization\InventoryPermissions
+Routes:          POST /{kind}/{number}/decisions, DELETE /{kind}/{number};
+                 PATCH /goods-transfer-requests/{number}/finish | /reopen
+Permissions:     esb.invoke + <kind>.approve (decisions) or <kind>.manage (delete,
+                 finish, reopen) -- ten new permissions, Super Admin only (docs/06)
+Audit:           <document>.authorized / .rejected (+ reason, item journals only) /
+                 .deleted; goods-transfer-request.finished / .reopened;
+                 <document>.write-unconfirmed (operation, correlation id)
+Tests:           tests/Feature/Inventory/InventoryWriteTestCase.php (+ one per kind;
+                 the transfer request's adds finish / reopen), mapper canEdit /
+                 canDelete, pages/inventory/show.test.tsx, confirm-action.test.tsx
+```
+
+Decisions and open points:
+
+- **One lock per document** (`<document>-write:{number}`) covers authorize, reject,
+  delete, finish, reopen -- and the S3 update and S4 attachments later.
+- **A reason only where the vendor takes one.** Only the item journal's reject has a body
+  (`reason`, not required); for the others a reason is neither sent nor audited. The
+  gateway caps it at 500 characters (vendor documents no length).
+- **What is offered.** Transfer requests: buttons follow the documented statuses, and
+  delete is hidden when the detail says `canDelete: false` (`canEdit` / `canDelete` are
+  now read; the other documents do not send them -> null, the ERP decides). The other
+  documents' allowed statuses are undocumented, so every decision is offered and the
+  ERP's refusal is shown.
+- **Finish / reopen need `goods-transfer-requests.manage`** (closing a request is part of
+  running it, not an approval) -- `TBD` with the business, like every role mapping.
+
+### [ESB-035] Inventory Documents, S3 (create, update)
+
+```
+Purpose:         Create and edit goods transfer requests, item journals and simple
+                 transfers (TODO-modules.md §3, S3).
+Family:          Core
+Method / Path:   GTR  POST  /inventory/goods-transfer-request
+                      PATCH /inventory/goods-transfer-request/{transferNum}   (whole request)
+                 IJ   POST  /inventory/item-journal
+                      PUT   /inventory/item-journal/{itemJournalNum}
+                 ST   POST  /simple-transfer
+                      PUT   /simple-transfer/{simpleTransferNum}
+Request Body:    GTR  {transferDate, originBranchID, originLocationID?, destinationBranchID,
+                       categoryTypeID: 1, additionalInfo, purchaseRequestNum: null | [..],
+                       transferDetailAssets: [], transferDetails: [{productDetailID, qty,
+                       requestQty?}]}
+                 IJ   {itemJournalDate, branchID, locationID, additionalInfo,
+                       itemJournalDetails: [{productDetailID, qty, purposeID?, hpp?}],
+                       requestTemplateID?}
+                 ST   {simpleTransferDate, originLocationID, destinationLocationID,
+                       additionalInfo, simpleTransferDetails: [{productDetailID, qty}],
+                       costCenterID?, projectID?}
+Response:        IJ create {itemJournalNum}; GTR / ST create "a map of strings" (example
+                 {}) -- only the detail's own number field is read; updates ignored
+Errors:          400 with errors[] -> on the form fields they name (ADR-021); anything
+                 unmapped on the form as a whole; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt; the read before an update is a GET
+Idempotency:     none documented; a create is one per person and kind at a time, an
+                 update holds the document's lock (shared with [ESB-034])
+Laravel:         App\Domain\Canonical\InventoryDraft / InventoryDraftLine /
+                 InventoryCarryOver; InventoryDocumentSource::createDocument() /
+                 updateDocument(); App\Actions\Inventory\InventoryDocumentForms;
+                 App\Http\Requests\Inventory\SaveInventoryDocumentRequest;
+                 App\Http\Controllers\Inventory\InventoryDocumentFormController
+                 (HandlesRecordForms); lookup "purposes" ([ESB-019], GET /purpose)
+Routes:          GET /{kind}/create, POST /{kind}, GET /{kind}/{number}/edit,
+                 PUT /{kind}/{number} -- kind = goods-transfer-requests | item-journals |
+                 simple-transfers
+Permissions:     esb.invoke + <kind>.manage
+Audit:           <document>.created (number when the ERP gave one, date, lines) /
+                 .updated (number, lines); <document>.write-unconfirmed
+Tests:           tests/Feature/Inventory/InventoryFormTestCase.php (+ one per kind),
+                 mapper carry-over / purposeId, pages/inventory/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Validated against the vendor schema first** (SaveInventoryDocumentRequest): required
+  sides per kind, YYYY-MM-DD, at least one line, each product detail once (GTR, IJ),
+  qty > 0 (GTR, ST; ST with at most four decimals), requested qty >= 0, item journal date
+  not in the future (Asia/Jakarta; the stock period is the ERP's to check), notes up to
+  1000 (the vendor gives none for ST: same cap). A negative item journal qty is allowed
+  (an adjustment out). Up to 500 lines (gateway bound).
+- **An update reads the document first** (outside the lock, so a failed read is never an
+  "unconfirmed update") and sends back what the form does not show: the purchase
+  requests a transfer request came from, a simple transfer's cost center and project, an
+  item journal's request template. The notes are always sent ("" clears them).
+- **Not edited here:** a transfer request the ERP marks `canEdit: false`; any document that
+  moves assets (GTR `categoryTypeID` 3 or `transferDetailAssets`, ST
+  `simpleTransferAssets` / asset lines) -- the form has no assets and a full replace
+  would drop them. New requests are inventory only (`categoryTypeID` 1,
+  `transferDetailAssets: []` -- assumed accepted when products are given).
+- **Pickers:** branch, location (narrowed to the branch), products from
+  `/product/browse-transfer` for the chosen branch (also used for item journals and
+  simple transfers: the vendor documents no other product browse for them), purposes
+  (active, `GET /purpose`; `purposeAppliedTo` values are undocumented, so not filtered).
+  A simple transfer's branch only narrows the pickers and is not sent.
+- **Not built:** cost center / project pickers (no lookup; the ERP says when its cost
+  center setting requires one), item journal request templates, asset transfers.
+- **Goods deliveries and goods receipts (`[!]`)** are created from a reference document
+  (`GET /goods-delivery/create/{refNum}` -> `POST /goods-delivery/{refNum}`;
+  `GET /goods-receipt/initialize?refNum&transType` -> `POST /goods-receipt/{refNum}`)
+  with expiration batches, assets and (deliveries) multi-address rows. Which documents
+  are valid references for a delivery, and how expirations must be filled, is not
+  documented -- asked of the ESB team; not built.
+
+### [ESB-036] Inventory Documents, S4 (attachments, simple transfer import)
+
+```
+Purpose:         Attach files to inventory documents, remove them, and hand the ERP a
+                 simple transfer spreadsheet (TODO-modules.md §3, S4).
+Family:          Core
+Method / Path:   PATCH  {path}/{number}/attachment   multipart, field "files" (repeated)
+                 DELETE {path}/{number}/attachment   (removes every attachment)
+                   {path}: /inventory/goods-transfer-request, /inventory/goods-delivery,
+                   /inventory/item-journal, /simple-transfer (no DELETE)
+                 POST   /simple-transfer/import      multipart, field "file" (.xlsx)
+Request Body:    upload: files[] (+ the vendor's optional "existing" -- never sent, below)
+Response:        upload: GTR {assetImage[], refNum, transactionName}; GD {urls}; IJ / ST
+                 {} -- ignored (URLs in the ERP's storage); delete / import: null
+Errors:          400 with errors[]; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt
+Idempotency:     none; a second upload adds (or replaces) again; importing the same
+                 sheet twice may create every transfer twice
+Laravel:         InventoryDocumentSource::attachFiles() / deleteAttachments();
+                 App\Actions\Inventory\InventoryAttachments (DocumentWrites::transition()
+                 with the files audited); AttachInventoryFilesRequest +
+                 Requests\Concerns\ForwardsAttachments (shared with suppliers);
+                 InventoryAttachmentController; the import is MasterDataImport::
+                 SimpleTransfers on the shared import screen ([ESB-032])
+Routes:          POST|DELETE /{kind}/{number}/attachments (DELETE not for simple
+                 transfers); GET|POST /imports/simple-transfers
+Permissions:     esb.invoke + <kind>.manage
+Audit:           <document>.attachments-uploaded (each file's name, size, sha256) /
+                 .attachments-deleted; <document>.write-unconfirmed (attach / detach);
+                 the import: master-data.imported / .import-unconfirmed with kind
+                 "simple-transfers" (the shared import's audit names)
+Tests:           tests/Feature/Inventory/InventoryAttachmentTestCase.php (+ one per kind),
+                 MasterDataImportTest (simple transfers), attachment-actions.test.tsx,
+                 pages/inventory/show.test.tsx, index.test.tsx
+```
+
+Decisions and open points:
+
+- **"existing" is never sent.** Deliveries, item journals and simple transfers document an
+  upload that keeps the "existing attachment URLs" it is sent -- so an upload without
+  them presumably drops the current attachments. The gateway does not hold those URLs
+  (ADR-006; the detail's URLs are counted, not kept) and the field's format (one string)
+  is undocumented, so for these kinds files are attached **only while the document has
+  none**; otherwise the person removes them first (deliveries, item journals) or uses the
+  ERP (simple transfers: no delete). The transfer request's upload takes no "existing"
+  and is taken to add, as the supplier's (assumed). `TBD` with the ESB team.
+- **File types, as the vendor names them:** transfer requests images (JPEG, PNG);
+  deliveries and simple transfers PDF, BMP, GIF, JPEG, PNG; item journals name none (PDF,
+  JPEG, PNG assumed). Up to 5 files at a time; 2 MB each for simple transfers
+  (documented, 10 MB total), 5 MB elsewhere (assumed).
+- **Not built (`[!]`):** goods receipt asset images (`POST /goods-receipt/{refNum}/asset-images`
+  -- assets are not handled here), goods delivery multi-address upload (part of the
+  create-from-reference flow, [ESB-035]), return browse / details (goods receipt returns
+  are their own module). Attachments are counted, never opened from the gateway (same
+  open point as the [ESB-032] exports).
+- **The simple transfer import** reuses the master data import screen: same file checks
+  (.xlsx, 2 MB, leading bytes), one per person at a time, queued by the ERP ("success"
+  means the ERP took the file).
 
 ## Integration Principles
 

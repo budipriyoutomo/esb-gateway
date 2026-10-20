@@ -8,7 +8,16 @@ export type LookupKind =
     | 'coa-accounts'
     | 'cash-bank-accounts'
     | 'statuses'
-    | 'transfer-products';
+    | 'transfer-products'
+    | 'metrics'
+    | 'category-types'
+    | 'taxes'
+    | 'product-categories'
+    | 'product-sub-categories'
+    | 'units'
+    | 'currencies'
+    | 'product-details'
+    | 'purposes';
 
 /** Mirrors App\Domain\Canonical\LookupOption. */
 export type LookupOption = {

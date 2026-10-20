@@ -5,6 +5,11 @@ import {
     ChefHat,
     ClipboardCheck,
     ClipboardList,
+    ArrowLeftRight,
+    PackageCheck,
+    PackageOpen,
+    NotebookPen,
+    Warehouse,
     Database,
     FileText,
     FolderGit2,
@@ -18,6 +23,7 @@ import {
     Truck,
     Factory,
     Landmark,
+    BadgeDollarSign,
     PlugZap,
     ReceiptText,
     ScrollText,
@@ -47,10 +53,15 @@ import { index as billsOfMaterialIndex } from '@/routes/bills-of-material';
 import { index as coaAccountsIndex } from '@/routes/coa-accounts';
 import { index as documentTemplatesIndex } from '@/routes/document-templates';
 import { index as endpointsIndex } from '@/routes/endpoints';
+import { index as goodsDeliveriesIndex } from '@/routes/goods-deliveries';
+import { index as goodsReceiptsIndex } from '@/routes/goods-receipts';
+import { index as goodsTransferRequestsIndex } from '@/routes/goods-transfer-requests';
 import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 import { index as integrationLogsIndex } from '@/routes/integration-logs';
+import { index as itemJournalsIndex } from '@/routes/item-journals';
 import { index as masterMenusIndex } from '@/routes/master-menus';
 import { index as menusIndex } from '@/routes/menus';
+import { index as pricelistsIndex } from '@/routes/pricelists';
 import { index as productCategoriesIndex } from '@/routes/product-categories';
 import { index as productSubCategoriesIndex } from '@/routes/product-sub-categories';
 import { index as productsIndex } from '@/routes/products';
@@ -60,6 +71,7 @@ import { index as purchaseRequestsIndex } from '@/routes/purchase-requests';
 import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import { index as simplePurchasesIndex } from '@/routes/simple-purchases';
+import { index as simpleTransfersIndex } from '@/routes/simple-transfers';
 import { index as supplierCategoriesIndex } from '@/routes/supplier-categories';
 import { index as suppliersIndex } from '@/routes/suppliers';
 import { index as unitsIndex } from '@/routes/units';
@@ -136,6 +148,12 @@ const mainNavItems: GatedNavEntry[] = [
                 permission: 'esb.invoke',
             },
             {
+                title: 'Pricelist',
+                href: pricelistsIndex(),
+                icon: BadgeDollarSign,
+                permission: 'esb.invoke',
+            },
+            {
                 title: 'Chart of accounts',
                 href: coaAccountsIndex(),
                 icon: Landmark,
@@ -181,6 +199,42 @@ const mainNavItems: GatedNavEntry[] = [
                 title: 'Simple purchases',
                 href: simplePurchasesIndex(),
                 icon: Wallet,
+                permission: 'esb.invoke',
+            },
+        ],
+    },
+    {
+        title: 'Inventory',
+        icon: Warehouse,
+        items: [
+            {
+                title: 'Goods transfer requests',
+                href: goodsTransferRequestsIndex(),
+                icon: ArrowLeftRight,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Goods deliveries',
+                href: goodsDeliveriesIndex(),
+                icon: Truck,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Goods receipts',
+                href: goodsReceiptsIndex(),
+                icon: PackageCheck,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Simple transfers',
+                href: simpleTransfersIndex(),
+                icon: PackageOpen,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Item journals',
+                href: itemJournalsIndex(),
+                icon: NotebookPen,
                 permission: 'esb.invoke',
             },
         ],

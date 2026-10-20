@@ -300,6 +300,34 @@ class EsbClientTest extends TestCase
     }
 
     #[Test]
+    public function a_file_upload_can_use_the_verb_the_vendor_documents(): void
+    {
+        Http::fake(['*' => Http::response($this->success())]);
+
+        $this->client()->upload(EsbFamily::Core, '/product/import', 'file', 'bytes', 'products.xlsx', method: 'PUT');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && $request->isMultipart()
+            && $request->hasFile('file', 'bytes', 'products.xlsx'));
+    }
+
+    #[Test]
+    public function several_files_go_under_one_field_in_one_request(): void
+    {
+        Http::fake(['*' => Http::response($this->success())]);
+
+        $this->client()->uploadFiles(EsbFamily::Core, '/supplier/7/attachment', 'files', [
+            ['contents' => 'one', 'filename' => 'npwp.pdf'],
+            ['contents' => 'two', 'filename' => 'siup.jpg'],
+        ], method: 'PATCH', operation: 'supplier.attach');
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->hasFile('files', 'one', 'npwp.pdf')
+            && $request->hasFile('files', 'two', 'siup.jpg'));
+    }
+
+    #[Test]
     public function a_file_upload_is_a_write_and_is_never_retried(): void
     {
         $attempts = 0;

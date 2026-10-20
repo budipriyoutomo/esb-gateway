@@ -15,6 +15,15 @@ enum LookupKind: string
     case CashBankAccounts = 'cash-bank-accounts';
     case Statuses = 'statuses';
     case TransferProducts = 'transfer-products';
+    case Metrics = 'metrics';
+    case CategoryTypes = 'category-types';
+    case Taxes = 'taxes';
+    case ProductCategories = 'product-categories';
+    case ProductSubCategories = 'product-sub-categories';
+    case Units = 'units';
+    case Currencies = 'currencies';
+    case ProductDetails = 'product-details';
+    case Purposes = 'purposes';
 
     /**
      * Whether the list belongs to one branch and cannot be asked for without it.

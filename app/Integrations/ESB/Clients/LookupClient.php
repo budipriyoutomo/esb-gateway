@@ -45,6 +45,15 @@ class LookupClient implements LookupSource
      * @see https://developers.esb.co.id/esb-core/#/paths/accounting-coa-cash-bank/get
      * @see https://developers.esb.co.id/esb-core/#/paths/common-status/get
      * @see https://developers.esb.co.id/esb-core/#/paths/product-browse-transfer/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/common-metrics/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/common-category-types-list/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/tax-list/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-category-all/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-sub-category-all/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/units-list/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/common-currency-active/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-detail-browse/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/purpose/get
      */
     public function lookup(LookupKind $kind, LookupQuery $query): LookupPage
     {
@@ -56,9 +65,28 @@ class LookupClient implements LookupSource
             LookupKind::Locations => $this->whole($kind, '/location/list', ['flagActive' => 1], $query),
             LookupKind::CashBankAccounts => $this->whole($kind, '/accounting/coa/cash-bank', [], $query),
             LookupKind::Statuses => $this->whole($kind, '/common/status', [], $query),
+            LookupKind::Metrics => $this->whole($kind, '/common/metrics', [], $query),
+            LookupKind::CategoryTypes => $this->whole($kind, '/common/category-types/list', [], $query),
+            // Inactive taxes are dropped by the mapper: /tax/list documents no status filter.
+            LookupKind::Taxes => $this->whole($kind, '/tax/list', [], $query),
+            // No status filter is documented for /product/category/all; the
+            // mapper drops inactive rows.
+            LookupKind::ProductCategories => $this->whole($kind, '/product/category/all', [], $query),
+            LookupKind::ProductSubCategories => $this->whole($kind, '/product/sub-category/all', ['flagActive' => 1], $query),
+            LookupKind::Units => $this->whole($kind, '/units/list', ['flagActive' => 1], $query),
+            LookupKind::Currencies => $this->whole($kind, '/common/currency/active', [], $query),
+            LookupKind::ProductDetails => $this->paged($kind, '/product-detail/browse', [
+                'productName' => $this->searchOrNull($query->search),
+            ], $query),
             LookupKind::CoaAccounts => $this->paged($kind, '/accounting/coa/active-non-module', [
                 ...$this->accountSearch($query->search),
                 'sort' => 'coaNo',
+            ], $query),
+            // Where a purpose may be used (purposeAppliedTo) has undocumented
+            // values, so every active purpose is offered.
+            LookupKind::Purposes => $this->paged($kind, '/purpose', [
+                'purposeName' => $this->searchOrNull($query->search),
+                'flagActive' => 1,
             ], $query),
             LookupKind::TransferProducts => $this->paged($kind, '/product/browse-transfer', [
                 'branchID' => $query->branchId,

@@ -5,9 +5,12 @@ namespace App\Providers;
 use App\Integrations\Contracts\BillOfMaterialSource;
 use App\Integrations\Contracts\CoaAccountSource;
 use App\Integrations\Contracts\DocumentTemplateSource;
+use App\Integrations\Contracts\InventoryDocumentSource;
 use App\Integrations\Contracts\LookupSource;
+use App\Integrations\Contracts\MasterDataImportSource;
 use App\Integrations\Contracts\MasterMenuSource;
 use App\Integrations\Contracts\MenuSource;
+use App\Integrations\Contracts\PricelistSource;
 use App\Integrations\Contracts\ProductCategorySource;
 use App\Integrations\Contracts\ProductSource;
 use App\Integrations\Contracts\ProductSubCategorySource;
@@ -23,9 +26,12 @@ use App\Integrations\Contracts\UnitOfMeasureSource;
 use App\Integrations\ESB\Clients\BillOfMaterialClient;
 use App\Integrations\ESB\Clients\CoaAccountClient;
 use App\Integrations\ESB\Clients\DocumentTemplateClient;
+use App\Integrations\ESB\Clients\InventoryDocumentClient;
 use App\Integrations\ESB\Clients\LookupClient;
+use App\Integrations\ESB\Clients\MasterDataImportClient;
 use App\Integrations\ESB\Clients\MasterMenuClient;
 use App\Integrations\ESB\Clients\MenuClient;
+use App\Integrations\ESB\Clients\PricelistClient;
 use App\Integrations\ESB\Clients\ProductCategoryClient;
 use App\Integrations\ESB\Clients\ProductClient;
 use App\Integrations\ESB\Clients\ProductSubCategoryClient;
@@ -56,6 +62,8 @@ class AppServiceProvider extends ServiceProvider
         // type-hint on a concrete class (ADR-016). The ESB is the only provider
         // today; a second one changes this line rather than the callers.
         $this->app->bind(ProductSource::class, ProductClient::class);
+        $this->app->bind(MasterDataImportSource::class, MasterDataImportClient::class);
+        $this->app->bind(InventoryDocumentSource::class, InventoryDocumentClient::class);
         $this->app->bind(MenuSource::class, MenuClient::class);
         $this->app->bind(MasterMenuSource::class, MasterMenuClient::class);
         $this->app->bind(BillOfMaterialSource::class, BillOfMaterialClient::class);
@@ -67,6 +75,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SupplierCategorySource::class, SupplierCategoryClient::class);
         $this->app->bind(SupplierSource::class, SupplierClient::class);
         $this->app->bind(CoaAccountSource::class, CoaAccountClient::class);
+        $this->app->bind(PricelistSource::class, PricelistClient::class);
         $this->app->bind(DocumentTemplateSource::class, DocumentTemplateClient::class);
         $this->app->bind(PurchaseRequestSource::class, PurchaseRequestClient::class);
         $this->app->bind(PurchaseInvoiceSource::class, PurchaseInvoiceClient::class);

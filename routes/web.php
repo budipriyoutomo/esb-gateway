@@ -1,8 +1,11 @@
 <?php
 
+use App\Authorization\InventoryPermissions;
 use App\Authorization\Permission;
+use App\Domain\Canonical\InventoryKind;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
 use App\Http\Controllers\CoaAccounts\CoaAccountController;
+use App\Http\Controllers\CoaAccounts\CoaAccountWriteController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateFormController;
@@ -12,12 +15,27 @@ use App\Http\Controllers\EsbConnections\EsbConnectionController;
 use App\Http\Controllers\EsbConnections\EsbConnectionProbeController;
 use App\Http\Controllers\Health\HealthController;
 use App\Http\Controllers\IntegrationLogs\IntegrationLogController;
+use App\Http\Controllers\Inventory\InventoryAttachmentController;
+use App\Http\Controllers\Inventory\InventoryDocumentController;
+use App\Http\Controllers\Inventory\InventoryDocumentFormController;
+use App\Http\Controllers\Inventory\InventoryDocumentWriteController;
 use App\Http\Controllers\Lookups\LookupController;
+use App\Http\Controllers\MasterData\MasterDataImportController;
 use App\Http\Controllers\MasterMenus\MasterMenuController;
 use App\Http\Controllers\Menus\MenuController;
+use App\Http\Controllers\Pricelists\PricelistController;
+use App\Http\Controllers\Pricelists\PricelistFormController;
+use App\Http\Controllers\Pricelists\PricelistPriceController;
+use App\Http\Controllers\Pricelists\TempPricelistWriteController;
 use App\Http\Controllers\ProductCategories\ProductCategoryController;
+use App\Http\Controllers\ProductCategories\ProductCategoryFormController;
+use App\Http\Controllers\ProductCategories\ProductCategoryWriteController;
 use App\Http\Controllers\Products\ProductController;
+use App\Http\Controllers\Products\ProductFormController;
+use App\Http\Controllers\Products\ProductWriteController;
 use App\Http\Controllers\ProductSubCategories\ProductSubCategoryController;
+use App\Http\Controllers\ProductSubCategories\ProductSubCategoryFormController;
+use App\Http\Controllers\ProductSubCategories\ProductSubCategoryWriteController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceDecisionController;
 use App\Http\Controllers\PurchaseOrders\PurchaseOrderController;
@@ -32,8 +50,14 @@ use App\Http\Controllers\SalesPushes\SalesPushRetryController;
 use App\Http\Controllers\SimplePurchases\SimplePurchaseController;
 use App\Http\Controllers\SimplePurchases\SimplePurchaseDecisionController;
 use App\Http\Controllers\SupplierCategories\SupplierCategoryController;
+use App\Http\Controllers\SupplierCategories\SupplierCategoryFormController;
+use App\Http\Controllers\SupplierCategories\SupplierCategoryWriteController;
+use App\Http\Controllers\Suppliers\SupplierAttachmentController;
 use App\Http\Controllers\Suppliers\SupplierController;
+use App\Http\Controllers\Suppliers\SupplierWriteController;
+use App\Http\Controllers\Units\UnitFormController;
 use App\Http\Controllers\Units\UnitOfMeasureController;
+use App\Http\Controllers\Units\UnitWriteController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +82,35 @@ Route::middleware('auth')->group(function () {
         Route::get('lookups/{kind}', [LookupController::class, 'show'])->name('lookups.show');
 
         Route::get('products', [ProductController::class, 'index'])->name('products.index');
+        // [ESB-026]. The id is interpolated upstream next to literal paths
+        // (/product/list), so it is held to a positive integer.
+        Route::get('products/{productId}', [ProductController::class, 'show'])
+            ->where('productId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('products.show');
+        // Creating and editing products ([ESB-031]).
+        Route::get('products/create', [ProductFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.create');
+        Route::post('products', [ProductFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.store');
+        Route::get('products/{productId}/edit', [ProductFormController::class, 'edit'])
+            ->where('productId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.edit');
+        Route::put('products/{productId}', [ProductFormController::class, 'update'])
+            ->where('productId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.update');
+        Route::delete('products/{productId}', [ProductWriteController::class, 'destroy'])
+            ->where('productId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.destroy');
+        Route::patch('products/{productId}/restore', [ProductWriteController::class, 'restore'])
+            ->where('productId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
+            ->name('products.restore');
 
         // Read-only master menu list ([ESB-012]). Authorization is on its
         // form request (esb.invoke).
@@ -130,6 +183,251 @@ Route::middleware('auth')->group(function () {
             ->where('supplierId', '[1-9][0-9]{0,9}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('suppliers.show');
+        Route::patch('suppliers/{supplierId}/deactivate', [SupplierWriteController::class, 'deactivate'])
+            ->where('supplierId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSuppliers->value])
+            ->name('suppliers.deactivate');
+        Route::patch('suppliers/{supplierId}/restore', [SupplierWriteController::class, 'restore'])
+            ->where('supplierId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSuppliers->value])
+            ->name('suppliers.restore');
+        // Supplier attachments ([ESB-032]). POST, not PATCH: PHP parses
+        // multipart bodies only on POST.
+        Route::post('suppliers/{supplierId}/attachments', [SupplierAttachmentController::class, 'store'])
+            ->where('supplierId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSuppliers->value])
+            ->name('suppliers.attachments.store');
+        Route::delete('suppliers/{supplierId}/attachments', [SupplierAttachmentController::class, 'destroy'])
+            ->where('supplierId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSuppliers->value])
+            ->name('suppliers.attachments.destroy');
+
+        // Master data create / update (TODO-modules.md §2, S3, [ESB-030]):
+        // esb.invoke and the module's own manage permission. "create" never
+        // matches the numeric id patterns, so the order does not matter.
+        Route::get('units/create', [UnitFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.create');
+        Route::post('units', [UnitFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.store');
+        Route::get('units/{uomId}/edit', [UnitFormController::class, 'edit'])
+            ->where('uomId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.edit');
+        Route::put('units/{uomId}', [UnitFormController::class, 'update'])
+            ->where('uomId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.update');
+        Route::get('product-sub-categories/create', [ProductSubCategoryFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.create');
+        Route::post('product-sub-categories', [ProductSubCategoryFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.store');
+        Route::get('product-sub-categories/{subCategoryId}/edit', [ProductSubCategoryFormController::class, 'edit'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.edit');
+        Route::put('product-sub-categories/{subCategoryId}', [ProductSubCategoryFormController::class, 'update'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.update');
+        Route::get('supplier-categories/create', [SupplierCategoryFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.create');
+        Route::post('supplier-categories', [SupplierCategoryFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.store');
+        Route::get('supplier-categories/{supplierCategoryId}/edit', [SupplierCategoryFormController::class, 'edit'])
+            ->where('supplierCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.edit');
+        Route::put('supplier-categories/{supplierCategoryId}', [SupplierCategoryFormController::class, 'update'])
+            ->where('supplierCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.update');
+        Route::get('product-categories/create', [ProductCategoryFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.create');
+        Route::post('product-categories', [ProductCategoryFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.store');
+        Route::get('product-categories/{categoryId}/edit', [ProductCategoryFormController::class, 'edit'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.edit');
+        Route::put('product-categories/{categoryId}', [ProductCategoryFormController::class, 'update'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.update');
+
+        // Inventory create / edit ([ESB-035], S3) for the kinds the gateway
+        // edits: esb.invoke + <kind>.manage. Registered before the details,
+        // whose number pattern would also match "create".
+        foreach (array_filter(InventoryKind::cases(), static fn (InventoryKind $kind): bool => $kind->editable()) as $inventoryKind) {
+            $manage = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.InventoryPermissions::manage($inventoryKind)->value];
+
+            Route::get($inventoryKind->value.'/create', [InventoryDocumentFormController::class, 'create'])
+                ->defaults('kind', $inventoryKind->value)
+                ->middleware($manage)
+                ->name($inventoryKind->value.'.create');
+            Route::post($inventoryKind->value, [InventoryDocumentFormController::class, 'store'])
+                ->defaults('kind', $inventoryKind->value)
+                ->name($inventoryKind->value.'.store');
+            Route::get($inventoryKind->value.'/{number}/edit', [InventoryDocumentFormController::class, 'edit'])
+                ->defaults('kind', $inventoryKind->value)
+                ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                ->middleware($manage)
+                ->name($inventoryKind->value.'.edit');
+            Route::put($inventoryKind->value.'/{number}', [InventoryDocumentFormController::class, 'update'])
+                ->defaults('kind', $inventoryKind->value)
+                ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                ->name($inventoryKind->value.'.update');
+        }
+
+        // Inventory documents ([ESB-033], ADR-026): list and detail per kind.
+        // Authorization (esb.invoke) is on the form request for the lists and
+        // on the route for the details; the controller requires a digit in the
+        // number (literal vendor paths share the segment).
+        Route::get('goods-transfer-requests', [InventoryDocumentController::class, 'index'])
+            ->defaults('kind', 'goods-transfer-requests')
+            ->name('goods-transfer-requests.index');
+        Route::get('goods-transfer-requests/{number}', [InventoryDocumentController::class, 'show'])
+            ->defaults('kind', 'goods-transfer-requests')
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('goods-transfer-requests.show');
+        Route::get('goods-deliveries', [InventoryDocumentController::class, 'index'])
+            ->defaults('kind', 'goods-deliveries')
+            ->name('goods-deliveries.index');
+        Route::get('goods-deliveries/{number}', [InventoryDocumentController::class, 'show'])
+            ->defaults('kind', 'goods-deliveries')
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('goods-deliveries.show');
+        Route::get('goods-receipts', [InventoryDocumentController::class, 'index'])
+            ->defaults('kind', 'goods-receipts')
+            ->name('goods-receipts.index');
+        Route::get('goods-receipts/{number}', [InventoryDocumentController::class, 'show'])
+            ->defaults('kind', 'goods-receipts')
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('goods-receipts.show');
+        Route::get('item-journals', [InventoryDocumentController::class, 'index'])
+            ->defaults('kind', 'item-journals')
+            ->name('item-journals.index');
+        Route::get('item-journals/{number}', [InventoryDocumentController::class, 'show'])
+            ->defaults('kind', 'item-journals')
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('item-journals.show');
+        Route::get('simple-transfers', [InventoryDocumentController::class, 'index'])
+            ->defaults('kind', 'simple-transfers')
+            ->name('simple-transfers.index');
+        Route::get('simple-transfers/{number}', [InventoryDocumentController::class, 'show'])
+            ->defaults('kind', 'simple-transfers')
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('simple-transfers.show');
+
+        // Inventory writes ([ESB-034], S2), per kind: decisions need
+        // <kind>.approve (checked by the form request), delete needs
+        // <kind>.manage; both need esb.invoke. The controller requires a
+        // digit in the number, as for the detail.
+        foreach (InventoryKind::cases() as $inventoryKind) {
+            $manage = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.InventoryPermissions::manage($inventoryKind)->value];
+
+            Route::post($inventoryKind->value.'/{number}/decisions', [InventoryDocumentWriteController::class, 'decide'])
+                ->defaults('kind', $inventoryKind->value)
+                ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                ->name($inventoryKind->value.'.decisions.store');
+            Route::delete($inventoryKind->value.'/{number}', [InventoryDocumentWriteController::class, 'destroy'])
+                ->defaults('kind', $inventoryKind->value)
+                ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                ->middleware($manage)
+                ->name($inventoryKind->value.'.destroy');
+        }
+        // Inventory attachments ([ESB-036], S4): esb.invoke + <kind>.manage.
+        // POST, not PATCH: PHP parses multipart bodies only on POST.
+        foreach (array_filter(InventoryKind::cases(), static fn (InventoryKind $kind): bool => $kind->takesAttachments()) as $inventoryKind) {
+            $manage = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.InventoryPermissions::manage($inventoryKind)->value];
+
+            Route::post($inventoryKind->value.'/{number}/attachments', [InventoryAttachmentController::class, 'store'])
+                ->defaults('kind', $inventoryKind->value)
+                ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                ->middleware($manage)
+                ->name($inventoryKind->value.'.attachments.store');
+
+            if ($inventoryKind->attachmentsRemovable()) {
+                Route::delete($inventoryKind->value.'/{number}/attachments', [InventoryAttachmentController::class, 'destroy'])
+                    ->defaults('kind', $inventoryKind->value)
+                    ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+                    ->middleware($manage)
+                    ->name($inventoryKind->value.'.attachments.destroy');
+            }
+        }
+        Route::patch('goods-transfer-requests/{number}/finish', [InventoryDocumentWriteController::class, 'finish'])
+            ->defaults('kind', InventoryKind::GoodsTransferRequests->value)
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageGoodsTransferRequests->value])
+            ->name('goods-transfer-requests.finish');
+        Route::patch('goods-transfer-requests/{number}/reopen', [InventoryDocumentWriteController::class, 'reopen'])
+            ->defaults('kind', InventoryKind::GoodsTransferRequests->value)
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageGoodsTransferRequests->value])
+            ->name('goods-transfer-requests.reopen');
+        // Master data spreadsheet imports ([ESB-032], S4). esb.invoke here;
+        // the module's own manage permission is checked per kind by the
+        // controller and the form request. An unknown kind is a 404.
+        Route::get('imports/{kind}', [MasterDataImportController::class, 'create'])
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('imports.create');
+        Route::post('imports/{kind}', [MasterDataImportController::class, 'store'])
+            ->name('imports.store');
+
+        // Master data writes (TODO-modules.md §2, S2): esb.invoke and the
+        // module's own manage permission. One write per record at a time.
+        Route::delete('units/{uomId}', [UnitWriteController::class, 'destroy'])
+            ->where('uomId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.destroy');
+        Route::patch('units/{uomId}/restore', [UnitWriteController::class, 'restore'])
+            ->where('uomId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageUnits->value])
+            ->name('units.restore');
+        Route::delete('product-categories/{categoryId}', [ProductCategoryWriteController::class, 'destroy'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.destroy');
+        Route::patch('product-categories/{categoryId}/deactivate', [ProductCategoryWriteController::class, 'deactivate'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.deactivate');
+        Route::patch('product-categories/{categoryId}/restore', [ProductCategoryWriteController::class, 'restore'])
+            ->where('categoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductCategories->value])
+            ->name('product-categories.restore');
+        Route::delete('product-sub-categories/{subCategoryId}', [ProductSubCategoryWriteController::class, 'destroy'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.destroy');
+        Route::patch('product-sub-categories/{subCategoryId}/deactivate', [ProductSubCategoryWriteController::class, 'deactivate'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.deactivate');
+        Route::patch('product-sub-categories/{subCategoryId}/restore', [ProductSubCategoryWriteController::class, 'restore'])
+            ->where('subCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProductSubCategories->value])
+            ->name('product-sub-categories.restore');
+        Route::delete('supplier-categories/{supplierCategoryId}', [SupplierCategoryWriteController::class, 'destroy'])
+            ->where('supplierCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.destroy');
+        Route::patch('supplier-categories/{supplierCategoryId}/restore', [SupplierCategoryWriteController::class, 'restore'])
+            ->where('supplierCategoryId', '[1-9][0-9]{0,9}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageSupplierCategories->value])
+            ->name('supplier-categories.restore');
 
         // The account number shares the upstream segment with literal vendor
         // paths (/accounting/coa/export, /index, /tax), so it must start with a
@@ -140,6 +438,59 @@ Route::middleware('auth')->group(function () {
             ->where('coaNo', '[0-9][0-9A-Za-z._-]{0,31}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('coa-accounts.show');
+        Route::patch('coa-accounts/{coaNo}/deactivate', [CoaAccountWriteController::class, 'deactivate'])
+            ->where('coaNo', '[0-9][0-9A-Za-z._-]{0,31}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageCoa->value])
+            ->name('coa-accounts.deactivate');
+        Route::patch('coa-accounts/{coaNo}/restore', [CoaAccountWriteController::class, 'restore'])
+            ->where('coaNo', '[0-9][0-9A-Za-z._-]{0,31}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageCoa->value])
+            ->name('coa-accounts.restore');
+        Route::patch('coa-accounts/{coaNo}/move', [CoaAccountWriteController::class, 'move'])
+            ->where('coaNo', '[0-9][0-9A-Za-z._-]{0,31}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageCoa->value])
+            ->name('coa-accounts.move');
+
+        // [ESB-027]. Authorization (esb.invoke) is on the form request for the
+        // lists and on the route for the detail. The controller also requires
+        // a digit in the number: /pricelist/temp/export is a vendor path.
+        Route::get('pricelists', [PricelistController::class, 'index'])
+            ->name('pricelists.index');
+        Route::get('pricelists/temp', [PricelistController::class, 'tempIndex'])
+            ->name('pricelists.temp.index');
+        // Prices that help fill a pricelist ([ESB-032]); esb.invoke on the requests.
+        Route::get('pricelists/last-prices', [PricelistPriceController::class, 'lastPrices'])
+            ->name('pricelists.last-prices');
+        Route::get('pricelists/purchase-history', [PricelistPriceController::class, 'purchasePrices'])
+            ->name('pricelists.purchase-history');
+        // Proposing and editing pricelists ([ESB-031]).
+        Route::get('pricelists/create', [PricelistFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePricelists->value])
+            ->name('pricelists.create');
+        Route::post('pricelists', [PricelistFormController::class, 'store'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePricelists->value])
+            ->name('pricelists.store');
+        Route::get('pricelists/temp/{pricelistNum}/edit', [PricelistFormController::class, 'edit'])
+            ->where('pricelistNum', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePricelists->value])
+            ->name('pricelists.temp.edit');
+        Route::put('pricelists/temp/{pricelistNum}', [PricelistFormController::class, 'update'])
+            ->where('pricelistNum', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePricelists->value])
+            ->name('pricelists.temp.update');
+        Route::get('pricelists/temp/{pricelistNum}', [PricelistController::class, 'tempShow'])
+            ->where('pricelistNum', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('pricelists.temp.show');
+        // Authorization: esb.invoke + pricelists.approve on the form request
+        // for decisions; esb.invoke + pricelists.manage here for a delete.
+        Route::post('pricelists/temp/{pricelistNum}/decisions', [TempPricelistWriteController::class, 'decide'])
+            ->where('pricelistNum', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('pricelists.temp.decisions.store');
+        Route::delete('pricelists/temp/{pricelistNum}', [TempPricelistWriteController::class, 'destroy'])
+            ->where('pricelistNum', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePricelists->value])
+            ->name('pricelists.temp.destroy');
 
         // Read-only ESB Core document templates ([ESB-016]). Authorization
         // for the list is on its form request (esb.invoke). The id is

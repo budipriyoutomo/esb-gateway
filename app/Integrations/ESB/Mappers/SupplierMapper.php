@@ -103,6 +103,9 @@ class SupplierMapper
                 accountName: $this->nullableString($bank['bankAccountName'] ?? null),
                 maskedAccountNumber: $this->mask($bank['bankAccountNumber'] ?? null),
             )),
+            // Counted only: the files live in the ERP's storage, and whether the
+            // browser may open those URLs is undecided (TODO-modules §2.9).
+            attachmentCount: $this->attachmentCount($result['imageAttachments'] ?? null),
             products: $this->each($result['supplierProduct'] ?? null, fn (array $product) => new SupplierProduct(
                 productDetailId: $this->nullableId($product['productDetailID'] ?? null),
                 productName: $this->nullableString($product['productName'] ?? null),
@@ -155,5 +158,14 @@ class SupplierMapper
         }
 
         return array_values(array_map($map, array_filter($rows, 'is_array')));
+    }
+
+    private function attachmentCount(mixed $attachments): int
+    {
+        if (! is_array($attachments)) {
+            return 0;
+        }
+
+        return count(array_filter($attachments, static fn (mixed $url): bool => is_string($url) && trim($url) !== ''));
     }
 }

@@ -1,7 +1,14 @@
 import { Head, Link } from '@inertiajs/react';
+import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
-import { index as unitsIndex, show as unitsShow } from '@/routes/units';
+import { Button } from '@/components/ui/button';
+import { usePermissions } from '@/hooks/use-permissions';
+import {
+    index as unitsIndex,
+    show as unitsShow,
+    create as createRoute,
+} from '@/routes/units';
 import type { UnitOfMeasureSummary } from '@/types/master-data';
 import type { Pagination } from '@/types/pagination';
 
@@ -12,11 +19,26 @@ type Props = {
 };
 
 export default function UnitsIndex({ units, pagination, filters }: Props) {
+    const { can } = usePermissions();
+
     return (
         <>
             <Head title="Units" />
 
             <ReferenceDataIndex
+                actions={
+                    can('esb.invoke') && can('units.manage') ? (
+                        <>
+                            <ImportLinks
+                                canImport
+                                imports={[{ kind: 'units', label: 'Import' }]}
+                            />
+                            <Button asChild>
+                                <Link href={createRoute()}>New unit</Link>
+                            </Button>
+                        </>
+                    ) : undefined
+                }
                 id="units"
                 title="Units"
                 description="Units of measure, read live from the ERP."

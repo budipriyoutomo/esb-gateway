@@ -165,6 +165,86 @@ class LookupTest extends TestCase
         $this->lookup('statuses')->assertOk()->assertJsonCount(3, 'options');
     }
 
+    #[Test]
+    public function metrics_category_types_and_taxes_come_from_their_common_lists(): void
+    {
+        Http::fake([
+            '*/common/metrics*' => Http::response(CoreLookup::listResponse(CoreLookup::metrics(), '/common/metrics')),
+            '*/common/category-types/list*' => Http::response(CoreLookup::listResponse(CoreLookup::categoryTypes(), '/common/category-types/list')),
+            '*/tax/list*' => Http::response(CoreLookup::listResponse(CoreLookup::taxes(), '/tax/list')),
+        ]);
+
+        $this->lookup('metrics')->assertOk()->assertJsonCount(2, 'options');
+        $this->lookup('category-types')->assertOk()->assertJsonPath('options.1.label', 'Asset');
+        $this->lookup('taxes', ['search' => 'pb'])->assertOk()
+            ->assertJsonPath('options', [['value' => '3', 'label' => 'PB1', 'code' => null, 'meta' => ['rate' => 10]]]);
+    }
+
+    #[Test]
+    public function product_reference_lists_come_from_their_whole_lists(): void
+    {
+        $sent = [];
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent[] = parse_url($request->url(), PHP_URL_PATH).'?'.http_build_query(self::sentQuery($request));
+
+            return match (true) {
+                str_contains($request->url(), '/product/category/all') => Http::response(CoreLookup::listResponse(CoreLookup::productCategories(), '/product/category/all')),
+                str_contains($request->url(), '/product/sub-category/all') => Http::response(CoreLookup::listResponse(CoreLookup::productSubCategories(), '/product/sub-category/all')),
+                str_contains($request->url(), '/units/list') => Http::response(CoreLookup::listResponse(CoreLookup::units(), '/units/list')),
+                default => Http::response(CoreLookup::listResponse(CoreLookup::currencies(), '/common/currency/active')),
+            };
+        });
+
+        $this->lookup('product-categories')->assertOk()->assertJsonCount(2, 'options');
+        $this->lookup('product-sub-categories')->assertOk()->assertJsonCount(1, 'options');
+        $this->lookup('units', ['search' => 'sa'])->assertOk()->assertJsonPath('options.0.label', 'SAK');
+        $this->lookup('currencies')->assertOk()->assertJsonPath('options.1.code', 'USD');
+
+        $this->assertSame([
+            '/core-int/product/category/all?',
+            '/core-int/product/sub-category/all?flagActive=1',
+            '/core-int/units/list?flagActive=1',
+            '/core-int/common/currency/active?',
+        ], $sent);
+    }
+
+    #[Test]
+    public function product_details_are_searched_by_name_in_the_erp(): void
+    {
+        $sent = null;
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent = self::sentQuery($request);
+
+            return Http::response(CoreLookup::pageResponse(CoreLookup::productDetails(), 30, 1, 20, '/product-detail/browse'));
+        });
+
+        $this->lookup('product-details', ['search' => 'beras'])
+            ->assertOk()
+            ->assertJsonPath('options.0.value', '501')
+            ->assertJsonPath('hasMore', true);
+
+        $this->assertSame(['productName' => 'beras', 'page' => '1', 'limit' => '20'], $sent);
+    }
+
+    #[Test]
+    public function active_purposes_are_searched_by_name_in_the_erp(): void
+    {
+        $sent = null;
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent = self::sentQuery($request);
+
+            return Http::response(CoreLookup::pageResponse(CoreLookup::purposes(), 2, 1, 20, '/purpose'));
+        });
+
+        $this->lookup('purposes', ['search' => 'waste'])
+            ->assertOk()
+            ->assertJsonPath('options.0.value', '7')
+            ->assertJsonCount(1, 'options')
+            ->assertJsonPath('hasMore', false);
+
+        $this->assertSame(['purposeName' => 'waste', 'flagActive' => '1', 'page' => '1', 'limit' => '20'], $sent);
+    }
+
     // ------------------------------------------------------ ESB-paginated kinds
 
     #[Test]

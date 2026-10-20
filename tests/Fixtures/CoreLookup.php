@@ -108,6 +108,110 @@ final class CoreLookup
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    public static function metrics(): array
+    {
+        return [
+            ['metricID' => 1, 'metricName' => 'Weight'],
+            ['metricID' => 2, 'metricName' => 'Volume'],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function categoryTypes(): array
+    {
+        return [
+            ['categoryTypeID' => 1, 'categoryTypeName' => 'Inventory'],
+            ['categoryTypeID' => 2, 'categoryTypeName' => 'Asset'],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function taxes(): array
+    {
+        return [
+            ['taxID' => 1, 'taxName' => 'PPN 11%', 'taxRate' => 11, 'flagActive' => true, 'coaNo' => '2101', 'coaDescription' => 'PPN Keluaran', 'flagCustoms' => false],
+            ['taxID' => 2, 'taxName' => 'PPN Lama', 'taxRate' => 10, 'flagActive' => false, 'coaNo' => '', 'coaDescription' => '', 'flagCustoms' => false],
+            ['taxID' => 3, 'taxName' => 'PB1', 'taxRate' => 10, 'flagActive' => true, 'coaNo' => '', 'coaDescription' => '', 'flagCustoms' => false],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function productCategories(): array
+    {
+        return [
+            ['categoryID' => 3, 'categoryCode' => 'BB', 'categoryName' => 'Bahan Baku', 'categoryTypeID' => 1, 'flagActive' => 1],
+            ['categoryID' => 4, 'categoryCode' => 'OLD', 'categoryName' => 'Lama', 'categoryTypeID' => 1, 'flagActive' => 0],
+            ['categoryID' => 5, 'categoryCode' => '', 'categoryName' => 'Kemasan', 'categoryTypeID' => 1, 'flagActive' => 1],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function productSubCategories(): array
+    {
+        return [
+            ['subCategoryID' => 7, 'subCategoryName' => 'Beras', 'deadStockThreshold' => 90, 'flagActive' => 1, 'notes' => ''],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function units(): array
+    {
+        return [
+            ['uomID' => 4, 'uomName' => 'KG'],
+            ['uomID' => 9, 'uomName' => 'SAK'],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function currencies(): array
+    {
+        return [
+            ['currencyID' => 1, 'currencyName' => 'Rupiah', 'currencySign' => 'IDR'],
+            ['currencyID' => 2, 'currencyName' => 'US Dollar', 'currencySign' => 'USD'],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function productDetails(): array
+    {
+        return [
+            ['productDetailID' => 501, 'productID' => 50, 'productCode' => 'BB-001', 'productName' => 'Beras Premium', 'qty' => 1, 'uomID' => 4, 'uomName' => 'KG'],
+            ['productDetailID' => 502, 'productID' => 50, 'productCode' => 'BB-001', 'productName' => 'Beras Premium', 'qty' => 25, 'uomID' => 9, 'uomName' => 'SAK'],
+        ];
+    }
+
+    /**
+     * GET /purpose rows (paginated). purposeAppliedTo lists where a purpose
+     * may be used; its values are undocumented, so the gateway does not
+     * filter on it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function purposes(): array
+    {
+        return [
+            ['flagActive' => true, 'purposeAccount' => 'Beban Lain-lain', 'purposeAppliedTo' => ['Item Journal'], 'purposeCoaNo' => '6101', 'purposeID' => 7, 'purposeName' => 'Waste'],
+            ['flagActive' => false, 'purposeAccount' => '', 'purposeAppliedTo' => [], 'purposeCoaNo' => '', 'purposeID' => 8, 'purposeName' => 'Old purpose'],
+        ];
+    }
+
+    /**
      * An "all rows, no pagination" response.
      *
      * @param  list<array<string, mixed>>  $rows

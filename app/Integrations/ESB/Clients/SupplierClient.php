@@ -70,4 +70,49 @@ class SupplierClient implements SupplierSource
 
         return $this->mapper->fromDetail($envelope->resultArray());
     }
+
+    /**
+     * The vendor's DELETE deactivates; it answers a conflict while the
+     * supplier has ongoing transactions.
+     *
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/supplier-supplierID/delete
+     */
+    public function deactivateSupplier(int $id): void
+    {
+        $this->client->delete(self::FAMILY, self::PATH.'/'.$id, operation: 'supplier.deactivate');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/supplier-supplierID--restore/patch
+     */
+    public function restoreSupplier(int $id): void
+    {
+        $this->client->patch(self::FAMILY, self::PATH.'/'.$id.'/restore', operation: 'supplier.restore');
+    }
+
+    /**
+     * @param  list<array{contents: string, filename: string}>  $files
+     *
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/supplier-supplierID--attachment/patch
+     */
+    public function attachFiles(int $id, array $files): void
+    {
+        $this->client->uploadFiles(self::FAMILY, '/supplier/'.$id.'/attachment', 'files', $files, method: 'PATCH', operation: 'supplier.attach');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/supplier-supplierID--attachment/delete
+     */
+    public function deleteAttachments(int $id): void
+    {
+        $this->client->delete(self::FAMILY, '/supplier/'.$id.'/attachment', operation: 'supplier.detach');
+    }
 }

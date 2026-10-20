@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Mappers;
 
 use App\Domain\Canonical\ProductSubCategory;
+use App\Domain\Canonical\ProductSubCategoryDraft;
 use App\Domain\Canonical\ProductSubCategorySummary;
 use App\Integrations\ESB\Clients\ProductSubCategoryClient;
 use App\Integrations\ESB\Mappers\Concerns\ReadsEsbValues;
@@ -64,5 +65,20 @@ class ProductSubCategoryMapper
             editedBy: $this->nullableString($result['editedBy'] ?? null),
             editedAt: $this->nullableString($result['editedDate'] ?? null),
         );
+    }
+
+    /**
+     * The body of POST /product/sub-category and PUT .../{subCategoryID}.
+     * flagActive is not sent: deactivate / restore change it.
+     *
+     * @return array<string, int|string>
+     */
+    public function requestFrom(ProductSubCategoryDraft $draft): array
+    {
+        return [
+            'subCategoryName' => $draft->name,
+            'deadStockThreshold' => $draft->deadStockDays,
+            'notes' => $draft->notes ?? '',
+        ];
     }
 }

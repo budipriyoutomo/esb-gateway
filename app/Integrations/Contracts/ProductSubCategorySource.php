@@ -3,6 +3,7 @@
 namespace App\Integrations\Contracts;
 
 use App\Domain\Canonical\ProductSubCategory;
+use App\Domain\Canonical\ProductSubCategoryDraft;
 use App\Domain\Canonical\ProductSubCategoryPage;
 use App\Domain\Canonical\ProductSubCategoryQuery;
 use App\Integrations\ESB\Exceptions\EsbException;
@@ -25,4 +26,39 @@ interface ProductSubCategorySource extends OutboundAdapter
      * @throws EsbException a not-found refusal surfaces as EsbNotFoundException
      */
     public function findSubCategory(int $id): ?ProductSubCategory;
+
+    /**
+     * Delete a product sub-category. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function deleteSubCategory(int $id): void;
+
+    /**
+     * Set a product sub-category inactive. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function deactivateSubCategory(int $id): void;
+
+    /**
+     * Reactivate a deactivated product sub-category. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function restoreSubCategory(int $id): void;
+
+    /**
+     * Create one. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function createSubCategory(ProductSubCategoryDraft $draft): void;
+
+    /**
+     * Replace one with the draft. One attempt.
+     *
+     * @throws EsbException a not-found refusal surfaces as EsbNotFoundException
+     */
+    public function updateSubCategory(int $id, ProductSubCategoryDraft $draft): void;
 }

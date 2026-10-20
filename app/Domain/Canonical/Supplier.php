@@ -43,6 +43,7 @@ readonly class Supplier implements JsonSerializable
         public array $contacts = [],
         public array $bankAccounts = [],
         public array $products = [],
+        public int $attachmentCount = 0,
         public ?string $createdBy = null,
         public ?string $createdAt = null,
         public ?string $editedBy = null,

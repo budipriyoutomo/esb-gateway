@@ -76,6 +76,64 @@ class LookupMapperTest extends TestCase
     }
 
     #[Test]
+    public function metrics_and_category_types_are_keyed_by_their_id(): void
+    {
+        $metric = $this->map(LookupKind::Metrics, CoreLookup::metrics())[1];
+        $type = $this->map(LookupKind::CategoryTypes, CoreLookup::categoryTypes())[0];
+
+        $this->assertEquals(new LookupOption(value: '2', label: 'Volume'), $metric);
+        $this->assertEquals(new LookupOption(value: '1', label: 'Inventory'), $type);
+    }
+
+    #[Test]
+    public function only_active_taxes_are_offered_with_their_rate(): void
+    {
+        $options = $this->map(LookupKind::Taxes, CoreLookup::taxes());
+
+        $this->assertSame(['1', '3'], array_map(fn (LookupOption $o) => $o->value, $options));
+        $this->assertSame('PPN 11%', $options[0]->label);
+        $this->assertSame(['rate' => 11], $options[0]->meta);
+    }
+
+    #[Test]
+    public function only_active_product_categories_are_offered(): void
+    {
+        $options = $this->map(LookupKind::ProductCategories, CoreLookup::productCategories());
+
+        $this->assertEquals(
+            [new LookupOption(value: '3', label: 'Bahan Baku', code: 'BB'), new LookupOption(value: '5', label: 'Kemasan')],
+            $options,
+        );
+    }
+
+    #[Test]
+    public function sub_categories_units_and_currencies_are_keyed_by_their_id(): void
+    {
+        $this->assertEquals(new LookupOption(value: '7', label: 'Beras'), $this->map(LookupKind::ProductSubCategories, CoreLookup::productSubCategories())[0]);
+        $this->assertEquals(new LookupOption(value: '9', label: 'SAK'), $this->map(LookupKind::Units, CoreLookup::units())[1]);
+        $this->assertEquals(new LookupOption(value: '1', label: 'Rupiah', code: 'IDR'), $this->map(LookupKind::Currencies, CoreLookup::currencies())[0]);
+    }
+
+    #[Test]
+    public function a_product_detail_is_one_product_in_one_unit(): void
+    {
+        $option = $this->map(LookupKind::ProductDetails, CoreLookup::productDetails())[1];
+
+        $this->assertSame('502', $option->value);
+        $this->assertSame('Beras Premium', $option->label);
+        $this->assertSame('BB-001', $option->code);
+        $this->assertSame(['productId' => 50, 'uomName' => 'SAK'], $option->meta);
+    }
+
+    #[Test]
+    public function a_purpose_shows_its_account_and_inactive_ones_are_dropped(): void
+    {
+        $options = $this->map(LookupKind::Purposes, CoreLookup::purposes());
+
+        $this->assertEquals([new LookupOption(value: '7', label: 'Waste', code: '6101')], $options);
+    }
+
+    #[Test]
     public function rows_without_an_id_or_a_label_are_dropped(): void
     {
         // The vendor's examples are zero-valued: 0 / "" mean "not there".

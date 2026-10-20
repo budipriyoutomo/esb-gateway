@@ -55,6 +55,10 @@ enum AuditAction: string
      */
     case PurchaseRequestsImported = 'purchase-request.imported';
 
+    case MasterDataImported = 'master-data.imported';
+
+    case MasterDataImportUnconfirmed = 'master-data.import-unconfirmed';
+
     /**
      * A create, update, delete, or import was sent but the ESB gave no
      * definite answer. The metadata names the operation and carries the
@@ -117,6 +121,193 @@ enum AuditAction: string
      * correlation id needed to trace it.
      */
     case SimplePurchaseWriteUnconfirmed = 'simple-purchase.write-unconfirmed';
+
+    /**
+     * A master data record was deleted, deactivated, or restored in the ERP
+     * through the gateway (TODO-modules.md §2, S2). The ERP sees the shared
+     * service credential, so these rows are the record of which person did
+     * it. `*.write-unconfirmed` means the ESB gave no definite answer; its
+     * metadata names the operation and carries the correlation id.
+     */
+    case UnitDeleted = 'unit.deleted';
+
+    case UnitRestored = 'unit.restored';
+
+    case UnitCreated = 'unit.created';
+
+    case UnitUpdated = 'unit.updated';
+
+    case UnitWriteUnconfirmed = 'unit.write-unconfirmed';
+
+    case ProductCategoryDeleted = 'product-category.deleted';
+
+    case ProductCategoryDeactivated = 'product-category.deactivated';
+
+    case ProductCategoryRestored = 'product-category.restored';
+
+    case ProductCategoryCreated = 'product-category.created';
+
+    case ProductCategoryUpdated = 'product-category.updated';
+
+    case ProductCategoryWriteUnconfirmed = 'product-category.write-unconfirmed';
+
+    case ProductSubCategoryDeleted = 'product-sub-category.deleted';
+
+    case ProductSubCategoryDeactivated = 'product-sub-category.deactivated';
+
+    case ProductSubCategoryRestored = 'product-sub-category.restored';
+
+    case ProductSubCategoryCreated = 'product-sub-category.created';
+
+    case ProductSubCategoryUpdated = 'product-sub-category.updated';
+
+    case ProductSubCategoryWriteUnconfirmed = 'product-sub-category.write-unconfirmed';
+
+    case SupplierCategoryDeleted = 'supplier-category.deleted';
+
+    case SupplierCategoryRestored = 'supplier-category.restored';
+
+    case SupplierCategoryCreated = 'supplier-category.created';
+
+    case SupplierCategoryUpdated = 'supplier-category.updated';
+
+    case SupplierCategoryWriteUnconfirmed = 'supplier-category.write-unconfirmed';
+
+    case SupplierDeactivated = 'supplier.deactivated';
+
+    case SupplierRestored = 'supplier.restored';
+
+    case SupplierAttachmentsUploaded = 'supplier.attachments-uploaded';
+
+    case SupplierAttachmentsDeleted = 'supplier.attachments-deleted';
+
+    case SupplierWriteUnconfirmed = 'supplier.write-unconfirmed';
+
+    /**
+     * A COA account (and, by the vendor's rule, its active sub-accounts) was
+     * deactivated or restored.
+     */
+    case CoaDeactivated = 'coa.deactivated';
+
+    case CoaRestored = 'coa.restored';
+
+    case CoaMoved = 'coa.moved';
+
+    case CoaWriteUnconfirmed = 'coa.write-unconfirmed';
+
+    /**
+     * A temporary pricelist was authorized (its prices became active and
+     * the proposal was removed), rejected, or deleted in the ERP.
+     */
+    case PricelistAuthorized = 'pricelist.authorized';
+
+    case PricelistRejected = 'pricelist.rejected';
+
+    case PricelistDeleted = 'pricelist.deleted';
+
+    case PricelistCreated = 'pricelist.created';
+
+    case PricelistUpdated = 'pricelist.updated';
+
+    case PricelistWriteUnconfirmed = 'pricelist.write-unconfirmed';
+
+    case ProductDeleted = 'product.deleted';
+
+    case ProductRestored = 'product.restored';
+
+    case ProductCreated = 'product.created';
+
+    case ProductUpdated = 'product.updated';
+
+    case ProductWriteUnconfirmed = 'product.write-unconfirmed';
+
+    /**
+     * An inventory document was authorized, rejected, or deleted in the ERP
+     * through the gateway (TODO-modules.md §3, S2), or -- a goods transfer
+     * request -- finished or reopened. The ERP records the gateway's
+     * credential, so this row is the record of the person. A write the ESB
+     * did not confirm is *.write-unconfirmed with the operation and the
+     * correlation id.
+     */
+    case GoodsTransferRequestAuthorized = 'goods-transfer-request.authorized';
+
+    case GoodsTransferRequestRejected = 'goods-transfer-request.rejected';
+
+    case GoodsTransferRequestDeleted = 'goods-transfer-request.deleted';
+
+    case GoodsTransferRequestFinished = 'goods-transfer-request.finished';
+
+    case GoodsTransferRequestReopened = 'goods-transfer-request.reopened';
+
+    case GoodsTransferRequestWriteUnconfirmed = 'goods-transfer-request.write-unconfirmed';
+
+    /**
+     * An inventory document was created or replaced through the gateway
+     * (S3, [ESB-035]). The metadata carries the number (when the ERP gave
+     * one) and how many lines, never the lines themselves.
+     */
+    case GoodsTransferRequestCreated = 'goods-transfer-request.created';
+
+    case GoodsTransferRequestUpdated = 'goods-transfer-request.updated';
+
+    case ItemJournalCreated = 'item-journal.created';
+
+    case ItemJournalUpdated = 'item-journal.updated';
+
+    case SimpleTransferCreated = 'simple-transfer.created';
+
+    case SimpleTransferUpdated = 'simple-transfer.updated';
+
+    /**
+     * Files were attached to, or every attachment removed from, an inventory
+     * document (S4, [ESB-036]). The metadata names each file with its size
+     * and SHA-256, never its contents.
+     */
+    case GoodsTransferRequestAttachmentsUploaded = 'goods-transfer-request.attachments-uploaded';
+
+    case GoodsTransferRequestAttachmentsDeleted = 'goods-transfer-request.attachments-deleted';
+
+    case GoodsDeliveryAttachmentsUploaded = 'goods-delivery.attachments-uploaded';
+
+    case GoodsDeliveryAttachmentsDeleted = 'goods-delivery.attachments-deleted';
+
+    case ItemJournalAttachmentsUploaded = 'item-journal.attachments-uploaded';
+
+    case ItemJournalAttachmentsDeleted = 'item-journal.attachments-deleted';
+
+    case SimpleTransferAttachmentsUploaded = 'simple-transfer.attachments-uploaded';
+
+    case GoodsDeliveryAuthorized = 'goods-delivery.authorized';
+
+    case GoodsDeliveryRejected = 'goods-delivery.rejected';
+
+    case GoodsDeliveryDeleted = 'goods-delivery.deleted';
+
+    case GoodsDeliveryWriteUnconfirmed = 'goods-delivery.write-unconfirmed';
+
+    case GoodsReceiptAuthorized = 'goods-receipt.authorized';
+
+    case GoodsReceiptRejected = 'goods-receipt.rejected';
+
+    case GoodsReceiptDeleted = 'goods-receipt.deleted';
+
+    case GoodsReceiptWriteUnconfirmed = 'goods-receipt.write-unconfirmed';
+
+    case ItemJournalAuthorized = 'item-journal.authorized';
+
+    case ItemJournalRejected = 'item-journal.rejected';
+
+    case ItemJournalDeleted = 'item-journal.deleted';
+
+    case ItemJournalWriteUnconfirmed = 'item-journal.write-unconfirmed';
+
+    case SimpleTransferAuthorized = 'simple-transfer.authorized';
+
+    case SimpleTransferRejected = 'simple-transfer.rejected';
+
+    case SimpleTransferDeleted = 'simple-transfer.deleted';
+
+    case SimpleTransferWriteUnconfirmed = 'simple-transfer.write-unconfirmed';
 
     /**
      * A document template was created in the ERP through the gateway. The

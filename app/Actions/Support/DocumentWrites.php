@@ -2,6 +2,7 @@
 
 namespace App\Actions\Support;
 
+use App\Audit\AuditAction;
 use App\Domain\Canonical\ApprovalDecision;
 use App\Integrations\ESB\Exceptions\EsbException;
 use App\Models\AuditLog;
@@ -64,23 +65,48 @@ class DocumentWrites
      */
     public function delete(ApprovableDocument $document, string $provider, string $number, Closure $write): void
     {
+        $this->transition($document, $provider, $number, 'delete', $document->deleted, $write);
+    }
+
+    /**
+     * Any other one-shot state change on an existing document -- e.g.
+     * finishing a goods transfer request -- under the same lock as its
+     * decisions and delete.
+     *
+     * @param  string  $operation  Recorded on an unconfirmed write, e.g. "finish".
+     * @param  Closure(): void  $write
+     * @param  array<string, mixed>  $detail  Audited with the write, e.g. the files attached.
+     *
+     * @throws WriteAlreadyInFlight when another write on this document is still running
+     * @throws EsbException when the ESB call fails; see mayHaveBeenApplied()
+     */
+    public function transition(
+        ApprovableDocument $document,
+        string $provider,
+        string $number,
+        string $operation,
+        AuditAction $audit,
+        Closure $write,
+        array $detail = [],
+    ): void {
         $this->guard->run(
             $document->lock($number),
             $write,
-            fn (EsbException $exception) => $this->recordUnconfirmed($document, $provider, 'delete', $number, $exception),
+            fn (EsbException $exception) => $this->recordUnconfirmed($document, $provider, $operation, $number, $exception),
         );
 
         AuditLog::record(
-            action: $document->deleted,
+            action: $audit,
             metadata: [
                 'provider' => $provider,
                 'number' => $number,
+                ...$detail,
             ],
         );
     }
 
     /**
-     * @param  'authorize'|'reject'|'delete'  $operation
+     * @param  string  $operation  'authorize', 'reject', 'delete', or a transition's name
      */
     private function recordUnconfirmed(
         ApprovableDocument $document,

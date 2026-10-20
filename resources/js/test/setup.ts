@@ -15,3 +15,13 @@ vi.mock('@inertiajs/react', async (importOriginal) => ({
 afterEach(() => {
     cleanup();
 });
+
+// jsdom has no ResizeObserver; Radix primitives (Checkbox) measure
+// themselves with one. Nothing a test asserts depends on the sizes.
+if (!('ResizeObserver' in globalThis)) {
+    globalThis.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+}

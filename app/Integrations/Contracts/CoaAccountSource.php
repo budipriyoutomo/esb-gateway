@@ -26,4 +26,28 @@ interface CoaAccountSource extends OutboundAdapter
      * @throws EsbException a not-found refusal surfaces as EsbNotFoundException
      */
     public function findAccount(string $coaNo): ?CoaAccount;
+
+    /**
+     * Deactivate an account and its active sub-accounts (the vendor's
+     * soft delete). One attempt.
+     *
+     * @throws EsbException
+     */
+    public function deactivateAccount(string $coaNo): void;
+
+    /**
+     * Reactivate a deactivated account. One attempt.
+     *
+     * @throws EsbException
+     */
+    public function restoreAccount(string $coaNo): void;
+
+    /**
+     * Move an account one place up or down among its siblings. One attempt.
+     *
+     * @param  'up'|'down'  $direction
+     *
+     * @throws EsbException
+     */
+    public function moveAccount(string $coaNo, string $direction): void;
 }

@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-10-19
+2026-10-20
 
 ## Current Phase
 
@@ -1389,6 +1389,87 @@ vendor documents as a read the GET retry policy. Opt-in per operation; never inf
   pass. `pint --test` — pass. `phpstan` — same 2 pre-existing errors.
 - Not run against a real ESB; not checked in a browser.
 
+## Update 2026-10-19 — Master data S1, part 2 (`TODO-modules.md` P8)
+
+**Selesai** (test-first; RED = missing classes / routes / pages)
+
+- `[ESB-024]` Suppliers (`/suppliers`): list + detail with contacts, bank accounts and
+  supplier product codes from one detail call. `SupplierMapper` keeps only the last four
+  digits of an account number; a test asserts the full number never reaches the page.
+- `[ESB-025]` Chart of accounts (`/coa-accounts`): `GET /accounting/coa` (all active,
+  unpaginated) sorted by `orderList`, searched / level-filtered / paged (50) in the
+  gateway (`CoaAccountPage::fromChart`); detail with mapping rows. Route allows
+  `[0-9][0-9A-Za-z._-]{0,31}` only — tested against `export`, `index`, `tax`.
+- `[ESB-026]` Product detail (`/products/{id}`): `ProductSource::findProduct()`,
+  `ProductDetail` + `ProductUnit`; product names in the list now link to it.
+  `ProductMapper` now uses `ReadsEsbValues` (its identical private copies removed).
+- `[ESB-027]` Pricelists (`/pricelists`, `/pricelists/temp`,
+  `/pricelists/temp/{number}`): active prices, proposed pricelists (status 38/2),
+  proposed detail with current vs proposed price. `BranchScope` for
+  `applicableBranch`. The controller requires a digit in the number
+  (`/pricelist/temp/export`).
+- Sidebar (Master data): Suppliers, Pricelist, Chart of accounts.
+
+**Not built (blocked)**
+
+- `[ESB-028]` Payment method — documented only. HTTP Basic "backend" credential (not
+  ADR-009's bearer token) and a response without the ESB envelope. Needs an ADR for a
+  second credential + non-envelope handling, the credential from the ESB team, and a
+  staging-int host for the `pos` family. `[!]` in TODO §2.8.
+- Active pricelist detail: list `ID` vs detail `pricelistID` undocumented. `[!]` §2.5.
+
+**Assumptions / TBD**
+
+- Supplier bank numbers masked (business decision pending). COA: active only, no parent;
+  `branchID` 0 = all branches. Unknown ids → `EC03100004` → 404 everywhere (assumed).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 981 tests (4818 assertions).
+- `npm run test:ui` — pass, 21 files, 158 tests. `tsc`, `vp check`, `npm run build`,
+  `pint --test` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-19 — Master data S2: state changes (`TODO-modules.md` P9a, `[ESB-029]`)
+
+P9 was split: **P9a** S2 (this), **P9b** S3 create / update, **P9c** S4 import / export.
+
+**Selesai** (test-first; RED = missing classes / routes / props)
+
+- Shared: `App\Actions\Support\RecordWrites` + `MasterRecord` + `RecordOperation` +
+  `RecordInUse` (one write per record, one attempt, audit, unconfirmed audit with
+  correlation id); `App\Http\Controllers\Concerns\HandlesRecordWrites` (toast + redirect,
+  up to three ERP `errors[]` reasons shown, delete → list, else → record);
+  `components/record-actions.tsx` (+ `warnings`), `ReferenceDataShow` gains `actions`.
+  Tests: `RecordWritesTest`, `HandlesRecordWritesTest`, base
+  `tests/Feature/MasterData/MasterDataWriteTestCase.php` (permission, one write,
+  audit, timeout not retried + unconfirmed, refusal reasons, lock, 404, route ids).
+- Modules (each `<X>Writes` action + `<X>WriteController` + routes + page actions):
+  units (delete / restore; `hardDelete` audited), product categories and
+  sub-categories (delete / deactivate / restore), supplier categories (delete with the
+  `check-delete` pre-check *outside* the lock / restore), suppliers and COA accounts
+  (deactivate = vendor DELETE / restore; COA warns about sub-accounts), products
+  (delete / restore).
+- Temporary pricelists: authorize / reject / delete on `DocumentWrites` +
+  `ApprovalActions`; decisions only for status 38. `HandlesDocumentWrites::decisionOutcome`
+  takes `authorizeConsumesDocument` (authorize removes the proposal → land on the list).
+- Permissions (Super Admin only): `units.manage`, `product-categories.manage`,
+  `product-sub-categories.manage`, `supplier-categories.manage`, `suppliers.manage`,
+  `coa.manage`, `products.manage`, `pricelists.approve`, `pricelists.manage` — PHP enum,
+  `permissions.ts`, `docs/06`. New audit actions in `AuditAction`.
+
+**Tersisa / blocked**
+
+- Temporary-product authorize / reject (`[!]` §2.1). P9b (create / update) and P9c.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1108 passed, 25 skipped (operations a module does not
+  offer, from the shared data provider), 5305 assertions.
+- `npm run test:ui` — pass, 22 files, 169 tests. `tsc`, `vp check`, `npm run build`,
+  `pint --test` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
 ## Known Unknowns / TBD
 
 Resolved by the 2026-09-09 contract import:
@@ -1462,3 +1543,200 @@ When changing phase or completing a major feature, update this file with:
 - next tasks;
 - known issues;
 - relevant decisions.
+
+## Update 2026-10-19 — Master data S3 batch 1: create / update (`TODO-modules.md` P9b, `[ESB-030]`)
+
+P9 is now P9a (S2), **P9b** (S3 batch 1, this), P9c (S3 batch 2: supplier, COA,
+product, pricelist), P9d (S4).
+
+**Selesai** (test-first; RED = missing trait / methods / routes / pages)
+
+- Lookups `[ESB-019]` gain `metrics`, `category-types`, `taxes` (active only, rate in
+  `meta`).
+- Shared: `RecordOperation::Create|Update`; `MasterRecord::createLock()` (per person);
+  `RecordWrites::create()` (returns and audits the new id when the ERP gives one);
+  `HandlesRecordForms::recordSaveOutcome()` (ERP field errors → form fields via a
+  field map, else `form`; create → record or list, update → record; unconfirmed →
+  warning with reference). Frontend `components/record-form.tsx` (`RecordForm`,
+  `RecordFormField`, unsaved-changes warning); `RecordActions` gains `editUrl`;
+  `ReferenceDataIndex` gains `actions` ("New …" button). Test setup stubs
+  `ResizeObserver` for Radix Checkbox.
+- Modules: units (metric + tax pickers), product sub-categories, supplier categories
+  (create returns the id), product categories (type + seven COA pickers, every field
+  sent). Each: `<X>Draft`, mapper `requestFrom()`, contract + client create/update,
+  `Save<X>Request`, `<X>FormController`, routes, `pages/<module>/form.tsx`.
+- Tests: `tests/Feature/MasterData/MasterDataFormTestCase.php` (permission, empty
+  create page, edit prefill, 404, one POST/PUT with the vendor body + audit, invalid
+  input never sent, ERP field errors on the form, timed-out create not retried +
+  unconfirmed audit) + one per module; `HandlesRecordFormsTest`; `RecordWritesTest`
+  additions; page tests per form.
+
+**Tersisa / TBD**
+
+- `TBD`: unit update without `refTaxID` — clears the reference or not; sub-category
+  `PUT` without `flagActive` — resets it or not. P9c, P9d.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1163 passed, 25 skipped.
+- `npm run test:ui` — pass, 27 files, 183 tests. `vp check`, `npm run build`,
+  `pint` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-19 — Master data S3 batch 2 (`TODO-modules.md` P9c, `[ESB-031]`)
+
+**Selesai** (test-first; RED = missing kinds / routes / classes / pages)
+
+- Lookups: `product-categories` (inactive dropped), `product-sub-categories`, `units`,
+  `currencies`, `product-details` (paged, searched by name upstream).
+- Shared: `App\Actions\Support\CreatedRecord` (id + `pendingApproval`); `RecordWrites`
+  audits `pending_approval`; `HandlesRecordForms` toasts "waiting for approval" and lands
+  on the list; `RecordOperation::Move`.
+- Products: `ProductDraft` / `ProductUnitDraft`, `ProductMapper::requestFrom()` (carries
+  over BOM, CoreTax id, custom fields, unit menu / cubication from the current
+  product) and `createdFrom()` (`isTemp`); `ProductDetail` gains `coretaxCodeId`,
+  `customFields`, `ProductUnit` gains `menuId`, `cubication`. `SaveProductRequest`
+  (exactly one base unit, unique units), `ProductFormController` (reads first; a unit id
+  must be the product's own), `pages/products/form.tsx`, "New product" / "Edit".
+- Pricelists: `PricelistDraft(+Line)`, `PricelistWrites` (lock shared with
+  `TempPricelistDocument`), `SavePricelistRequest`, `PricelistFormController`,
+  `pages/pricelists/form.tsx` (supplier, currency, dates, branches or all, price lines);
+  `TempPricelist.currencyId`, `BranchScope.ids`. Create → proposals list.
+- COA: `PATCH /coa-accounts/{coaNo}/move` → `PATCH /accounting/coa/reorder`;
+  `components/move-actions.tsx` on the COA detail.
+
+**Tersisa / blocked**
+
+- `[!]` Supplier create / update (greeting, payment method, masked banks), COA create /
+  update (numbering, parent, currency id), active-pricelist edit (id ambiguity).
+- `TBD`: product `pushToGoApp`; "exactly one base unit" is an assumption. P9d (S4).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1197 passed, 25 skipped.
+- `npm run test:ui` — pass, 30 files, 191 tests. `vp check`, `tsc`, `npm run build`,
+  `pint` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-19 — Master data S4 (`TODO-modules.md` P9d, `[ESB-032]`)
+
+**Selesai** (test-first; RED = missing methods / routes / pages / modules)
+
+- `EsbClient::upload(..., method:)` and `uploadFiles()` (several files, one field, one
+  attempt).
+- Imports: `MasterDataImport` enum (9 kinds: label, extensions, queued),
+  `MasterDataImportSource` / `MasterDataImportClient`, `ImportMasterData` (lock
+  `master-data-import:{kind}:{user}`, audit with SHA-256 and COA counts),
+  `ImportMasterDataRequest` (permission per kind), `MasterDataImportController`,
+  `pages/imports/create.tsx`, `components/import-links.tsx` on the lists. The Excel checks
+  were extracted to `Http\Requests\Concerns\ValidatesExcelUpload` (second consumer, ADR-015);
+  the purchase request import uses it unchanged.
+- Pricelist helper prices: `PricelistSource::lastPrices()` / `purchasePrices()`,
+  `PurchasePrice`, JSON `GET /pricelists/last-prices` and `/pricelists/purchase-history`,
+  `lib/pricelist-prices.ts`, an "Active price" column and `PurchaseHistoryDialog` in the
+  pricelist form.
+- Supplier attachments: `Supplier.attachmentCount`, `SupplierWrites::attach()` /
+  `deleteAttachments()` (supplier write lock, `RecordOperation::Attach|Detach`),
+  `AttachSupplierFilesRequest`, `SupplierAttachmentController`,
+  `components/attachment-actions.tsx` on the detail.
+
+**Tersisa / blocked**
+
+- `[!]` Every ERP export (file URL in the ERP's storage; proxy vs gateway-made export
+  needs an ADR and ESB answers). Attachment files are counted only, for the same reason.
+- `TBD`: where users get the ERP import templates; attachment type / size limits.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1235 passed, 25 skipped.
+- `npm run test:ui` — pass, 34 files, 204 tests. `vp check`, `tsc`, `npm run build`,
+  `pint` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-20 — Inventory S1 (`TODO-modules.md` P10, `[ESB-033]`, ADR-026)
+
+**Selesai** (test-first; RED = missing classes / routes / pages)
+
+- ADR-026: one canonical shape for the five inventory documents. `InventoryKind` (label,
+  documented statuses, branch filter, free-text search), `InventoryDocumentSummary`,
+  `InventoryDocument` (+ `withOutstanding()`, `withStockUsed()`), `InventoryLine`,
+  `InventoryParty`, `InventoryLinkedDocument`, `InventoryDocumentQuery` / `Page`.
+- `InventoryDocumentSource` / `InventoryDocumentClient` / `InventoryDocumentMapper` (field
+  names per kind). Extra reads: goods delivery outstanding qty (only with a reference),
+  goods receipt and simple transfer stock check; their failure leaves the field empty.
+- `ListInventoryDocumentsRequest`, `InventoryDocumentController` (kind as route default;
+  number must contain a digit), routes `/{kind}` and `/{kind}/{number}` for
+  goods-transfer-requests, goods-deliveries, goods-receipts, item-journals,
+  simple-transfers. Pages `inventory/index.tsx` (search by number or free text, status,
+  branch, date range) and `inventory/show.tsx` (only the quantity columns the lines
+  have, stock-used warning, linked documents); `lib/inventory.ts`; "Inventory" sidebar
+  group.
+- Tests: `InventoryDocumentMapperTest`, `tests/Feature/Inventory/InventoryDocumentTestCase.php`
+  + one per kind, page tests; fixture `tests/Fixtures/CoreInventory.php`.
+- `phpunit.xml` sets `memory_limit=1G`: the whole suite crashed ("Premature end of PHP
+  process") at the 128M default in one process; Unit and Feature passed separately.
+
+**Tersisa / blocked**
+
+- Not read: GTR `POST /detail` (S3), item journal approval flow, receipt expirations /
+  assets, delivery multi-address. `[!]` refNum validity for delivery / receipt creates.
+  Next: P11 (Inventory S2–S4).
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1287 passed, 25 skipped.
+- `npm run test:ui` — pass, 36 files, 210 tests. `vp check`, `tsc`, `npm run build`,
+  `pint` — pass. `phpstan` — same 2 pre-existing errors.
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-20 — Inventory S2–S4 (`TODO-modules.md` P11, `[ESB-034]`–`[ESB-036]`)
+
+**Selesai** (test-first; RED = missing routes / permissions / classes / pages)
+
+- S2 `[ESB-034]`: authorize / reject / delete for all five inventory documents, finish /
+  reopen for goods transfer requests. `App\Actions\Inventory\{DecideInventoryDocument,
+  DeleteInventoryDocument, CompleteGoodsTransferRequest, InventoryDocuments}`,
+  `DocumentWrites::transition()` (+ audited detail), `InventoryDocumentWriteController`,
+  `DecideInventoryDocumentRequest`, `HandlesDocumentWrites::transitionOutcome()`.
+  Ten permissions `<kind>.approve` / `.manage` (+ `App\Authorization\InventoryPermissions`,
+  `permissions.ts`), Super Admin only; audit actions per document. Detail reads
+  `canEdit` / `canDelete` (transfer requests). UI: `ApprovalActions` (optional reject
+  reason), new `ConfirmAction`; transfer request buttons follow documented statuses.
+- S3 `[ESB-035]`: create / edit transfer requests, item journals, simple transfers.
+  `InventoryDraft` / `InventoryDraftLine` / `InventoryCarryOver` (on `InventoryDocument`),
+  `InventoryLine::purposeId`, `InventoryKind::editable()`, client bodies per kind,
+  `InventoryDocumentForms` (GuardedEsbWrite; create lock per person + kind),
+  `SaveInventoryDocumentRequest`, `InventoryDocumentFormController` (HandlesRecordForms;
+  edit refused for asset documents / `canEdit: false`). Lookup `purposes` (`GET /purpose`).
+  Page `inventory/form.tsx`; New / Edit links. Create routes registered before the detail
+  routes (`/{kind}/create`).
+- S4 `[ESB-036]`: attachments (`InventoryAttachments`, `AttachInventoryFilesRequest`,
+  `InventoryAttachmentController`, `Requests\Concerns\ForwardsAttachments` now shared with
+  supplier attachments; `AttachmentActions` gained optional delete, accept list and a
+  blocked reason). Simple transfer import = `MasterDataImport::SimpleTransfers` on the
+  shared import screen.
+
+**Tersisa / blocked**
+
+- `[!]` (vendor): goods delivery / goods receipt create-from-reference (refNum validity,
+  expirations, assets, multi-address), receipt asset images; `existing` field format of
+  attachment uploads; number in GTR / ST create responses. Questions in
+  `TODO-modules.md` §9. Next: P12 (Finance: Disbursement).
+
+**Assumptions / TBD**
+
+- Finish / reopen need `goods-transfer-requests.manage` (`[ESB-034]`, docs/06).
+- Uploads with an "existing" list (GD, IJ, ST) are allowed only while there are no
+  attachments; the GTR upload is taken to add (`[ESB-036]`).
+- New transfer requests send `transferDetailAssets: []` and `categoryTypeID: 1`; item
+  journal attachment types PDF/JPEG/PNG; 5 MB per file except simple transfers (2 MB).
+- An S1 test changed on purpose: `GET /{kind}/create` is now the form (403 without
+  `.manage`) for the three editable kinds, still never an ESB read.
+
+**Checks dijalankan**
+
+- `php artisan test` — **pass**, 1462 passed, 26 skipped (25 before + the item journal "no assets" case).
+- `npm run test:ui` — pass, 38 files, 236 tests. `vp check`, `tsc --noEmit`, `npm run build`,
+  `pint` — pass. `phpstan` — same 2 pre-existing errors in `app/Services/EsbConnectionInspector.php`
+  (file untouched).
+- Not run against a real ESB; not checked in a browser.

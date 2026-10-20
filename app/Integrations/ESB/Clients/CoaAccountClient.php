@@ -57,4 +57,42 @@ class CoaAccountClient implements CoaAccountSource
 
         return $this->mapper->fromDetail($envelope->resultArray());
     }
+
+    /**
+     * The vendor's DELETE soft-deletes the account and its active
+     * descendants; system-generated descendants block it.
+     *
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/accounting-coa-coaNo/delete
+     */
+    public function deactivateAccount(string $coaNo): void
+    {
+        $this->client->delete(self::FAMILY, self::PATH.'/'.rawurlencode($coaNo), operation: 'coa.deactivate');
+    }
+
+    /**
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/accounting-coa-coaNo--restore/patch
+     */
+    public function restoreAccount(string $coaNo): void
+    {
+        $this->client->patch(self::FAMILY, self::PATH.'/'.rawurlencode($coaNo).'/restore', operation: 'coa.restore');
+    }
+
+    /**
+     * The vendor lists coaNo as a "path parameter" of a path that has none;
+     * it is sent in the body, the only place the schema leaves for it.
+     *
+     * @param  'up'|'down'  $direction
+     *
+     * @throws EsbException
+     *
+     * @see https://developers.esb.co.id/esb-core/#/paths/accounting-coa-reorder/patch
+     */
+    public function moveAccount(string $coaNo, string $direction): void
+    {
+        $this->client->patch(self::FAMILY, '/accounting/coa/reorder', ['coaNo' => $coaNo, 'type' => $direction], operation: 'coa.move');
+    }
 }

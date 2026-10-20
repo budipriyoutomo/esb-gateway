@@ -3,6 +3,7 @@
 namespace App\Integrations\ESB\Mappers;
 
 use App\Domain\Canonical\ProductCategory;
+use App\Domain\Canonical\ProductCategoryDraft;
 use App\Domain\Canonical\ProductCategoryQuery;
 use App\Domain\Canonical\ProductCategorySummary;
 use App\Integrations\ESB\Clients\ProductCategoryClient;
@@ -83,5 +84,35 @@ class ProductCategoryMapper
             editedBy: $this->nullableString($result['editedBy'] ?? null),
             editedAt: $this->nullableString($result['editedDate'] ?? null),
         );
+    }
+
+    /**
+     * The body of POST /product/category and PUT .../{categoryID}. Every
+     * documented field is sent, an empty one as the vendor's own "none"
+     * ("" / 0, as its detail returns them), so an update replaces the whole
+     * record as PUT says.
+     *
+     * @return array<string, int|string>
+     */
+    public function requestFrom(ProductCategoryDraft $draft): array
+    {
+        return [
+            'categoryName' => $draft->name,
+            'categoryCode' => $draft->code ?? '',
+            'categoryTypeID' => $draft->typeId,
+            'notes' => $draft->notes ?? '',
+            'coaNo' => $draft->coaNo ?? '',
+            'cogsCoaNo' => $draft->cogsCoaNo ?? '',
+            'accrualBasisCoaNo' => $draft->accrualBasisCoaNo ?? '',
+            'opnameCoaNo' => $draft->opnameCoaNo ?? '',
+            'productSalesCoaNo' => $draft->productSalesCoaNo ?? '',
+            'depCoaNo' => $draft->depreciationCoaNo ?? '',
+            'depExpenseCoaNo' => $draft->depreciationExpenseCoaNo ?? '',
+            'depLength' => $draft->depreciationMonths ?? 0,
+            'depLengthFiscal' => $draft->fiscalDepreciationMonths ?? 0,
+            'depreciationTypeID' => $draft->depreciationTypeId ?? 0,
+            'depreciationTypeIDFiscal' => $draft->fiscalDepreciationTypeId ?? 0,
+            'flagAssetTax' => $draft->assetTax ? 1 : 0,
+        ];
     }
 }

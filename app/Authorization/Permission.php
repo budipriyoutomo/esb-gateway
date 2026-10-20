@@ -117,6 +117,86 @@ enum Permission: string
     case ManageDocumentTemplates = 'document-templates.manage';
 
     /**
+     * Permission to delete, deactivate and restore master data records in
+     * the ERP (TODO-modules.md §2, S2): units, product categories, product
+     * sub-categories, supplier categories. One per module, because which
+     * team maintains which list is for the business to decide. No role
+     * holds them yet; only Super Admin can use them (docs/06).
+     */
+    case ManageUnits = 'units.manage';
+
+    case ManageProductCategories = 'product-categories.manage';
+
+    case ManageProductSubCategories = 'product-sub-categories.manage';
+
+    case ManageSupplierCategories = 'supplier-categories.manage';
+
+    /**
+     * Permission to deactivate and restore suppliers in the ERP. A supplier
+     * that is inactive can no longer be chosen on purchases. No role holds it
+     * yet (docs/06).
+     */
+    case ManageSuppliers = 'suppliers.manage';
+
+    /**
+     * Permission to deactivate and restore chart-of-accounts entries in the
+     * ERP. Deactivating an account also deactivates its active
+     * sub-accounts, so this is kept apart from every other master data
+     * permission. No role holds it yet (docs/06).
+     */
+    case ManageCoa = 'coa.manage';
+
+    /**
+     * Permission to authorize or reject a temporary (proposed) pricelist in
+     * the ERP. Authorizing makes its prices the active supplier prices. No
+     * role holds it yet (docs/06).
+     */
+    case ApprovePricelists = 'pricelists.approve';
+
+    /**
+     * Permission to delete a temporary pricelist in the ERP. No role holds
+     * it yet (docs/06).
+     */
+    case ManagePricelists = 'pricelists.manage';
+
+    /**
+     * Permission to delete and restore products in the ERP. No role holds it
+     * yet (docs/06).
+     */
+    case ManageProducts = 'products.manage';
+
+    /**
+     * Permission to authorize or reject an inventory document in the ERP
+     * (TODO-modules.md §3, S2). Authorizing moves stock (or lets it move), so
+     * each document has its own pair, kept apart from esb.invoke. No role
+     * holds them yet; only Super Admin can use them (docs/06).
+     */
+    case ApproveGoodsTransferRequests = 'goods-transfer-requests.approve';
+
+    /**
+     * Permission to delete an inventory document in the ERP -- and, for a
+     * goods transfer request, to finish and reopen it. No role holds them yet
+     * (docs/06).
+     */
+    case ManageGoodsTransferRequests = 'goods-transfer-requests.manage';
+
+    case ApproveGoodsDeliveries = 'goods-deliveries.approve';
+
+    case ManageGoodsDeliveries = 'goods-deliveries.manage';
+
+    case ApproveGoodsReceipts = 'goods-receipts.approve';
+
+    case ManageGoodsReceipts = 'goods-receipts.manage';
+
+    case ApproveItemJournals = 'item-journals.approve';
+
+    case ManageItemJournals = 'item-journals.manage';
+
+    case ApproveSimpleTransfers = 'simple-transfers.approve';
+
+    case ManageSimpleTransfers = 'simple-transfers.manage';
+
+    /**
      * See the sales transactions POS clients pushed through the gateway, and
      * what the ESB said about each (ADR-022). Never the card details.
      */

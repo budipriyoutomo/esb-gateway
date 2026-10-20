@@ -99,10 +99,13 @@ class EsbClient
     }
 
     /**
-     * POST one file as multipart/form-data.
+     * Send one file as multipart/form-data, with the verb the vendor
+     * documents (POST by default; some imports are PUT or PATCH).
      *
      * A write like any other non-GET: exactly one attempt. The contents are
      * never logged -- the integration log records metadata only.
+     *
+     * @param  'POST'|'PUT'|'PATCH'  $method
      *
      * @throws EsbException
      */
@@ -113,18 +116,38 @@ class EsbClient
         string $contents,
         string $filename,
         string $operation = '',
+        string $method = 'POST',
     ): EsbEnvelope {
-        return $this->send('POST', $family, $path, $operation, file: [
-            'name' => $field,
-            'contents' => $contents,
-            'filename' => $filename,
-        ]);
+        return $this->uploadFiles($family, $path, $field, [['contents' => $contents, 'filename' => $filename]], $method, $operation);
+    }
+
+    /**
+     * Send several files under one multipart field, in one request (e.g.
+     * supplier attachments). The same write rules as upload().
+     *
+     * @param  list<array{contents: string, filename: string}>  $files
+     * @param  'POST'|'PUT'|'PATCH'  $method
+     *
+     * @throws EsbException
+     */
+    public function uploadFiles(
+        EsbFamily $family,
+        string $path,
+        string $field,
+        array $files,
+        string $method = 'POST',
+        string $operation = '',
+    ): EsbEnvelope {
+        return $this->send($method, $family, $path, $operation, files: array_map(
+            static fn (array $file): array => ['name' => $field, 'contents' => $file['contents'], 'filename' => $file['filename']],
+            $files,
+        ));
     }
 
     /**
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
-     * @param  array{name: string, contents: string, filename: string}|null  $file
+     * @param  list<array{name: string, contents: string, filename: string}>  $files
      * @param  bool  $read  apply the read retry policy to a non-GET (ADR-025)
      *
      * @throws EsbException
@@ -136,7 +159,7 @@ class EsbClient
         string $operation = '',
         array $query = [],
         array $body = [],
-        ?array $file = null,
+        array $files = [],
         bool $read = false,
     ): EsbEnvelope {
         $method = strtoupper($method);
@@ -153,7 +176,7 @@ class EsbClient
         $startedAtMicro = microtime(true);
 
         try {
-            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $file, $context, $read);
+            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $files, $context, $read);
         } catch (EsbException $exception) {
             $this->record(
                 $exception->context->withTiming($this->elapsedMs($startedAtMicro)),
@@ -183,7 +206,7 @@ class EsbClient
      *
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
-     * @param  array{name: string, contents: string, filename: string}|null  $file
+     * @param  list<array{name: string, contents: string, filename: string}>  $files
      * @return array{EsbEnvelope, int, int|null}
      *
      * @throws EsbException
@@ -194,7 +217,7 @@ class EsbClient
         string $path,
         array $query,
         array $body,
-        ?array $file,
+        array $files,
         EsbContext $context,
         bool $read = false,
     ): array {
@@ -214,7 +237,7 @@ class EsbClient
             $attempt++;
 
             try {
-                $response = $this->dispatch($method, $family, $path, $query, $body, $file);
+                $response = $this->dispatch($method, $family, $path, $query, $body, $files);
             } catch (EsbConfigurationException $misconfigured) {
                 // Not a transport failure: no retry fixes it, and wrapping it
                 // would report a disabled or undocumented family as an
@@ -274,9 +297,9 @@ class EsbClient
     /**
      * @param  array<string, mixed>  $query
      * @param  array<string, mixed>  $body
-     * @param  array{name: string, contents: string, filename: string}|null  $file
+     * @param  list<array{name: string, contents: string, filename: string}>  $files
      */
-    private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body, ?array $file): Response
+    private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body, array $files): Response
     {
         $url = $this->connectionResolver->resolve($family).'/'.ltrim($path, '/');
 
@@ -293,11 +316,14 @@ class EsbClient
             $request = $request->withQueryParameters($query);
         }
 
-        if ($file !== null) {
+        if ($files !== []) {
+            foreach ($files as $file) {
+                $request = $request->attach($file['name'], $file['contents'], $file['filename']);
+            }
+
             // PendingRequest only merges attached files into a request that
             // carries a body option of its own format, even an empty one.
-            return $request->attach($file['name'], $file['contents'], $file['filename'])
-                ->send($method, $url, ['multipart' => []]);
+            return $request->send($method, $url, ['multipart' => []]);
         }
 
         return $body === []

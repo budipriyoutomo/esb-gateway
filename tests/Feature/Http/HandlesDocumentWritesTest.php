@@ -34,6 +34,7 @@ class HandlesDocumentWritesTest extends TestCase
             Route::get('test-widgets', fn () => 'index')->name('test-widgets.index');
             Route::get('test-widgets/{number}', fn () => 'show')->name('test-widgets.show');
             Route::post('test-widgets/{number}/{decision}', [FakeDocumentWriteController::class, 'decide']);
+            Route::post('consumed-widgets/{number}/{decision}', [FakeDocumentWriteController::class, 'decideConsumed']);
             Route::delete('test-widgets/{number}', [FakeDocumentWriteController::class, 'destroy']);
         });
 
@@ -124,6 +125,30 @@ class HandlesDocumentWritesTest extends TestCase
         $this->post('test-widgets/'.self::NUMBER.'/authorize')->assertNotFound();
     }
 
+    #[Test]
+    public function an_authorization_that_consumes_the_document_returns_to_the_list(): void
+    {
+        // e.g. a temporary pricelist: authorizing copies it into the master
+        // pricelist and removes it, so its page no longer exists.
+        $this->post('consumed-widgets/'.self::NUMBER.'/authorize')
+            ->assertRedirect($this->index())
+            ->assertSessionHas('inertia.flash_data.toast.message', 'Test widget W-0001 was authorized.');
+    }
+
+    #[Test]
+    public function an_unconfirmed_consuming_authorization_also_returns_to_the_list(): void
+    {
+        FakeDocumentWriteController::$throw = new EsbTimeoutException(self::context());
+
+        $this->post('consumed-widgets/'.self::NUMBER.'/authorize')->assertRedirect($this->index());
+    }
+
+    #[Test]
+    public function a_rejection_of_such_a_document_stays_on_it(): void
+    {
+        $this->post('consumed-widgets/'.self::NUMBER.'/reject')->assertRedirect($this->show());
+    }
+
     // -------------------------------------------------------------- delete
 
     #[Test]
@@ -197,6 +222,15 @@ class FakeDocumentWriteController extends Controller
         return $this->decisionOutcome(
             'Test widget', 'test-widgets', $number, ApprovalDecision::from($decision),
             fn () => self::fail(),
+        );
+    }
+
+    public function decideConsumed(string $number, string $decision): RedirectResponse
+    {
+        return $this->decisionOutcome(
+            'Test widget', 'test-widgets', $number, ApprovalDecision::from($decision),
+            fn () => self::fail(),
+            authorizeConsumesDocument: true,
         );
     }
 

@@ -28,4 +28,19 @@ class ProductController extends Controller
             'sortable' => ProductQuery::SORTABLE,
         ]);
     }
+
+    /**
+     * A not-found refusal from the ESB is rendered as a 404 by
+     * EsbExceptionRenderer; the id is held to a positive integer by the route.
+     */
+    public function show(int $productId, ProductSource $products): Response
+    {
+        $product = $products->findProduct($productId);
+
+        abort_if($product === null, 404);
+
+        return Inertia::render('products/show', [
+            'product' => $product,
+        ]);
+    }
 }

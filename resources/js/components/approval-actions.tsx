@@ -27,10 +27,10 @@ type Props = {
     /** Permission checks done by the page (esb.invoke + <module>.manage). */
     canDelete: boolean;
     /**
-     * Set when a rejection must carry a reason. `max` mirrors the
-     * FormRequest's REASON_MAX.
+     * Set when a rejection carries a reason. `max` mirrors the FormRequest's
+     * REASON_MAX; `required: false` lets it be left blank (default: required).
      */
-    rejectReason?: { max: number };
+    rejectReason?: { max: number; required?: boolean };
 };
 
 const textareaClass =
@@ -141,6 +141,7 @@ export function ApprovalActions({
     const reasonMissing =
         pending === 'reject' &&
         rejectReason !== undefined &&
+        rejectReason.required !== false &&
         reason.trim() === '';
 
     return (
@@ -200,7 +201,9 @@ export function ApprovalActions({
                     {pending === 'reject' && rejectReason && (
                         <div className="grid gap-1.5">
                             <Label htmlFor={`${number}-reject-reason`}>
-                                Reason
+                                {rejectReason.required === false
+                                    ? 'Reason (optional)'
+                                    : 'Reason'}
                             </Label>
                             <textarea
                                 id={`${number}-reject-reason`}

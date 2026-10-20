@@ -158,6 +158,8 @@ export type Supplier = Audit & {
     contacts: SupplierContact[];
     bankAccounts: SupplierBankAccount[];
     products: SupplierProduct[];
+    /** How many files the ERP holds; the files are not opened from the gateway. */
+    attachmentCount: number;
 };
 
 export type CoaAccountSummary = {
@@ -187,3 +189,108 @@ export type CoaAccount = Audit &
         releasePaymentCode: string | null;
         mappings: CoaMapping[];
     };
+
+export type ProductUnit = {
+    productDetailId: number;
+    uomId: number | null;
+    uomName: string | null;
+    /** How many base units one of this unit holds. */
+    qty: number | null;
+    isBase: boolean | null;
+    purchasable: boolean | null;
+    saleable: boolean | null;
+    stocked: boolean | null;
+    transferable: boolean | null;
+    sku: string | null;
+    /** Display only. */
+    basePrice: number | null;
+    weight: number | null;
+    menuName: string | null;
+    menuId: number | null;
+    cubication: number | null;
+    active: boolean | null;
+};
+
+export type ProductDetail = Audit & {
+    provider: string;
+    id: number;
+    name: string;
+    code: string | null;
+    categoryId: number | null;
+    categoryName: string | null;
+    subCategoryId: number | null;
+    subCategoryName: string | null;
+    bomId: number | null;
+    bomName: string | null;
+    purchasable: boolean | null;
+    saleable: boolean | null;
+    requestable: boolean | null;
+    vat: boolean | null;
+    luxury: boolean | null;
+    receiptTolerance: number | null;
+    coretaxCode: string | null;
+    notes: string | null;
+    active: boolean | null;
+    units: ProductUnit[];
+    coretaxCodeId: number | null;
+    customFields: Record<string, string | null>;
+};
+
+/** Every branch (all = true), the named ones (false), or unknown (null). */
+export type BranchScope = {
+    all: boolean | null;
+    names: string[];
+    /** The named branches' ids, when the ERP sends them. */
+    ids: number[];
+};
+
+export type PricelistEntry = {
+    provider: string;
+    rowId: number | null;
+    pricelistNumber: string | null;
+    productDetailId: number | null;
+    productCode: string | null;
+    productName: string | null;
+    unit: string | null;
+    supplierId: number | null;
+    supplierName: string | null;
+    currencyName: string | null;
+    /** Display only. */
+    price: number | null;
+    priceDate: string | null;
+    expireDate: string | null;
+    branches: BranchScope;
+};
+
+export type TempPricelistSummary = {
+    provider: string;
+    number: string;
+    supplierName: string | null;
+    currencyName: string | null;
+    priceDate: string | null;
+    expireDate: string | null;
+    statusId: number | null;
+    statusName: string | null;
+    branches: BranchScope;
+};
+
+export type TempPricelistLine = {
+    productDetailId: number | null;
+    productCode: string | null;
+    productName: string | null;
+    unitName: string | null;
+    price: number | null;
+    lastPrice: number | null;
+};
+
+export type TempPricelist = TempPricelistSummary & {
+    supplierId: number | null;
+    currencyId: number | null;
+    lines: TempPricelistLine[];
+    createdBy: string | null;
+    createdAt: string | null;
+    editedBy: string | null;
+    editedAt: string | null;
+    rejectedBy: string | null;
+    rejectedAt: string | null;
+};
