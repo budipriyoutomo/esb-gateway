@@ -30,6 +30,7 @@ class ImportMasterDataRequest extends BaseFormRequest
             MasterDataImport::NewSuppliers, MasterDataImport::SupplierChanges => Permission::ManageSuppliers,
             MasterDataImport::CoaAccounts => Permission::ManageCoa,
             MasterDataImport::SimpleTransfers => Permission::ManageSimpleTransfers,
+            MasterDataImport::Disbursements => Permission::ManageDisbursements,
         };
     }
 

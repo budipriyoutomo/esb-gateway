@@ -45,6 +45,24 @@ trait ReadsEsbValues
     }
 
     /**
+     * A bank account number with only its last four digits kept: "•••• 6789"
+     * (suppliers [ESB-024], disbursements [ESB-037]). A number too short to
+     * mask safely is hidden entirely.
+     */
+    private function mask(mixed $number): ?string
+    {
+        $number = $this->nullableString(is_string($number) ? trim($number) : null);
+
+        if ($number === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $number) ?? '';
+
+        return strlen($digits) >= 8 ? '•••• '.substr($digits, -4) : '••••';
+    }
+
+    /**
      * 1/0 (or a boolean). Anything else is unknown, not false.
      */
     private function flag(mixed $value): ?bool

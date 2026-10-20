@@ -2331,6 +2331,345 @@ Decisions and open points:
   (.xlsx, 2 MB, leading bytes), one per person at a time, queued by the ERP ("success"
   means the ERP took the file).
 
+### [ESB-037] Disbursements, S1 (list, detail)
+
+```
+Purpose:         Read the ERP's disbursements (cash / credit payments out), TODO-modules.md
+                 §4.1, S1.
+Family:          Core
+Method / Path:   GET /finance/disbursement
+                 GET /finance/disbursement/{disbursementNum}
+Query (list):    disbursementNum, disbursementDateFrom, disbursementDateTo (YYYY-MM-DD),
+                 branchID, supplierID, paymentID (1 cash, 2 credit), statusID (1 New,
+                 2 Rejected, 3 Authorized, 38 Waiting For Approval), ref (partial),
+                 isOverDue (true = overdue only), page, limit. Not sent: grandTotal,
+                 additionalInfo, refIs, sort (the vendor's default order).
+Response:        list {count, data[{disbursementNum, disbursementDate, branchID,
+                 branchName, supplierID, supplierName, paymentMethodName, ref,
+                 additionalInfo, grandTotal, invoiceDueDate, overDue, hasApproval,
+                 statusID, statusName}], page, limit, next, prev}
+                 detail {disbursementNum, disbursementDate, branch*, supplier*, paymentID,
+                 paymentName, disbursementCoaNo, currencyID, currencyName, currencySign,
+                 rate, creditTerm, invoiceDueDate, ref, additionalInformation, bankName,
+                 bankAccountName, bankAccountNumber, supplierBankID, costCenter*, project*,
+                 grandTotal, releasePaymentCode, statusID, disbursementDetails[{branchID,
+                 branchName, coaNo, coaDescription, description, amount}],
+                 purchasePaymentDetails[], supplierSettlementDetails[], imageAttachments[],
+                 created* / edited* / authorized*}
+Errors:          EC03100004 -> 404
+Retry Policy:    reads -- the GET policy
+Laravel:         App\Integrations\Contracts\DisbursementSource; ESB\Clients\
+                 DisbursementClient; ESB\Mappers\DisbursementMapper; Domain\Canonical\
+                 Disbursement*; Http\Requests\Disbursements\ListDisbursementsRequest;
+                 Http\Controllers\Disbursements\DisbursementController
+Routes:          GET /disbursements, GET /disbursements/{number}
+Permissions:     esb.invoke
+Tests:           tests/Unit/Integrations/ESB/DisbursementMapperTest.php,
+                 tests/Feature/Disbursements/DisbursementTest.php,
+                 pages/disbursements/{index,show}.test.tsx
+```
+
+Decisions and open points:
+
+- **A number must contain a digit**: `/finance/disbursement/import` shares the detail's
+  segment.
+- **The grand total, overdue flag and amounts are the ERP's** -- shown as sent, never
+  summed or recomputed in the gateway.
+- **The bank account number is masked** to its last four digits in the adapter, as for
+  suppliers ([ESB-024]; `TBD` business). The full number never reaches the browser; an
+  edit sends back the ERP's own value read just before ([ESB-039]).
+- **Linked documents**: purchase payments and supplier settlements are listed with number,
+  date, total and status; they are not opened from the gateway (their modules are not
+  built).
+- Status names come from the ERP; the four ids above are the vendor's documented set.
+
+### [ESB-038] Disbursements, S2 (authorize, reject, delete)
+
+```
+Purpose:         Change a disbursement's state (TODO-modules.md §4.1, S2).
+Family:          Core
+Method / Path:   PATCH  /finance/disbursement/{disbursementNum}/authorize   (no body)
+                 PATCH  /finance/disbursement/{disbursementNum}/reject      {reason?}
+                 DELETE /finance/disbursement/{disbursementNum}
+Response:        result null; ignored
+Statuses:        authorize / reject: New or Waiting For Approval (authorize may leave it
+                 Waiting For Approval when more approval levels remain); delete: New,
+                 Rejected, Authorized or Waiting For Approval -- removes its journal,
+                 payable, attachments and approvals with it
+Errors:          400 with errors[] -> the ERP's message in the toast; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt, never retried
+Idempotency:     none documented; an unknown outcome is audited as
+                 disbursement.write-unconfirmed and the person re-reads the document
+Laravel:         App\Actions\Disbursements\{Disbursements, DecideDisbursement,
+                 DeleteDisbursement} on DocumentWrites; Http\Controllers\Disbursements\
+                 DisbursementWriteController (HandlesDocumentWrites);
+                 Http\Requests\Disbursements\DecideDisbursementRequest
+Routes:          POST /disbursements/{number}/decisions, DELETE /disbursements/{number}
+Permissions:     esb.invoke + disbursements.approve (decisions) / disbursements.manage
+                 (delete) -- Super Admin only (docs/06)
+Audit:           disbursement.authorized / .rejected (+ reason) / .deleted;
+                 disbursement.write-unconfirmed (operation, correlation id)
+Tests:           tests/Feature/Disbursements/DisbursementWriteTest.php,
+                 pages/disbursements/show.test.tsx
+```
+
+Decisions and open points:
+
+- **The reason is optional** (the vendor does not mark it required); capped at 500
+  characters by the gateway.
+- **What is offered follows the documented statuses**: decisions on New / Waiting For
+  Approval, delete on the four documented statuses. The ERP's refusal is shown either way.
+- **Segregation of duties** (the creator may not authorize) is not enforced by the
+  gateway: every write goes out under the shared service credential (ADR-009), so the ERP
+  cannot tell. `TBD` business (TODO-modules.md §9); the audit names the real person.
+
+### [ESB-039] Disbursements, S3 (create, update)
+
+```
+Purpose:         Create and edit disbursements (TODO-modules.md §4.1, S3).
+Family:          Core
+Method / Path:   POST /finance/disbursement
+                 PUT  /finance/disbursement/{disbursementNum}/validate   (no body; nothing
+                                                                          is saved)
+                 PUT  /finance/disbursement/{disbursementNum}
+Request Body:    {disbursementDate, branchID, paymentID (1 | 2), currencyID, rate,
+                 disbursementCoaNo (cash only), supplierID (required for credit),
+                 creditTerm? / ref? (credit only), invoiceDueDate?, additionalInformation,
+                 disbursementDetails: [{branchID, coaNo, description, amount}],
+                 costCenterID?, projectID?, bankName?, bankAccountName?,
+                 bankAccountNumber?}
+Response:        create: "returns the new disbursementNum" (example {}) -- read from
+                 result.disbursementNum when present; validate / update: null
+Errors:          400 with errors[] -> on the form fields they name (ADR-021); anything
+                 unmapped on the form as a whole; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt; the validate is a PUT and also gets one
+Idempotency:     none documented; a create is one per person at a time, an update holds
+                 the document's lock (shared with [ESB-038])
+Laravel:         Domain\Canonical\DisbursementDraft / DisbursementDraftLine /
+                 DisbursementCarryOver; DisbursementSource::createDisbursement() /
+                 validateUpdate() / updateDisbursement(); Actions\Disbursements\
+                 DisbursementForms; Http\Requests\Disbursements\SaveDisbursementRequest;
+                 Http\Controllers\Disbursements\DisbursementFormController
+                 (HandlesRecordForms)
+Routes:          GET /disbursements/create, POST /disbursements,
+                 GET /disbursements/{number}/edit, PUT /disbursements/{number}
+Permissions:     esb.invoke + disbursements.manage
+Audit:           disbursement.created (number when the ERP gave one, date, payment,
+                 lines) / .updated (number, lines); disbursement.write-unconfirmed
+Tests:           tests/Feature/Disbursements/DisbursementFormTest.php,
+                 pages/disbursements/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Validated against the vendor schema first** (SaveDisbursementRequest): YYYY-MM-DD,
+  cash needs the cash / bank account and takes no credit term or reference; credit needs
+  the supplier and takes no cash / bank account; rate > 0; credit term 0-99999; reference
+  up to 50, notes up to 1000, each line's description up to 100 and amount with at most
+  four decimals (decimal(20,4)); at least one line, up to 500 (gateway bound). The
+  locked period, the supplier being active and every "must exist" are the ERP's to check.
+- **The validate comes first.** The edit page and the update call `PUT .../validate`
+  (end period, supplier, cost center, payment and reconciliation). A refusal -- or no
+  answer -- sends the person back to the document with the ERP's reason; nothing is
+  sent. It is a PUT, so it is not retried (ADR-025 covers POST reads only); it saves
+  nothing, so an unanswered one is reported as "could not check", not as unconfirmed.
+- **An update reads the document first** (outside the lock) and sends back what the form
+  does not show: cost center, project, and the bank name / account name / account number
+  (the full number, from that read -- never from the browser).
+- **Not in the form (`TBD`)**: cost center and project pickers (no lookup; the ERP says
+  when its cost center setting requires one), bank details on a new disbursement, the
+  supplier's bank account (`supplierBankID` is read-only in the vendor body).
+- **Pickers**: branch, supplier, currency, cash / bank account (narrowed to the branch),
+  COA account per line ([ESB-019]).
+
+### [ESB-040] Disbursements, S4 (attachments, import, import form)
+
+```
+Purpose:         Attach files to a disbursement, hand the ERP a disbursement spreadsheet,
+                 and fill a form's lines from the ERP's Excel form (TODO-modules.md §4.1,
+                 S4).
+Family:          Core
+Method / Path:   PATCH /finance/disbursement/{disbursementNum}/attachment
+                       multipart: files[] (pdf, bmp, gif, jpg, jpeg, png; 2 MB each,
+                       10 MB total), existing[] (never sent)
+                 POST  /finance/disbursement/import        multipart "file" (.xlsx/.xls,
+                       2 MB); queued
+                 POST  /finance/disbursement/import/form   multipart "file" (.xlsx/.xls,
+                       2 MB); "nothing is saved"
+Response:        attachment: {urls} -- ignored; import: null;
+                 import form: [{branchID, branchName, coaNo, coaDescription, description,
+                 amount}]
+Errors:          400 with errors[]; EC03100004 -> 404
+Retry Policy:    one attempt for all three (uploads); the import form saves nothing, so
+                 it is neither locked nor audited
+Laravel:         DisbursementSource::attachFiles() / readFormLines();
+                 Actions\Disbursements\DisbursementAttachments (DocumentWrites::
+                 transition()); Http\Requests\Disbursements\{AttachDisbursementFilesRequest,
+                 ReadDisbursementFormRequest}; Http\Controllers\Disbursements\
+                 {DisbursementAttachmentController, DisbursementFormLinesController};
+                 the import is MasterDataImport::Disbursements on the shared import
+                 screen ([ESB-032])
+Routes:          POST /disbursements/{number}/attachments; POST /disbursements/form-lines;
+                 GET|POST /imports/disbursements
+Permissions:     esb.invoke + disbursements.manage
+Audit:           disbursement.attachments-uploaded (each file's name, size, sha256);
+                 disbursement.write-unconfirmed (attach); the import:
+                 master-data.imported / .import-unconfirmed with kind "disbursements"
+Tests:           tests/Feature/Disbursements/{DisbursementAttachmentTest,
+                 DisbursementFormLinesTest}.php, MasterDataImportTest (disbursements),
+                 pages/disbursements/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Attach only while there are none**, as for the inventory documents ([ESB-036]): the
+  upload keeps the "existing" references it is sent, whose format is undocumented. The
+  vendor has no delete for disbursement attachments, so the person adds further files in
+  the ERP.
+- **The import form only fills the form.** Its rows become lines on the create / edit
+  form, where the person checks them before saving; the gateway sends nothing else
+  until the form is submitted. Its rows replace the form's lines.
+- **Not built (`[!]`)**: the ERP export (same open point as [ESB-032]) and opening
+  attachments from the gateway.
+
+### [ESB-041] General Journal, S1 (list, lines)
+
+```
+Purpose:         Read the ERP's general journal: the journal entries every module posts
+                 (TODO-modules.md §5.3, S1).
+Family:          Core
+Method / Path:   GET /accounting/general-journal/search
+                 GET /accounting/general-journal/{journalHeadID}/detail
+Query:           search: dateFrom, dateTo (YYYY-MM-DD), journalSearch (free text over
+                 COA, account, branch, transaction type, reference, notes), page, limit
+                 detail: page, limit
+                 Not sent: branchID[], account[] / accounts[], costCenterID[],
+                 projectID[] (array parameters, format undocumented -- [ESB-019]),
+                 filterByCostCenter, typeMode (fullset | partial: undocumented meaning),
+                 sort (the vendor's default, newest first)
+Response:        search {count, data[{journalHeadID, journalDate, transactionType, refNum,
+                 notes, typeHasAccessView}], page, limit, next, prev}
+                 detail {count, data[{journalDetailID, journalHeadID, branchID,
+                 branchName, coaNo, coaDesc, costCenterID, costCenterName, projectID,
+                 projectName, currencyID, currencyName, rate, drAmount, crAmount, notes}],
+                 ...paging}
+Errors:          EC03100004 -> 404
+Retry Policy:    reads -- the GET policy
+Laravel:         Integrations\Contracts\GeneralJournalSource; ESB\Clients\
+                 GeneralJournalClient; ESB\Mappers\JournalMapper; Domain\Canonical\
+                 {GeneralJournalEntry, GeneralJournalPage, GeneralJournalQuery,
+                 JournalLine, JournalLinePage}; Http\Controllers\Accounting\
+                 GeneralJournalController
+Routes:          GET /general-journals, GET /general-journals/{journalHeadId}
+Permissions:     esb.invoke
+Tests:           tests/Unit/Integrations/ESB/JournalMapperTest.php,
+                 tests/Feature/Accounting/GeneralJournalTest.php,
+                 pages/general-journals/*.test.tsx
+```
+
+Decisions and open points:
+
+- **The detail has lines only.** The vendor's detail answers the journal's lines, not its
+  head (date, transaction type, reference). The page shows the lines; the list carries the
+  head. A journal head id is a positive integer.
+- **Debit and credit are shown as sent**, never summed or balanced by the gateway (the ERP
+  is the authority, TODO-modules.md §0.3).
+- `typeHasAccessView` is shown as "not viewable in the ERP" when false; the gateway does
+  not hide the row (`TBD` what the ERP means by it beyond its own UI).
+- **Not built (`[!]`)**: the export (same open point as [ESB-032]); filters by branch,
+  account, cost center and project (array parameters).
+
+### [ESB-042] General Ledger, S1 (entries, summary)
+
+```
+Purpose:         The ledger of one account over a period, and the period's summary per
+                 branch and account (TODO-modules.md §5.2, S1).
+Family:          Core
+Method / Path:   POST /accounting/general-ledger            (a read, ADR-025)
+                 POST /accounting/general-ledger/summary    (a read, ADR-025)
+Request Body:    entries {coaNo*, dateFrom, dateTo, branchID?, debitCreditFilter?
+                 (1 debit, 2 credit), reference?, notes?, transactionType?}
+                 summary {startPeriod*, endPeriod*, accountNo?, branchID?, page, limit}
+                 Not sent: useCostCenter / costCenterIDs, projectIDs, alreadyReconcile,
+                 branchCode
+Response:        entries: a list, not paged [{journalDate, branchID, branchName,
+                 coaNumber, coaDescription, transactionType, referenceNumber, notes,
+                 debitAmount, creditAmount, costCenterName, projectName,
+                 generalLedgerInfo, createdDate}]
+                 summary {count, data[{journalDate, branchID, branchCode, branchName,
+                 accountNo, accountDescription, debitAmount, creditAmount}], ...paging}
+Errors:          400 with errors[] -> the ERP's reason on the page; no 404
+Retry Policy:    EsbClient::postRead() -- the GET policy (ADR-025: documented as "List…"
+                 with no side effect)
+Laravel:         Integrations\Contracts\GeneralLedgerSource; ESB\Clients\
+                 GeneralLedgerClient; ESB\Mappers\JournalMapper; Domain\Canonical\
+                 {LedgerEntry, LedgerEntryPage, LedgerQuery, LedgerSummaryRow,
+                 LedgerSummaryPage, LedgerSummaryQuery}; Http\Controllers\Accounting\
+                 GeneralLedgerController
+Routes:          GET /general-ledger, GET /general-ledger/summary
+Permissions:     esb.invoke
+Tests:           tests/Feature/Accounting/GeneralLedgerTest.php,
+                 pages/general-ledger/*.test.tsx
+```
+
+Decisions and open points:
+
+- **The account and the period are required** (TODO-modules.md §5.2) and no call is made
+  without them: the page asks first. The period is at most 366 days (gateway bound: the
+  entries come back as one unpaged list), and the gateway pages that list itself.
+- **No balance is computed.** The vendor gives no opening balance; a running balance from
+  the period's entries alone would be wrong, so none is shown. Debit and credit are the
+  ERP's.
+- **CSV export from the gateway: not built** (TODO-modules.md §5.2 asks to decide). It
+  would be the gateway's own rendering of ERP data -- `TBD` with the business, together
+  with the ERP's queued report export (`POST /report/accounting/general-ledger/export`).
+- Filters by cost center / project and the reconciliation flag are not offered (pickers
+  and meaning `TBD`).
+
+### [ESB-043] Memorial Journal, S1 (list, detail)
+
+```
+Purpose:         Read the ERP's memorial journals -- manual journal entries
+                 (TODO-modules.md §5.4, S1).
+Family:          Core
+Method / Path:   GET /accounting/memorial-journal
+                 GET /accounting/memorial-journal/{memorialJournalNum}
+Query (list):    memorialJournalNum, dateFrom, dateTo (YYYY-MM-DD), statusID (1 New,
+                 2 Rejected, 3 Authorized, 38 Waiting For Approval), page, limit
+Response:        list {count, data[{memorialJournalNum, memorialJournalDate,
+                 additionalInfo, approval, createdBy, statusID, statusName}], ...paging}
+                 detail {memorialJournalNum, memorialJournalDate, additionalInfo, approval,
+                 statusID, statusName, created* / edited* / authorized* (+ creator /
+                 editor / authorizer {username, fullName}), image[{ID, imageUrl, ...}],
+                 memorialJournalDetails[{ID, branchID, branchName, coaNo, description,
+                 costCenterID, costCenterName, projectID, projectName, currencyID,
+                 currencyName, rate, drAmount, crAmount, notes}]}
+Errors:          EC03100004 -> 404
+Retry Policy:    reads -- the GET policy
+Laravel:         Integrations\Contracts\MemorialJournalSource; ESB\Clients\
+                 MemorialJournalClient; ESB\Mappers\JournalMapper; Domain\Canonical\
+                 {MemorialJournal, MemorialJournalSummary, MemorialJournalPage,
+                 MemorialJournalQuery, JournalLine}; Http\Controllers\Accounting\
+                 MemorialJournalController
+Routes:          GET /memorial-journals, GET /memorial-journals/{number}
+Permissions:     esb.invoke
+Tests:           tests/Feature/Accounting/MemorialJournalTest.php,
+                 pages/memorial-journals/*.test.tsx
+```
+
+Decisions and open points:
+
+- **A number must contain a digit**: `/access`, `/export`, `/form-upload` and `/upload`
+  share the detail's segment.
+- **`GET /accounting/memorial-journal/access` is not used (`[!]`).** It "returns true when
+  the current user's branches can access every memorial journal number passed in the
+  query", but the query parameter's name is undocumented -- and the "current user" is the
+  gateway's shared credential (ADR-009), not the person. Actions in S2 are offered by the
+  gateway's own permissions and the documented statuses. Asked of the ESB team.
+- Lines share the canonical `JournalLine` with the general journal ([ESB-041]). Debit and
+  credit are shown as sent; the gateway does not check that they balance.
+- Attachment images are counted, not opened (same open point as [ESB-032]).
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

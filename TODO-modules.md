@@ -16,7 +16,7 @@ jawaban ESB/bisnis).
 
 1. **Dokumentasi kontrak dulu.** Baca operasi di `docs/esb/esb-core-endpoints.md` /
    `esb-oms-endpoints.md` + halaman vendor. Tulis entri `[ESB-0xx]` di
-   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-037]`**). Jangan mengarang
+   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-044]`**). Jangan mengarang
    field yang tidak terdokumentasi — tandai sebagai asumsi/TBD.
 2. **Fixture** `tests/Fixtures/Core<Module>.php` dari contoh respons vendor.
 3. **Tulis test yang gagal (RED)**, jalankan, pastikan gagal karena alasan yang benar:
@@ -82,8 +82,8 @@ memberi usulan pesan commit.
 | P9d | Master Data S4: import, harga pricelist, attachment supplier (export `[!]`) | `[x]` siap commit |
 | P10 | Inventory S1 (GTR, Goods Delivery, Goods Receipt, Simple Transfer, Item Journal) | `[x]` siap commit |
 | P11 | Inventory S2–S4 | `[x]` siap commit (GD/GR create-from-reference & aset `[!]`) |
-| P12 | Finance: Disbursement S1–S4 | `[ ]` |
-| P13 | Accounting S1 (General Journal, General Ledger, Memorial Journal) | `[ ]` |
+| P12 | Finance: Disbursement S1–S4 | `[x]` siap commit (export `[!]`) |
+| P13 | Accounting S1 (General Journal, General Ledger, Memorial Journal) | `[x]` siap commit (filter array, `/access`, export `[!]`) |
 | P14 | Accounting S2–S4 (Memorial Journal) | `[ ]` |
 | P15 | POS: Menu Category, Promotion (+ Menu setelah keputusan sumber) | `[ ]` |
 | P16 | UI-3 navigasi + UI-4 dashboard | `[ ]` |
@@ -318,6 +318,54 @@ screen. ForwardsAttachments is shared with supplier attachments.
 Goods deliveries and goods receipts are not created here: they start from
 a reference document with expirations and assets the vendor does not
 fully document.
+```
+
+Usulan pesan commit P12:
+
+```
+feat: disbursements (read, decide, create, edit, attachments, import)
+
+[ESB-037] list with number, status, branch, supplier, payment, reference,
+overdue and date filters, and detail with the account lines and the
+purchase payments / supplier settlements against it. The bank account
+number is masked in the adapter (ReadsEsbValues::mask(), now shared with
+suppliers); the whole number stays on the server.
+
+[ESB-038] authorize / reject (optional reason) / delete on DocumentWrites:
+one write per disbursement at a time, one attempt, audited with the
+person. disbursements.approve / .manage, Super Admin only.
+
+[ESB-039] create and edit cash and credit disbursements, checked against
+the vendor schema; an edit first asks the ERP (PUT .../validate) whether
+the disbursement may change, and sends back the cost center, project and
+bank details it does not show.
+
+[ESB-040] attach files (only while there are none), the queued Excel
+import on the shared import screen, and lines read from the ERP's Excel
+disbursement form into the create / edit form (nothing saved by the ERP).
+Finance group in the sidebar.
+```
+
+Usulan pesan commit P13:
+
+```
+feat: general journal, general ledger and memorial journals (read)
+
+[ESB-041] general journal entries by date and free text, and one
+journal's lines page by page. The vendor's array filters (branch,
+account, cost center, project) are not sent: their format is
+undocumented.
+
+[ESB-042] an account's general ledger over a period and the period's
+summary per branch and account -- POST reads through postRead()
+(ADR-025). Nothing is read until the account and period are given; the
+period is at most 366 days and the unpaged entries are paged by the
+gateway. No balance is computed. The ERP's refusal shows on the page.
+
+[ESB-043] memorial journal list and detail; numbers must contain a digit
+(/access, /export, /upload share the segment). JournalLine and
+JournalLinesTable are shared by both journals. Accounting group in the
+sidebar.
 ```
 
 Usulan pesan commit P10:
@@ -588,13 +636,23 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 
 ### 4.1 Disbursement (`/finance/disbursement`)
 
-- [ ] S1: list, detail.
-- [ ] S2: authorize / reject / delete.
-- [ ] S3: create / update; pakai `PUT /{num}/validate` sebagai pre-check sebelum update.
-      Picker COA cash/bank, supplier, cost center.
-- [ ] S4: import, import form, attachment.
-- [ ] Permission `disbursements.approve` / `.manage`; pertimbangkan pemisahan tugas
-      (pembuat ≠ pengotorisasi) — keputusan bisnis.
+- [x] S1 (2026-10-20, `[ESB-037]`): list (nomor, status, branch, supplier, cash/credit,
+      referensi, overdue, tanggal) + detail (baris akun, purchase payment & supplier
+      settlement terkait). Nomor rekening bank dimask di adapter (sama dengan supplier).
+- [x] S2 (2026-10-20, `[ESB-038]`): authorize / reject (alasan opsional) / delete; tombol
+      mengikuti status terdokumentasi (decide: New / Waiting For Approval).
+- [x] S3 (2026-10-20, `[ESB-039]`): create / update cash & credit; `PUT /{num}/validate`
+      dipanggil saat membuka edit dan sebelum update (ditolak / tak terjawab → kembali ke
+      detail, tanpa update). Picker branch, supplier, currency, COA cash/bank, COA per baris.
+      Cost center, project, data bank dibawa saat edit (dari ERP, bukan browser).
+- [!] S3: picker cost center / project (tidak ada lookup); data bank pada create baru.
+- [x] S4 (2026-10-20, `[ESB-040]`): attachment (hanya saat belum ada; vendor tidak punya
+      hapus), import Excel (layar import bersama, di-queue ERP), import form → mengisi baris
+      form (ERP tidak menyimpan apa pun).
+- [!] S4 export: sama dengan `[ESB-032]`.
+- [x] Permission `disbursements.approve` / `.manage` (Super Admin saja).
+- [!] Pemisahan tugas (pembuat ≠ pengotorisasi) — keputusan bisnis; ERP hanya melihat
+      kredensial bersama, audit gateway mencatat orangnya.
 
 ---
 
@@ -608,18 +666,25 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 
 ### 5.2 General Ledger (`POST /accounting/general-ledger`, `/summary`)
 
-- [ ] S1 read-only: laporan ledger per COA + periode, dan summary. Filter wajib periode
-      dan COA (picker dari §2.7).
-- [ ] Ekspor CSV di sisi gateway? → putuskan; jangan menghitung saldo sendiri.
+- [x] S1 (2026-10-20, `[ESB-042]`): ledger per COA + periode (wajib, maks. 366 hari, paging
+      di gateway karena vendor tidak mem-page) dan summary per branch/akun (paging vendor).
+      `postRead()` (ADR-025). Tanpa saldo berjalan (vendor tidak memberi saldo awal).
+- [!] Ekspor CSV di sisi gateway / export report ERP (`/report/accounting/general-ledger/export`)
+      — keputusan bisnis. Filter cost center / project / rekonsiliasi belum ditawarkan.
 
 ### 5.3 General Journal (`/accounting/general-journal`)
 
-- [ ] S1 read-only: search, detail `/{journalHeadID}/detail`.
-- [ ] S4: export.
+- [x] S1 (2026-10-20, `[ESB-041]`): list (tanggal, teks bebas) + baris jurnal per halaman.
+      Detail vendor hanya berisi baris (tanpa head).
+- [!] Filter branch / akun / cost center / project: parameter array tidak terdokumentasi.
+- [!] S4: export — sama dengan `[ESB-032]`.
 
 ### 5.4 Memorial Journal (`/accounting/memorial-journal`)
 
-- [ ] S1: list, detail; `GET /access` untuk menyembunyikan aksi yang tidak diizinkan ERP.
+- [x] S1 (2026-10-20, `[ESB-043]`): list (nomor, status, tanggal) + detail dengan baris
+      debit/kredit (komponen `JournalLinesTable` bersama general journal).
+- [!] `GET /access`: nama parameter query tidak terdokumentasi, dan "current user" = kredensial
+      bersama gateway. Aksi S2 memakai permission gateway + status terdokumentasi.
 - [ ] S2: authorize / reject / delete.
 - [ ] S3: create / update — baris debit/kredit dengan picker COA; validasi seimbang
       hanya sebagai UX hint, ERP tetap otoritas.
@@ -796,6 +861,9 @@ nilai read-only cepat terlihat dan kontrak ESB tervalidasi lebih awal.
 - [ ] ESB: COA — akun nonaktif / parent akun (`/accounting/coa/index`?).
 - [ ] Bisnis: tampilkan nomor rekening supplier utuh atau dimask?- [ ] ESB: Promotion — update/nonaktifkan; arti "ESO".
 - [ ] ESB: `refNum` valid untuk Goods Delivery & Goods Receipt; cara mengisi batch expirasi.
+- [ ] ESB: memorial journal `/access` — nama parameter query nomor jurnal.
+- [ ] ESB: disbursement create — apakah `result.disbursementNum` dikirim (contoh `{}`).
+- [ ] Bisnis: ekspor general ledger (CSV dari gateway vs export report ERP).
 - [ ] ESB: upload attachment inventory — format field `existing`, dan apakah upload GTR
       menambah atau mengganti.
 - [ ] ESB: nomor dokumen di respons create GTR / Simple Transfer (dokumentasi: map string).

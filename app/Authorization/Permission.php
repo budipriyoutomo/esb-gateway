@@ -197,6 +197,20 @@ enum Permission: string
     case ManageSimpleTransfers = 'simple-transfers.manage';
 
     /**
+     * Permission to authorize or reject a disbursement in the ERP
+     * (TODO-modules.md §4.1, S2). Money goes out once it is authorized, so it
+     * is kept apart from esb.invoke and from managing. No role holds it yet;
+     * only Super Admin can use it (docs/06).
+     */
+    case ApproveDisbursements = 'disbursements.approve';
+
+    /**
+     * Permission to create, edit and delete disbursements, attach files to
+     * them and import them (S2-S4). No role holds it yet (docs/06).
+     */
+    case ManageDisbursements = 'disbursements.manage';
+
+    /**
      * See the sales transactions POS clients pushed through the gateway, and
      * what the ESB said about each (ADR-022). Never the card details.
      */

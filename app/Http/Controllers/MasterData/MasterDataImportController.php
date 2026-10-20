@@ -34,6 +34,7 @@ class MasterDataImportController extends Controller
             MasterDataImport::NewSuppliers, MasterDataImport::SupplierChanges => 'suppliers.index',
             MasterDataImport::CoaAccounts => 'coa-accounts.index',
             MasterDataImport::SimpleTransfers => 'simple-transfers.index',
+            MasterDataImport::Disbursements => 'disbursements.index',
         };
     }
 

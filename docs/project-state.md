@@ -1740,3 +1740,83 @@ product, pricelist), P9d (S4).
   `pint` — pass. `phpstan` — same 2 pre-existing errors in `app/Services/EsbConnectionInspector.php`
   (file untouched).
 - Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-20 — Finance: Disbursement S1–S4 (`TODO-modules.md` P12, `[ESB-037]`–`[ESB-040]`)
+
+**Selesai** (test-first; RED = missing classes / routes / permissions, then missing pages)
+
+- S1 `[ESB-037]`: `DisbursementSource` / `DisbursementClient` / `DisbursementMapper`,
+  `Domain\Canonical\Disbursement*` (summary, detail, line, linked document, query, page,
+  payment method). `DisbursementController` + `ListDisbursementsRequest`; pages
+  `disbursements/{index,show}.tsx`. The bank account number is masked in the adapter:
+  `mask()` moved from `SupplierMapper` into `ReadsEsbValues` (two consumers now); the whole
+  number lives only in `DisbursementCarryOver`, which is never serialized.
+- S2 `[ESB-038]`: `Actions\Disbursements\{Disbursements, DecideDisbursement,
+  DeleteDisbursement}` on `DocumentWrites`, `DisbursementWriteController`,
+  `DecideDisbursementRequest` (optional reason, 500 max). Permissions
+  `disbursements.approve` / `.manage` (Super Admin only), audit actions `disbursement.*`.
+- S3 `[ESB-039]`: `DisbursementDraft(Line)`, `DisbursementForms` (GuardedEsbWrite; create lock
+  per person), `SaveDisbursementRequest` (cash vs credit rules), `DisbursementFormController`
+  (HandlesRecordForms). Edit and update first read the document, then `PUT .../validate`;
+  a refusal or no answer lands on the detail with a warning, no update sent. Page
+  `disbursements/form.tsx`.
+- S4 `[ESB-040]`: `DisbursementAttachments` + `AttachDisbursementFilesRequest` +
+  `DisbursementAttachmentController` (attach only while there are none);
+  `MasterDataImport::Disbursements` on the shared import screen;
+  `DisbursementFormLinesController` + `ReadDisbursementFormRequest`: the ERP's Excel form is
+  read and its lines flashed back (`disbursementLines`) into the form — no lock, no audit.
+- Sidebar group "Finance".
+
+**Tersisa / blocked**
+
+- `[!]` vendor/business: export (same as `[ESB-032]`), cost center / project pickers (no
+  lookup), bank details on a new disbursement, segregation of duties (creator ≠ approver),
+  whether create returns `disbursementNum` (example `{}`).
+
+**Assumptions / TBD**
+
+- `isOverDue` sent as the string `true`, only when filtering overdue (`[ESB-037]`).
+- Decide offered for New / Waiting For Approval, delete for the four documented statuses;
+  edit offered always and decided by the ERP's validate (`[ESB-038]`, `[ESB-039]`).
+- Line amounts may be negative (vendor gives no sign rule); attachments 2 MB each, 5 files.
+
+## Update 2026-10-20 — Accounting S1 (`TODO-modules.md` P13, `[ESB-041]`–`[ESB-043]`)
+
+**Selesai** (test-first; RED = missing classes / routes, then missing pages)
+
+- General journal `[ESB-041]`: `GeneralJournalSource` / `GeneralJournalClient`,
+  `GeneralJournalController` (`ListGeneralJournalsRequest`, `ListJournalLinesRequest`),
+  pages `general-journals/{index,show}.tsx`. Detail = the vendor's paged lines (50 per page).
+- General ledger `[ESB-042]`: `GeneralLedgerSource` / `GeneralLedgerClient` via `postRead()`
+  (ADR-025), `GeneralLedgerController` (entries + summary; the ERP's validation refusal is
+  shown on the page as `error`), `ListLedgerEntriesRequest`, `ListLedgerSummaryRequest`,
+  `Requests\Accounting\Concerns\ValidatesLedgerPeriod`. `LedgerEntryPage::fromLedger()` pages
+  the vendor's unpaged list. Pages `general-ledger/{index,summary}.tsx`.
+- Memorial journal `[ESB-043]`: `MemorialJournalSource` / `MemorialJournalClient`,
+  `MemorialJournalController`, `ListMemorialJournalsRequest`, pages
+  `memorial-journals/{index,show}.tsx`.
+- Shared: `JournalMapper`, canonical `JournalLine`, component `JournalLinesTable`. Sidebar
+  group "Accounting".
+
+**Tersisa / blocked**
+
+- `[!]` vendor: array query format (branch / account / cost center / project filters of the
+  general journal), memorial journal `/access` parameter name; exports.
+- Business: general ledger export (gateway CSV vs ERP report export).
+- Next: P14 (Memorial Journal S2–S4).
+
+**Assumptions / TBD**
+
+- Ledger period required with the account, at most 366 days (gateway bound) (`[ESB-042]`).
+- No balance shown: the vendor gives no opening balance.
+- 0 on the other side of a journal line is shown as "—" (display only).
+
+**Checks dijalankan (P12 + P13)**
+
+- `php artisan test` — **pass**, 1544 passed, 26 skipped (unchanged skips); 1570 tests, 8374 assertions.
+- `npm run test:ui` — pass, 44 files, 257 tests. `vp check`, `tsc --noEmit`, `npm run build`,
+  `pint --test` — pass. `phpstan` — the same 2 pre-existing errors in
+  `app/Services/EsbConnectionInspector.php` (file untouched).
+- Frontend page tests were written alongside the pages rather than strictly before them;
+  the backend followed RED → GREEN.
+- Not run against a real ESB; not checked in a browser.

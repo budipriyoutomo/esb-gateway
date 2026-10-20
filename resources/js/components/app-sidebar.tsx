@@ -24,6 +24,12 @@ import {
     Factory,
     Landmark,
     BadgeDollarSign,
+    Banknote,
+    BookOpenText,
+    Calculator,
+    NotebookText,
+    Scale,
+    HandCoins,
     PlugZap,
     ReceiptText,
     ScrollText,
@@ -72,6 +78,10 @@ import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import { index as simplePurchasesIndex } from '@/routes/simple-purchases';
 import { index as simpleTransfersIndex } from '@/routes/simple-transfers';
+import { index as disbursementsIndex } from '@/routes/disbursements';
+import { index as generalJournalsIndex } from '@/routes/general-journals';
+import { index as generalLedgerIndex } from '@/routes/general-ledger';
+import { index as memorialJournalsIndex } from '@/routes/memorial-journals';
 import { index as supplierCategoriesIndex } from '@/routes/supplier-categories';
 import { index as suppliersIndex } from '@/routes/suppliers';
 import { index as unitsIndex } from '@/routes/units';
@@ -235,6 +245,42 @@ const mainNavItems: GatedNavEntry[] = [
                 title: 'Item journals',
                 href: itemJournalsIndex(),
                 icon: NotebookPen,
+                permission: 'esb.invoke',
+            },
+        ],
+    },
+    {
+        title: 'Finance',
+        icon: Banknote,
+        items: [
+            {
+                title: 'Disbursements',
+                href: disbursementsIndex(),
+                icon: HandCoins,
+                permission: 'esb.invoke',
+            },
+        ],
+    },
+    {
+        title: 'Accounting',
+        icon: Calculator,
+        items: [
+            {
+                title: 'General journal',
+                href: generalJournalsIndex(),
+                icon: BookOpenText,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'General ledger',
+                href: generalLedgerIndex(),
+                icon: Scale,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'Memorial journals',
+                href: memorialJournalsIndex(),
+                icon: NotebookText,
                 permission: 'esb.invoke',
             },
         ],

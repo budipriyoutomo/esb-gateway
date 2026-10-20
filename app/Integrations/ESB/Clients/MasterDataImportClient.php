@@ -40,6 +40,7 @@ class MasterDataImportClient implements MasterDataImportSource
      * @see https://developers.esb.co.id/esb-core/#/paths/supplier-upload/patch
      * @see https://developers.esb.co.id/esb-core/#/paths/accounting-coa-upload/post
      * @see https://developers.esb.co.id/esb-core/#/paths/simple-transfer-import/post
+     * @see https://developers.esb.co.id/esb-core/#/paths/finance-disbursement-import/post
      */
     public function import(MasterDataImport $kind, string $contents, string $filename): array
     {
@@ -54,6 +55,7 @@ class MasterDataImportClient implements MasterDataImportSource
             MasterDataImport::SupplierChanges => ['PATCH', '/supplier/upload'],
             MasterDataImport::CoaAccounts => ['POST', '/accounting/coa/upload'],
             MasterDataImport::SimpleTransfers => ['POST', '/simple-transfer/import'],
+            MasterDataImport::Disbursements => ['POST', '/finance/disbursement/import'],
         };
 
         $envelope = $this->client->upload(

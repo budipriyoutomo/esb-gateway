@@ -61,6 +61,8 @@ class MasterDataImportTest extends TestCase
         yield 'COA accounts' => ['coa-accounts', 'POST', '/accounting/coa/upload', 'coa.manage', 'coa-accounts.index'];
         // Not master data, but the same queued spreadsheet import ([ESB-036]).
         yield 'simple transfers' => ['simple-transfers', 'POST', '/simple-transfer/import', 'simple-transfers.manage', 'simple-transfers.index'];
+        // Queued as well ([ESB-040]).
+        yield 'disbursements' => ['disbursements', 'POST', '/finance/disbursement/import', 'disbursements.manage', 'disbursements.index'];
     }
 
     private function holder(string $permission): User

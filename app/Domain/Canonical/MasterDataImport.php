@@ -4,8 +4,8 @@ namespace App\Domain\Canonical;
 
 /**
  * The spreadsheets the ERP can import: master data ([ESB-032], S4) and,
- * through the same screen, simple transfers ([ESB-036]). The value is the
- * route segment of /imports/{kind}.
+ * through the same screen, simple transfers ([ESB-036]) and disbursements
+ * ([ESB-040]). The value is the route segment of /imports/{kind}.
  */
 enum MasterDataImport: string
 {
@@ -19,6 +19,7 @@ enum MasterDataImport: string
     case SupplierChanges = 'suppliers-update';
     case CoaAccounts = 'coa-accounts';
     case SimpleTransfers = 'simple-transfers';
+    case Disbursements = 'disbursements';
 
     /** For headings and messages, e.g. "units". */
     public function label(): string
@@ -34,19 +35,21 @@ enum MasterDataImport: string
             self::SupplierChanges => 'changes to existing suppliers',
             self::CoaAccounts => 'COA accounts and account mappings',
             self::SimpleTransfers => 'simple transfers',
+            self::Disbursements => 'disbursements',
         };
     }
 
     /**
-     * File extensions the vendor documents. Products take legacy .xls too;
-     * the rest name .xlsx (the COA upload says "Excel", taken as both).
+     * File extensions the vendor documents. Products and disbursements take
+     * legacy .xls too; the rest name .xlsx (the COA upload says "Excel",
+     * taken as both).
      *
      * @return list<string>
      */
     public function extensions(): array
     {
         return match ($this) {
-            self::NewProducts, self::ProductChanges, self::CoaAccounts => ['xlsx', 'xls'],
+            self::NewProducts, self::ProductChanges, self::CoaAccounts, self::Disbursements => ['xlsx', 'xls'],
             default => ['xlsx'],
         };
     }

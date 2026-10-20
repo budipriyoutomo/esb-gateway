@@ -42,6 +42,8 @@ export type Permission =
     | 'item-journals.manage'
     | 'simple-transfers.approve'
     | 'simple-transfers.manage'
+    | 'disbursements.approve'
+    | 'disbursements.manage'
     | 'sales-pushes.view'
     | 'sales-pushes.retry'
     | 'users.view'

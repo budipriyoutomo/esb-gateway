@@ -3,10 +3,18 @@
 use App\Authorization\InventoryPermissions;
 use App\Authorization\Permission;
 use App\Domain\Canonical\InventoryKind;
+use App\Http\Controllers\Accounting\GeneralJournalController;
+use App\Http\Controllers\Accounting\GeneralLedgerController;
+use App\Http\Controllers\Accounting\MemorialJournalController;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
 use App\Http\Controllers\CoaAccounts\CoaAccountController;
 use App\Http\Controllers\CoaAccounts\CoaAccountWriteController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\Disbursements\DisbursementAttachmentController;
+use App\Http\Controllers\Disbursements\DisbursementController;
+use App\Http\Controllers\Disbursements\DisbursementFormController;
+use App\Http\Controllers\Disbursements\DisbursementFormLinesController;
+use App\Http\Controllers\Disbursements\DisbursementWriteController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateFormController;
 use App\Http\Controllers\DocumentTemplates\DocumentTemplateImportController;
@@ -377,6 +385,67 @@ Route::middleware('auth')->group(function () {
             ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
             ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageGoodsTransferRequests->value])
             ->name('goods-transfer-requests.reopen');
+        // Disbursements ([ESB-037]–[ESB-040]). Reading needs esb.invoke (on
+        // the form request for the list, the route for the detail); decisions
+        // need disbursements.approve (checked by the form request); everything
+        // else disbursements.manage. The controller requires a digit in the
+        // number (/finance/disbursement/import shares the segment). The form
+        // routes come first: "create" would match the number pattern.
+        $manageDisbursements = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageDisbursements->value];
+        Route::get('disbursements/create', [DisbursementFormController::class, 'create'])
+            ->middleware($manageDisbursements)
+            ->name('disbursements.create');
+        Route::post('disbursements', [DisbursementFormController::class, 'store'])
+            ->name('disbursements.store');
+        Route::post('disbursements/form-lines', [DisbursementFormLinesController::class, 'store'])
+            ->name('disbursements.form-lines');
+        Route::get('disbursements', [DisbursementController::class, 'index'])
+            ->name('disbursements.index');
+        Route::get('disbursements/{number}', [DisbursementController::class, 'show'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('disbursements.show');
+        Route::get('disbursements/{number}/edit', [DisbursementFormController::class, 'edit'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageDisbursements)
+            ->name('disbursements.edit');
+        Route::put('disbursements/{number}', [DisbursementFormController::class, 'update'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('disbursements.update');
+        Route::post('disbursements/{number}/decisions', [DisbursementWriteController::class, 'decide'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('disbursements.decisions.store');
+        Route::delete('disbursements/{number}', [DisbursementWriteController::class, 'destroy'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageDisbursements)
+            ->name('disbursements.destroy');
+        // POST, not PATCH: PHP parses multipart bodies only on POST.
+        Route::post('disbursements/{number}/attachments', [DisbursementAttachmentController::class, 'store'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageDisbursements)
+            ->name('disbursements.attachments.store');
+
+        // Accounting reads ([ESB-041]–[ESB-043], S1). Authorization
+        // (esb.invoke) is on the form requests, and on the route for the
+        // memorial journal detail. A journal head id is a positive integer; a
+        // memorial journal number must contain a digit (checked by the
+        // controller: literal vendor paths share the segment).
+        Route::get('general-journals', [GeneralJournalController::class, 'index'])
+            ->name('general-journals.index');
+        Route::get('general-journals/{journalHeadId}', [GeneralJournalController::class, 'show'])
+            ->where('journalHeadId', '[1-9][0-9]{0,9}')
+            ->name('general-journals.show');
+        Route::get('general-ledger', [GeneralLedgerController::class, 'index'])
+            ->name('general-ledger.index');
+        Route::get('general-ledger/summary', [GeneralLedgerController::class, 'summary'])
+            ->name('general-ledger.summary');
+        Route::get('memorial-journals', [MemorialJournalController::class, 'index'])
+            ->name('memorial-journals.index');
+        Route::get('memorial-journals/{number}', [MemorialJournalController::class, 'show'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('memorial-journals.show');
+
         // Master data spreadsheet imports ([ESB-032], S4). esb.invoke here;
         // the module's own manage permission is checked per kind by the
         // controller and the form request. An unknown kind is a 404.

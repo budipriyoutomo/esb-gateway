@@ -129,23 +129,6 @@ class SupplierMapper
     }
 
     /**
-     * Keep only the last four digits: "•••• 6789". A number too short to
-     * mask safely is hidden entirely.
-     */
-    private function mask(mixed $number): ?string
-    {
-        $number = $this->nullableString(is_string($number) ? trim($number) : null);
-
-        if ($number === null) {
-            return null;
-        }
-
-        $digits = preg_replace('/\D/', '', $number) ?? '';
-
-        return strlen($digits) >= 8 ? '•••• '.substr($digits, -4) : '••••';
-    }
-
-    /**
      * @template T
      *
      * @param  callable(array<mixed>): T  $map

@@ -310,6 +310,38 @@ enum AuditAction: string
     case SimpleTransferWriteUnconfirmed = 'simple-transfer.write-unconfirmed';
 
     /**
+     * A disbursement was authorized, rejected (with the reason, when one was
+     * given) or deleted through the gateway ([ESB-038]). The ERP records the
+     * shared service credential, so this row is the record of the person.
+     */
+    case DisbursementAuthorized = 'disbursement.authorized';
+
+    case DisbursementRejected = 'disbursement.rejected';
+
+    case DisbursementDeleted = 'disbursement.deleted';
+
+    /**
+     * A disbursement was created or replaced through the gateway
+     * ([ESB-039]). The metadata carries the number (when the ERP gave one),
+     * the date, the payment method and how many lines -- never the amounts.
+     */
+    case DisbursementCreated = 'disbursement.created';
+
+    case DisbursementUpdated = 'disbursement.updated';
+
+    /**
+     * Files were attached to a disbursement ([ESB-040]): each file's name,
+     * size and SHA-256, never its contents.
+     */
+    case DisbursementAttachmentsUploaded = 'disbursement.attachments-uploaded';
+
+    /**
+     * A disbursement write the ERP did not confirm either way, with its
+     * correlation id.
+     */
+    case DisbursementWriteUnconfirmed = 'disbursement.write-unconfirmed';
+
+    /**
      * A document template was created in the ERP through the gateway. The
      * ERP sees the shared service credential, so this row is the record of
      * which person did it.
