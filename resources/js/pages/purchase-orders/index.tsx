@@ -216,12 +216,3 @@ export default function PurchaseOrdersIndex({
         </>
     );
 }
-
-PurchaseOrdersIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purchase orders',
-            href: purchaseOrdersIndex(),
-        },
-    ],
-};

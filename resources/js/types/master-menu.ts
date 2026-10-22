@@ -38,6 +38,12 @@ export type MasterMenuExtra = {
     price: number | null;
 };
 
+/** An extra with the menu it belongs to (MasterMenuController::extras). */
+export type MasterMenuExtraRow = MasterMenuExtra & {
+    menuCode: string;
+    menuName: string;
+};
+
 export type MasterMenuReference = {
     menuId: number;
     name: string | null;

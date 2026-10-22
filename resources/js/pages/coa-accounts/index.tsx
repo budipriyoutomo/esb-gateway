@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ImportLinks } from '@/components/import-links';
 import { useState } from 'react';
@@ -10,7 +11,11 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { useListQuery } from '@/hooks/use-list-query';
-import { index as coaIndex, show as coaShow } from '@/routes/coa-accounts';
+import {
+    exportMethod as exportRoute,
+    index as coaIndex,
+    show as coaShow,
+} from '@/routes/coa-accounts';
 import type { CoaAccountSummary } from '@/types/master-data';
 import type { Pagination } from '@/types/pagination';
 
@@ -66,12 +71,27 @@ export default function CoaAccountsIndex({
                     title="Chart of accounts"
                     description="Active accounts in chart order, read live from the ERP."
                     actions={
-                        <ImportLinks
-                            canImport={can('esb.invoke') && can('coa.manage')}
-                            imports={[
-                                { kind: 'coa-accounts', label: 'Import' },
-                            ]}
-                        />
+                        <>
+                            <ExportCsvButton
+                                href={
+                                    exportRoute({ query: exportQuery(filters) })
+                                        .url
+                                }
+                            />
+                            {
+                                <ImportLinks
+                                    canImport={
+                                        can('esb.invoke') && can('coa.manage')
+                                    }
+                                    imports={[
+                                        {
+                                            kind: 'coa-accounts',
+                                            label: 'Import',
+                                        },
+                                    ]}
+                                />
+                            }
+                        </>
                     }
                 />
 
@@ -194,7 +214,3 @@ export default function CoaAccountsIndex({
         </>
     );
 }
-
-CoaAccountsIndex.layout = {
-    breadcrumbs: [{ title: 'Chart of accounts', href: coaIndex() }],
-};

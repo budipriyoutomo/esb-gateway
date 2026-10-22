@@ -132,7 +132,3 @@ export default function UnitForm({ unit }: { unit: UnitOfMeasure | null }) {
         </>
     );
 }
-
-UnitForm.layout = {
-    breadcrumbs: [{ title: 'Units', href: unitsIndex() }],
-};

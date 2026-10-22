@@ -33,6 +33,7 @@ class HandlesDocumentWritesTest extends TestCase
         Route::middleware('web')->group(function (): void {
             Route::get('test-widgets', fn () => 'index')->name('test-widgets.index');
             Route::get('test-widgets/{number}', fn () => 'show')->name('test-widgets.show');
+            Route::post('test-widgets/{number}/finish', [FakeDocumentWriteController::class, 'finish']);
             Route::post('test-widgets/{number}/{decision}', [FakeDocumentWriteController::class, 'decide']);
             Route::post('consumed-widgets/{number}/{decision}', [FakeDocumentWriteController::class, 'decideConsumed']);
             Route::delete('test-widgets/{number}', [FakeDocumentWriteController::class, 'destroy']);
@@ -91,16 +92,19 @@ class HandlesDocumentWritesTest extends TestCase
     }
 
     #[Test]
-    public function an_unconfirmed_decision_warns_with_the_reference(): void
+    public function an_unconfirmed_decision_flashes_a_notice_for_the_detail_page(): void
     {
+        // A toast disappears in seconds; the detail page keeps a banner up
+        // while the person checks the re-read status (UnconfirmedWriteNotice).
         FakeDocumentWriteController::$throw = new EsbTimeoutException(self::context());
 
         $this->post('test-widgets/'.self::NUMBER.'/reject')
             ->assertRedirect($this->show())
-            ->assertSessionHas('inertia.flash_data.toast', [
-                'type' => 'warning',
-                'message' => 'The ERP did not confirm the request to reject W-0001. It may or may not have been applied -- check the status below before trying again. (reference: corr-123)',
-            ]);
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite', [
+                'action' => 'reject W-0001',
+                'reference' => 'corr-123',
+            ])
+            ->assertSessionMissing('inertia.flash_data.toast');
     }
 
     #[Test]
@@ -138,15 +142,60 @@ class HandlesDocumentWritesTest extends TestCase
     #[Test]
     public function an_unconfirmed_consuming_authorization_also_returns_to_the_list(): void
     {
+        // The list has no status to check below, so it stays a toast.
         FakeDocumentWriteController::$throw = new EsbTimeoutException(self::context());
 
-        $this->post('consumed-widgets/'.self::NUMBER.'/authorize')->assertRedirect($this->index());
+        $this->post('consumed-widgets/'.self::NUMBER.'/authorize')
+            ->assertRedirect($this->index())
+            ->assertSessionHas('inertia.flash_data.toast.type', 'warning')
+            ->assertSessionMissing('inertia.flash_data.unconfirmedWrite');
     }
 
     #[Test]
     public function a_rejection_of_such_a_document_stays_on_it(): void
     {
         $this->post('consumed-widgets/'.self::NUMBER.'/reject')->assertRedirect($this->show());
+    }
+
+    // ---------------------------------------------------------- transition
+
+    #[Test]
+    public function a_transition_is_reported_on_the_detail_page(): void
+    {
+        $this->post('test-widgets/'.self::NUMBER.'/finish')
+            ->assertRedirect($this->show())
+            ->assertSessionHas('inertia.flash_data.toast', [
+                'type' => 'success',
+                'message' => 'Test widget W-0001 was finished.',
+            ]);
+    }
+
+    #[Test]
+    public function an_unconfirmed_transition_flashes_a_notice_for_the_detail_page(): void
+    {
+        FakeDocumentWriteController::$throw = new EsbTimeoutException(self::context());
+
+        $this->post('test-widgets/'.self::NUMBER.'/finish')
+            ->assertRedirect($this->show())
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite', [
+                'action' => 'finish W-0001',
+                'reference' => 'corr-123',
+            ])
+            ->assertSessionMissing('inertia.flash_data.toast');
+    }
+
+    #[Test]
+    public function a_refused_transition_is_an_error_with_the_safe_message(): void
+    {
+        $exception = new EsbBusinessRejectionException(self::context());
+        FakeDocumentWriteController::$throw = $exception;
+
+        $this->post('test-widgets/'.self::NUMBER.'/finish')
+            ->assertRedirect($this->show())
+            ->assertSessionHas('inertia.flash_data.toast', [
+                'type' => 'error',
+                'message' => 'Could not finish W-0001. '.$exception->safeMessage(),
+            ]);
     }
 
     // -------------------------------------------------------------- delete
@@ -231,6 +280,14 @@ class FakeDocumentWriteController extends Controller
             'Test widget', 'test-widgets', $number, ApprovalDecision::from($decision),
             fn () => self::fail(),
             authorizeConsumesDocument: true,
+        );
+    }
+
+    public function finish(string $number): RedirectResponse
+    {
+        return $this->transitionOutcome(
+            'Test widget', 'test-widgets', $number, 'finish', 'finished',
+            fn () => self::fail(),
         );
     }
 

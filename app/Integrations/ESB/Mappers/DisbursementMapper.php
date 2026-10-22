@@ -14,9 +14,7 @@ use App\Integrations\ESB\Mappers\Concerns\ReadsEsbValues;
  * ESB Core disbursements onto the canonical shape ([ESB-037]).
  *
  * The vendor's examples are zero-valued, so 0 / "" ids and texts are "none".
- * Amounts are kept as sent, 0 included; a non-number is unknown (null). The
- * bank account number is masked here, so the whole number never leaves the
- * adapter except in the carry-over an update sends back.
+ * Amounts are kept as sent, 0 included; a non-number is unknown (null).
  */
 class DisbursementMapper
 {
@@ -113,7 +111,7 @@ class DisbursementMapper
             notes: $this->nullableString($r['additionalInformation'] ?? null),
             bankName: $this->nullableString($r['bankName'] ?? null),
             bankAccountName: $this->nullableString($r['bankAccountName'] ?? null),
-            maskedBankAccountNumber: $this->mask($r['bankAccountNumber'] ?? null),
+            bankAccountNumber: $this->accountNumber($r['bankAccountNumber'] ?? null),
             costCenter: $this->nullableString($r['costCenterName'] ?? null),
             project: $this->nullableString($r['projectName'] ?? null),
             grandTotal: $this->amount($r['grandTotal'] ?? null),

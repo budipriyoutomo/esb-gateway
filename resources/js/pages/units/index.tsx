@@ -1,10 +1,12 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/use-permissions';
 import {
+    exportMethod as exportRoute,
     index as unitsIndex,
     show as unitsShow,
     create as createRoute,
@@ -27,17 +29,26 @@ export default function UnitsIndex({ units, pagination, filters }: Props) {
 
             <ReferenceDataIndex
                 actions={
-                    can('esb.invoke') && can('units.manage') ? (
-                        <>
-                            <ImportLinks
-                                canImport
-                                imports={[{ kind: 'units', label: 'Import' }]}
-                            />
-                            <Button asChild>
-                                <Link href={createRoute()}>New unit</Link>
-                            </Button>
-                        </>
-                    ) : undefined
+                    <>
+                        <ExportCsvButton
+                            href={
+                                exportRoute({ query: exportQuery(filters) }).url
+                            }
+                        />
+                        {can('esb.invoke') && can('units.manage') ? (
+                            <>
+                                <ImportLinks
+                                    canImport
+                                    imports={[
+                                        { kind: 'units', label: 'Import' },
+                                    ]}
+                                />
+                                <Button asChild>
+                                    <Link href={createRoute()}>New unit</Link>
+                                </Button>
+                            </>
+                        ) : undefined}
+                    </>
                 }
                 id="units"
                 title="Units"
@@ -91,7 +102,3 @@ export default function UnitsIndex({ units, pagination, filters }: Props) {
         </>
     );
 }
-
-UnitsIndex.layout = {
-    breadcrumbs: [{ title: 'Units', href: unitsIndex() }],
-};

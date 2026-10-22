@@ -180,7 +180,7 @@ class DisbursementTest extends TestCase
     }
 
     #[Test]
-    public function the_detail_shows_the_disbursement_with_a_masked_bank_account(): void
+    public function the_detail_shows_the_disbursement_with_its_bank_account(): void
     {
         $this->fakeUpstream();
 
@@ -189,11 +189,10 @@ class DisbursementTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('disbursements/show')
                 ->where('disbursement.number', CoreDisbursement::NUMBER)
-                ->where('disbursement.maskedBankAccountNumber', '•••• 0123')
+                ->where('disbursement.bankAccountNumber', '1234567890123')
                 ->has('disbursement.lines', 1)
                 ->has('disbursement.linkedDocuments', 1)
-                ->missing('disbursement.carryOver'))
-            ->assertDontSee('1234567890123');
+                ->missing('disbursement.carryOver'));
     }
 
     #[Test]

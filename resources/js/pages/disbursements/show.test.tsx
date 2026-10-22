@@ -42,7 +42,7 @@ function disbursement(overrides: Partial<Disbursement> = {}): Disbursement {
         notes: 'Sewa ruko Maret',
         bankName: 'BCA',
         bankAccountName: 'PT Properti Jaya',
-        maskedBankAccountNumber: '•••• 0123',
+        bankAccountNumber: '1234567890123',
         costCenter: 'Operasional',
         project: null,
         grandTotal: 15000000.5,
@@ -90,7 +90,7 @@ describe('Disbursement detail', () => {
         );
         expect(screen.getByText('30 days')).toBeVisible();
         expect(
-            screen.getByText('BCA · PT Properti Jaya · •••• 0123'),
+            screen.getByText('BCA · PT Properti Jaya · 1234567890123'),
         ).toBeVisible();
         expect(screen.getByText('Beban Sewa')).toBeVisible();
         expect(screen.getByText('PP202603280001')).toBeVisible();

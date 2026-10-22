@@ -4,6 +4,7 @@ namespace App\Integrations\ESB\Mappers;
 
 use App\Domain\Canonical\LookupKind;
 use App\Domain\Canonical\LookupOption;
+use LogicException;
 
 /**
  * ESB Core reference rows -> picker options ([ESB-019]).
@@ -27,6 +28,8 @@ class LookupMapper
             }
 
             $option = match ($kind) {
+                // ESB OMS lists: read through LookupClient::oms() with their own mappers.
+                LookupKind::MenuCategories, LookupKind::MenuCategoryDetails, LookupKind::PosMenus => throw new LogicException("{$kind->value} is not a Core list."),
                 LookupKind::Branches => $this->option($this->id($row['branchID'] ?? null), $row['branchName'] ?? null, $row['branchCode'] ?? null),
                 LookupKind::Suppliers => $this->option($this->id($row['supplierID'] ?? null), $row['supplierName'] ?? null, $row['supplierCode'] ?? null),
                 LookupKind::Locations => $this->option(

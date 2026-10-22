@@ -133,4 +133,29 @@ describe('AttachmentActions', () => {
             screen.getByRole('button', { name: 'Remove all' }),
         ).toBeVisible();
     });
+
+    it('sends one file under "file" where the ERP takes one at a time', async () => {
+        const post = vi.spyOn(router, 'post').mockImplementation(() => {});
+        render(
+            <AttachmentActions
+                name="MJ202603260001"
+                count={1}
+                canManage
+                uploadUrl="/memorial-journals/MJ202603260001/images"
+                accept=".jpg,.jpeg,.png"
+                single
+            />,
+        );
+
+        const input = screen.getByLabelText('Image to attach');
+        expect(input).not.toHaveAttribute('multiple');
+
+        const image = new File(['jpg'], 'bukti.jpg', { type: 'image/jpeg' });
+        await userEvent.upload(input, image);
+        await userEvent.click(screen.getByRole('button', { name: 'Attach' }));
+
+        const [url, data] = post.mock.calls[0] as [string, unknown];
+        expect(url).toBe('/memorial-journals/MJ202603260001/images');
+        expect(data).toEqual({ file: image, name: 'MJ202603260001' });
+    });
 });

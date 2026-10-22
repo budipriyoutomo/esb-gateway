@@ -1,6 +1,6 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import Heading from '@/components/heading';
+import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,7 +30,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { usePermissions } from '@/hooks/use-permissions';
-import { index as esbConnectionsIndex } from '@/routes/esb-connections';
 
 type ConnectionSource =
     | 'disabled'
@@ -132,7 +131,7 @@ export default function EsbConnectionsIndex({
             <Head title="ESB connections" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="ESB connections"
                     description={`Environment: ${environment}. Authentication: ${authMechanism}.`}
                 />
@@ -527,12 +526,3 @@ function EditConnectionDialog({
         </Dialog>
     );
 }
-
-EsbConnectionsIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'ESB connections',
-            href: esbConnectionsIndex(),
-        },
-    ],
-};

@@ -13,6 +13,7 @@ function line(overrides: Partial<JournalLine>): JournalLine {
         costCenter: null,
         project: null,
         currencyName: 'Rupiah',
+        currencyId: 1,
         rate: 1,
         debit: 500000,
         credit: 0,

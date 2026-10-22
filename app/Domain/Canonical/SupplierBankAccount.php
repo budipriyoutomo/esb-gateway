@@ -5,8 +5,8 @@ namespace App\Domain\Canonical;
 use JsonSerializable;
 
 /**
- * A supplier's bank account ([ESB-024]). Only the last four digits of the
- * account number are kept; the full number stays in the ERP.
+ * A supplier's bank account ([ESB-024]). The account number is shown in
+ * full (business decision 2026-10-22).
  */
 readonly class SupplierBankAccount implements JsonSerializable
 {
@@ -14,8 +14,8 @@ readonly class SupplierBankAccount implements JsonSerializable
         public ?int $bankId,
         public ?string $bankName,
         public ?string $accountName,
-        /** e.g. "•••• 6789"; null when the ERP sent none. */
-        public ?string $maskedAccountNumber,
+        /** As the ERP sent it, trimmed; null when it sent none. */
+        public ?string $accountNumber,
     ) {}
 
     /**

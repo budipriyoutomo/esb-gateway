@@ -82,6 +82,25 @@ readonly class EsbFieldError
     }
 
     /**
+     * A message the ESB keyed by field (OMS, [ESB-048], [ESB-050]). A field
+     * that is not an identifier is dropped; the message is kept.
+     */
+    public static function forField(?string $field, string $message): ?self
+    {
+        $message = trim($message);
+
+        if ($message === '') {
+            return null;
+        }
+
+        return new self(
+            field: self::identifierOrNull($field),
+            row: null,
+            message: mb_strimwidth($message, 0, self::MAX_MESSAGE_LENGTH, '…'),
+        );
+    }
+
+    /**
      * A field name is an identifier. Anything else is dropped rather than
      * echoed, so it cannot be used to smuggle markup to a page.
      */

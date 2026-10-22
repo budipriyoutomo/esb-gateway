@@ -231,7 +231,7 @@ abstract class InventoryAttachmentTestCase extends TestCase
 
         $this->upload()
             ->assertRedirect($this->showRoute())
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $writes);
 

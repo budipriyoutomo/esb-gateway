@@ -42,8 +42,69 @@ class ErrorClassifier
             esbCode: $envelope->code,
             upstreamMessage: $envelope->message,
             fieldErrors: $this->fieldErrors($envelope->errors)
-                ?: $this->messageErrors($envelope->body['data'] ?? null),
+                ?: $this->messageErrors($envelope->body['data'] ?? null)
+                ?: $this->keyedErrors($envelope->body['data'] ?? null)
+                ?: $this->omsMasterErrors($envelope),
         );
+    }
+
+    /**
+     * An ESB OMS master refusal (EC0110, [ESB-048]) puts its per-field
+     * errors as a JSON object in `message`; when the message is not one, it
+     * is the refusal itself and is kept without a field. Only EC0110 is read
+     * this way: any other code's message stays diagnostic.
+     *
+     * @return list<EsbFieldError>
+     */
+    private function omsMasterErrors(EsbEnvelope $envelope): array
+    {
+        if ($envelope->code !== ErrorCode::OMS_VALIDATION || $envelope->message === null) {
+            return [];
+        }
+
+        $decoded = json_decode($envelope->message, true);
+
+        if (is_array($decoded) && ! array_is_list($decoded)) {
+            return $this->keyedErrors($decoded);
+        }
+
+        $fieldError = EsbFieldError::forField(null, $envelope->message);
+
+        return $fieldError === null ? [] : [$fieldError];
+    }
+
+    /**
+     * Errors keyed by field, each a message or a list of them: the OMS
+     * promotion create's `data` ([ESB-050]) and the EC0110 message. A key
+     * that is not an identifier keeps its message without a field.
+     *
+     * @return list<EsbFieldError>
+     */
+    private function keyedErrors(mixed $errors): array
+    {
+        if (! is_array($errors) || array_is_list($errors)) {
+            return [];
+        }
+
+        $fieldErrors = [];
+
+        foreach ($errors as $field => $messages) {
+            foreach (is_array($messages) ? $messages : [$messages] as $message) {
+                $fieldError = is_string($message) ? EsbFieldError::forField((string) $field, $message) : null;
+
+                if ($fieldError === null) {
+                    continue;
+                }
+
+                $fieldErrors[] = $fieldError;
+
+                if (count($fieldErrors) === self::MAX_FIELD_ERRORS) {
+                    return $fieldErrors;
+                }
+            }
+        }
+
+        return $fieldErrors;
     }
 
     /**

@@ -3,7 +3,8 @@
 namespace App\Domain\Canonical;
 
 /**
- * The reference lists a picker can search ([ESB-019]). The values are the
+ * The reference lists a picker can search ([ESB-019]); the last three are
+ * ESB OMS lists ([ESB-047], [ESB-013]). The values are the
  * route segment of GET /lookups/{kind}.
  */
 enum LookupKind: string
@@ -24,6 +25,11 @@ enum LookupKind: string
     case Currencies = 'currencies';
     case ProductDetails = 'product-details';
     case Purposes = 'purposes';
+
+    /** ESB OMS, for promotions ([ESB-050]): paged by the ESB, searched per page. */
+    case MenuCategories = 'menu-categories';
+    case MenuCategoryDetails = 'menu-category-details';
+    case PosMenus = 'pos-menus';
 
     /**
      * Whether the list belongs to one branch and cannot be asked for without it.

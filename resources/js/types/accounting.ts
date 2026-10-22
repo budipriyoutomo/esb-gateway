@@ -8,6 +8,7 @@ export type JournalLine = {
     costCenter: string | null;
     project: string | null;
     currencyName: string | null;
+    currencyId: number | null;
     rate: number | null;
     debit: number | null;
     credit: number | null;
@@ -85,3 +86,11 @@ export type MemorialJournal = {
     authorizedBy: string | null;
     authorizedAt: string | null;
 };
+
+/** The memorial journal statuses the vendor documents ([ESB-043]). */
+export const MEMORIAL_JOURNAL_STATUS = {
+    new: 1,
+    rejected: 2,
+    authorized: 3,
+    waitingForApproval: 38,
+} as const;

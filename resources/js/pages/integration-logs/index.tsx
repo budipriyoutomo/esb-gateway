@@ -1,26 +1,18 @@
-import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
+import { Head } from '@inertiajs/react';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { FilterBar } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { SelectFilterField } from '@/components/select-filter-field';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import { index as integrationLogsIndex } from '@/routes/integration-logs';
+import { Label } from '@/components/ui/label';
+import { useFilterForm } from '@/hooks/use-filter-form';
 import { formatDateTime } from '@/lib/format';
+import { fromPaginator } from '@/lib/pagination';
+import type { LaravelPaginator } from '@/lib/pagination';
+import { index as integrationLogsIndex } from '@/routes/integration-logs';
 
 type LogRow = {
     id: number;
@@ -40,22 +32,14 @@ type LogRow = {
     createdAt: string | null;
 };
 
-type Paginated = {
-    data: LogRow[];
-    total: number;
-    current_page: number;
-    last_page: number;
-};
-
 type Props = {
-    logs: Paginated;
+    logs: LaravelPaginator<LogRow>;
     filters: Record<string, string>;
     outcomes: string[];
     families: string[];
 };
 
-const ANY = '__any__';
-
+/** The gateway's own outcome names, so they keep their own colours. */
 function outcomeVariant(
     outcome: string,
 ): 'default' | 'secondary' | 'destructive' {
@@ -67,35 +51,88 @@ function outcomeVariant(
     return 'destructive';
 }
 
+const columns: DataTableColumn<LogRow>[] = [
+    {
+        key: 'when',
+        header: 'When',
+        className: 'text-muted-foreground text-xs',
+        cell: (log) => formatDateTime(log.createdAt),
+    },
+    {
+        key: 'operation',
+        header: 'Operation',
+        className: 'font-medium',
+        cell: (log) => (
+            <span>
+                {log.operation}
+                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    {log.method} {log.path}
+                </span>
+            </span>
+        ),
+    },
+    {
+        key: 'outcome',
+        header: 'Outcome',
+        cell: (log) => (
+            <span>
+                <Badge variant={outcomeVariant(log.outcome)}>
+                    {log.outcome}
+                </Badge>
+                {log.message && (
+                    <span className="text-muted-foreground mt-1 block max-w-md text-xs whitespace-normal">
+                        {log.message}
+                    </span>
+                )}
+            </span>
+        ),
+    },
+    {
+        key: 'code',
+        header: 'Code',
+        className: 'font-mono text-xs',
+        cell: (log) => log.esbCode ?? '—',
+    },
+    {
+        key: 'duration',
+        header: 'Duration',
+        className: 'text-muted-foreground text-xs',
+        cell: (log) =>
+            `${log.durationMs === null ? '—' : `${String(log.durationMs)} ms`}${
+                log.retryCount > 0 ? ` (${String(log.retryCount)} retries)` : ''
+            }`,
+    },
+    {
+        key: 'by',
+        header: 'By',
+        className: 'text-muted-foreground text-xs',
+        cell: (log) => log.user ?? 'System',
+    },
+    {
+        key: 'correlationId',
+        header: 'Correlation ID',
+        className: 'font-mono text-xs',
+        cell: (log) => log.correlationId,
+    },
+];
+
 export default function IntegrationLogsIndex({
     logs,
     filters,
     outcomes,
     families,
 }: Props) {
-    const [correlationId, setCorrelationId] = useState(
-        filters.correlationId ?? '',
-    );
-    const [operation, setOperation] = useState(filters.operation ?? '');
+    const form = useFilterForm(integrationLogsIndex().url, filters, [
+        { key: 'correlationId', chip: (value) => `Reference ${value}` },
+        { key: 'operation', chip: (value) => `Operation ${value}` },
+        { key: 'outcome', chip: (value) => `Outcome ${value}` },
+        { key: 'family', chip: (value) => `Family ${value}` },
+    ]);
 
-    function apply(overrides: Record<string, string> = {}) {
-        const next: Record<string, string> = {
-            ...filters,
-            correlationId,
-            operation,
-            ...overrides,
-        };
-
-        for (const key of Object.keys(next)) {
-            if (next[key] === '' || next[key] === ANY) {
-                delete next[key];
-            }
-        }
-
-        router.get(integrationLogsIndex().url, next, {
-            preserveState: true,
-            replace: true,
-        });
+    // The selects apply at once, as they did before.
+    function applyNow(key: string, value: string) {
+        form.set(key, value);
+        form.apply({ ...form.values, [key]: value });
     }
 
     return (
@@ -103,190 +140,77 @@ export default function IntegrationLogsIndex({
             <Head title="Integration logs" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="Integration logs"
                     description="Every call the gateway made to the ERP service. Search by the reference shown on an error page."
                 />
 
-                <form
-                    className="flex flex-wrap items-end gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        apply();
+                <FilterBar
+                    id="logs"
+                    search={{
+                        label: 'Correlation ID',
+                        value: form.values.correlationId!,
+                        onChange: (value) => form.set('correlationId', value),
+                        placeholder: 'The reference on an error page',
                     }}
+                    {...form.bar}
+                    defaultAdvancedOpen={Boolean(
+                        filters.operation || filters.outcome || filters.family,
+                    )}
                 >
-                    <Input
-                        value={correlationId}
-                        onChange={(event) => {
-                            setCorrelationId(event.target.value);
+                    <div className="grid w-full gap-1.5 sm:w-48">
+                        <Label htmlFor="logs-operation">Operation</Label>
+                        <Input
+                            id="logs-operation"
+                            value={form.values.operation}
+                            onChange={(event) => {
+                                form.set('operation', event.target.value);
+                            }}
+                        />
+                    </div>
+                    <SelectFilterField
+                        id="logs-outcome"
+                        label="Outcome"
+                        anyLabel="Any outcome"
+                        options={outcomes.map((outcome) => ({
+                            value: outcome,
+                            label: outcome,
+                        }))}
+                        value={form.values.outcome!}
+                        onChange={(value) => {
+                            applyNow('outcome', value);
                         }}
-                        placeholder="Correlation ID"
-                        aria-label="Correlation ID"
-                        className="w-72"
-                    />
-                    <Input
-                        value={operation}
-                        onChange={(event) => {
-                            setOperation(event.target.value);
-                        }}
-                        placeholder="Operation"
-                        aria-label="Operation"
                         className="w-48"
                     />
-                    <Select
-                        value={filters.outcome ?? ANY}
-                        onValueChange={(value) => {
-                            apply({ outcome: value });
+                    <SelectFilterField
+                        id="logs-family"
+                        label="Family"
+                        anyLabel="Any family"
+                        options={families.map((family) => ({
+                            value: family,
+                            label: family,
+                        }))}
+                        value={form.values.family!}
+                        onChange={(value) => {
+                            applyNow('family', value);
                         }}
-                    >
-                        <SelectTrigger className="w-48" aria-label="Outcome">
-                            <SelectValue placeholder="Any outcome" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any outcome</SelectItem>
-                            {outcomes.map((outcome) => (
-                                <SelectItem key={outcome} value={outcome}>
-                                    {outcome}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={filters.family ?? ANY}
-                        onValueChange={(value) => {
-                            apply({ family: value });
-                        }}
-                    >
-                        <SelectTrigger className="w-44" aria-label="Family">
-                            <SelectValue placeholder="Any family" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any family</SelectItem>
-                            {families.map((family) => (
-                                <SelectItem key={family} value={family}>
-                                    {family}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
+                    />
+                </FilterBar>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>When</TableHead>
-                                <TableHead>Operation</TableHead>
-                                <TableHead>Outcome</TableHead>
-                                <TableHead>Code</TableHead>
-                                <TableHead>Duration</TableHead>
-                                <TableHead>By</TableHead>
-                                <TableHead>Correlation ID</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {logs.data.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={7}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No calls matched these filters.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                <DataTable
+                    caption="ERP calls"
+                    columns={columns}
+                    rows={logs.data}
+                    rowKey={(log) => String(log.id)}
+                    empty="No calls matched these filters."
+                />
 
-                            {logs.data.map((log) => (
-                                <TableRow key={log.id}>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {formatDateTime(log.createdAt)}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {log.operation}
-                                        <span className="text-muted-foreground ml-2 font-mono text-xs">
-                                            {log.method} {log.path}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant={outcomeVariant(
-                                                log.outcome,
-                                            )}
-                                        >
-                                            {log.outcome}
-                                        </Badge>
-                                        {log.message && (
-                                            <p className="text-muted-foreground mt-1 max-w-md text-xs">
-                                                {log.message}
-                                            </p>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">
-                                        {log.esbCode ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {log.durationMs === null
-                                            ? '—'
-                                            : `${String(log.durationMs)} ms`}
-                                        {log.retryCount > 0 && (
-                                            <span className="ml-1">
-                                                ({log.retryCount} retries)
-                                            </span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {log.user ?? 'System'}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">
-                                        {log.correlationId}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                    <p className="text-muted-foreground text-sm">
-                        Page {logs.current_page} of {logs.last_page} —{' '}
-                        {logs.total} calls
-                    </p>
-                    <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={logs.current_page <= 1}
-                            onClick={() => {
-                                apply({ page: String(logs.current_page - 1) });
-                            }}
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={logs.current_page >= logs.last_page}
-                            onClick={() => {
-                                apply({ page: String(logs.current_page + 1) });
-                            }}
-                        >
-                            Next
-                        </Button>
-                    </div>
-                </div>
+                <ListPagination
+                    pagination={fromPaginator(logs)}
+                    noun="calls"
+                    onPageChange={form.goToPage}
+                />
             </div>
         </>
     );
 }
-
-IntegrationLogsIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Integration logs',
-            href: integrationLogsIndex(),
-        },
-    ],
-};

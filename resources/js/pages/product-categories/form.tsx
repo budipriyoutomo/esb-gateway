@@ -259,7 +259,3 @@ export default function ProductCategoryForm({
         </>
     );
 }
-
-ProductCategoryForm.layout = {
-    breadcrumbs: [{ title: 'Categories', href: categoriesIndex() }],
-};

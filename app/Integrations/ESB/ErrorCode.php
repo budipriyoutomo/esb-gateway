@@ -35,6 +35,12 @@ final class ErrorCode
     public const OMS_SUCCESS = 'EC011200';
 
     /**
+     * An ESB OMS master refusal: field errors as JSON in `message`
+     * ([ESB-048]).
+     */
+    public const OMS_VALIDATION = 'EC0110';
+
+    /**
      * Code to exception class.
      *
      * @var array<string, class-string<EsbException>>

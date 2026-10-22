@@ -1,4 +1,4 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, setLayoutProps, useForm, usePage } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import InputError from '@/components/input-error';
 import { PageHeader } from '@/components/page-header';
@@ -14,7 +14,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { store as storeImport } from '@/routes/imports';
+import { deriveBreadcrumbs } from '@/lib/breadcrumbs';
+import { mainNavigation } from '@/lib/navigation';
+import { create as createImport, store as storeImport } from '@/routes/imports';
 
 type ImportKind = {
     kind: string;
@@ -43,6 +45,15 @@ export default function ImportCreate({ import: kind }: { import: ImportKind }) {
             ?.importErrors as ImportError[] | undefined) ?? [];
     const form = useForm<{ file: File | null }>({ file: null });
     const title = `Import ${kind.label}`;
+
+    // /imports/{kind} sits outside the menu: the trail starts at the list
+    // the sheet feeds, like the module's own pages.
+    setLayoutProps({
+        breadcrumbs: [
+            ...deriveBreadcrumbs(kind.listUrl, mainNavigation),
+            { title: 'Import', href: createImport(kind.kind).url },
+        ],
+    });
     const accept = kind.extensions
         .map((extension) => `.${extension}`)
         .join(',');

@@ -202,10 +202,3 @@ export default function TempPricelistsIndex({
         </>
     );
 }
-
-TempPricelistsIndex.layout = {
-    breadcrumbs: [
-        { title: 'Pricelist', href: pricelistsIndex() },
-        { title: 'Proposed prices', href: tempIndex() },
-    ],
-};

@@ -70,7 +70,3 @@ export default function SupplierCategoriesIndex({
         </>
     );
 }
-
-SupplierCategoriesIndex.layout = {
-    breadcrumbs: [{ title: 'Supplier categories', href: categoriesIndex() }],
-};

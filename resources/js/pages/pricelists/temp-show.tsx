@@ -12,7 +12,6 @@ import { StatusBadge } from '@/components/status-badge';
 import { usePermissions } from '@/hooks/use-permissions';
 import { branchScopeLabel } from '@/lib/branch-scope';
 import { formatAmount, formatDate, formatDateTime } from '@/lib/format';
-import { index as pricelistsIndex } from '@/routes/pricelists';
 import {
     destroy as destroyTemp,
     edit as editTemp,
@@ -173,10 +172,3 @@ export default function TempPricelistShow({
         </>
     );
 }
-
-TempPricelistShow.layout = {
-    breadcrumbs: [
-        { title: 'Pricelist', href: pricelistsIndex() },
-        { title: 'Proposed prices', href: tempIndex() },
-    ],
-};

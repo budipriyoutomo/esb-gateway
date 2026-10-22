@@ -1,6 +1,6 @@
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import Heading from '@/components/heading';
+import { Head } from '@inertiajs/react';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import {
     Table,
@@ -49,27 +49,21 @@ export default function DocumentTemplateShow({
             <Head title={`Document template ${template.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-col gap-2">
-                        <Link
-                            href={documentTemplatesIndex()}
-                            className="text-muted-foreground inline-flex items-center gap-1 text-sm hover:underline"
-                        >
-                            <ArrowLeft className="size-4" /> Document templates
-                        </Link>
-                        <Heading
-                            title={template.name || `#${String(template.id)}`}
-                            description={template.typeName ?? 'Unknown type'}
-                        />
-                    </div>
-                    {template.active !== null && (
-                        <Badge
-                            variant={template.active ? 'default' : 'secondary'}
-                        >
-                            {template.active ? 'Active' : 'Inactive'}
-                        </Badge>
-                    )}
-                </div>
+                <PageHeader
+                    title={template.name || `#${String(template.id)}`}
+                    description={template.typeName ?? 'Unknown type'}
+                    back={{
+                        href: documentTemplatesIndex(),
+                        label: 'Document templates',
+                    }}
+                    actions={
+                        template.active !== null && (
+                            <StatusBadge
+                                status={template.active ? 'Active' : 'Inactive'}
+                            />
+                        )
+                    }
+                />
 
                 <section className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-4">
                     <h2 className="mb-3 text-sm font-medium">General</h2>
@@ -192,12 +186,3 @@ export default function DocumentTemplateShow({
         </>
     );
 }
-
-DocumentTemplateShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Document templates',
-            href: documentTemplatesIndex(),
-        },
-    ],
-};

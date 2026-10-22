@@ -173,8 +173,10 @@ class CoaAccountTest extends TestCase
     {
         Http::fake();
 
-        // export / index / tax are literal vendor paths under /accounting/coa.
-        foreach (['export', 'index', 'tax', 'cash-bank', rawurlencode('1/2'), '..', '-1', str_repeat('9', 33)] as $coaNo) {
+        // index / tax are literal vendor paths under /accounting/coa. The
+        // gateway's /coa-accounts/export is its own CSV of the list (ADR-031),
+        // never the vendor's /accounting/coa/export.
+        foreach (['index', 'tax', 'cash-bank', rawurlencode('1/2'), '..', '-1', str_repeat('9', 33)] as $coaNo) {
             $this->actingAs($this->operator())->get('/coa-accounts/'.$coaNo)->assertNotFound();
         }
 

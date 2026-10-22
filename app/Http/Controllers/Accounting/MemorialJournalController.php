@@ -39,7 +39,7 @@ class MemorialJournalController extends Controller
 
     public function show(string $number, MemorialJournalSource $journals): Response
     {
-        abort_unless(preg_match(self::NUMBER, $number) === 1, 404);
+        self::assertUsableNumber($number);
 
         $journal = $journals->findJournal($number);
 
@@ -48,5 +48,10 @@ class MemorialJournalController extends Controller
         return Inertia::render('memorial-journals/show', [
             'journal' => $journal,
         ]);
+    }
+
+    public static function assertUsableNumber(string $number): void
+    {
+        abort_unless(preg_match(self::NUMBER, $number) === 1, 404);
     }
 }

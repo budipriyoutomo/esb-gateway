@@ -13,6 +13,14 @@ export type FlashToast = {
     message: string;
 };
 
+/** Flashed by HandlesDocumentWrites when a write may or may not have applied. */
+export type UnconfirmedWrite = {
+    /** e.g. "authorize PO-0001". */
+    action: string;
+    /** Correlation id of the ESB call. */
+    reference: string;
+};
+
 export type AuthLayoutProps = {
     children?: ReactNode;
     name?: string;

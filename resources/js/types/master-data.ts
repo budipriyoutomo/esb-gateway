@@ -118,8 +118,7 @@ export type SupplierBankAccount = {
     bankId: number | null;
     bankName: string | null;
     accountName: string | null;
-    /** Only the last four digits, e.g. "•••• 6789". */
-    maskedAccountNumber: string | null;
+    accountNumber: string | null;
 };
 
 export type SupplierProduct = {

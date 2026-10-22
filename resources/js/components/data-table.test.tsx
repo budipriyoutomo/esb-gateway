@@ -132,4 +132,58 @@ describe('DataTable', () => {
 
         expect(visit).not.toHaveBeenCalled();
     });
+
+    describe('on a narrow screen (< 640px)', () => {
+        it('labels every cell with its column, for the card layout', () => {
+            renderTable({});
+
+            expect(
+                screen.getByRole('cell', { name: 'Globex' }),
+            ).toHaveAttribute('data-label', 'Supplier');
+            expect(screen.getByRole('cell', { name: '20,00' })).toHaveAttribute(
+                'data-label',
+                'Total',
+            );
+        });
+
+        it('uses the column label when the header is not plain text', () => {
+            renderTable({
+                columns: [
+                    {
+                        key: 'supplier',
+                        header: <span>Supplier</span>,
+                        label: 'Vendor',
+                        cell: (row) => row.supplier,
+                    },
+                ],
+            });
+
+            expect(screen.getByRole('cell', { name: 'Acme' })).toHaveAttribute(
+                'data-label',
+                'Vendor',
+            );
+        });
+
+        it('keeps the table roles when the cards change the display', () => {
+            renderTable({});
+
+            const table = screen.getByRole('table', {
+                name: 'Purchase orders',
+            });
+
+            // display: block drops the implicit roles in some browsers; the
+            // explicit ones keep screen readers reading a table.
+            expect(table).toHaveAttribute('role', 'table');
+            for (const row of within(table).getAllByRole('row')) {
+                expect(row).toHaveAttribute('role', 'row');
+            }
+            expect(screen.getByRole('cell', { name: 'Acme' })).toHaveAttribute(
+                'role',
+                'cell',
+            );
+            expect(
+                screen.getByRole('columnheader', { name: 'Total' }),
+            ).toHaveAttribute('role', 'columnheader');
+        });
+    });
 });

@@ -81,7 +81,3 @@ export default function SupplierCategoryForm({
         </>
     );
 }
-
-SupplierCategoryForm.layout = {
-    breadcrumbs: [{ title: 'Supplier categories', href: categoriesIndex() }],
-};

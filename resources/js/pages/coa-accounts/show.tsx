@@ -126,7 +126,3 @@ export default function CoaAccountShow({ account }: { account: CoaAccount }) {
         </>
     );
 }
-
-CoaAccountShow.layout = {
-    breadcrumbs: [{ title: 'Chart of accounts', href: coaIndex() }],
-};

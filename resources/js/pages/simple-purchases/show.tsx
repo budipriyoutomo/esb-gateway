@@ -1,19 +1,8 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
-import InputError from '@/components/input-error';
+import { Head } from '@inertiajs/react';
+import { ApprovalActions } from '@/components/approval-actions';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -43,9 +32,6 @@ type Props = {
 // Mirrors DecideSimplePurchaseRequest::REASON_MAX.
 const REASON_MAX = 500;
 
-const textareaClass =
-    'border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50';
-
 function byline(name: string | null, at: string | null): string {
     if (name === null && at === null) {
         return '—';
@@ -65,227 +51,6 @@ function Field({ label, value }: { label: string; value: string | null }) {
     );
 }
 
-type Decision = 'authorize' | 'reject';
-
-const DECISION_COPY: Record<
-    Decision,
-    { label: string; title: string; description: string }
-> = {
-    authorize: {
-        label: 'Authorize',
-        title: 'Authorize this simple purchase?',
-        description:
-            'The purchase is authorized in the ERP straight away. The ERP records the gateway as the approver; the gateway records you.',
-    },
-    reject: {
-        label: 'Reject',
-        title: 'Reject this simple purchase?',
-        description:
-            'The purchase is rejected in the ERP straight away, with the reason below. The ERP records the gateway as the approver; the gateway records you.',
-    },
-};
-
-function DecisionControls({ number }: { number: string }) {
-    const [pending, setPending] = useState<Decision | null>(null);
-    const [reason, setReason] = useState('');
-    const [error, setError] = useState<string | undefined>(undefined);
-    const [processing, setProcessing] = useState(false);
-
-    function close() {
-        setPending(null);
-        setReason('');
-        setError(undefined);
-    }
-
-    function submit() {
-        if (pending === null) {
-            return;
-        }
-
-        // The write is not idempotent. Buttons stay disabled until the
-        // request finishes, and the server holds a lock per document too.
-        router.post(
-            storeDecision(number).url,
-            pending === 'reject'
-                ? { decision: pending, reason }
-                : { decision: pending },
-            {
-                preserveScroll: true,
-                onStart: () => {
-                    setProcessing(true);
-                },
-                onSuccess: () => {
-                    close();
-                },
-                onError: (errors) => {
-                    // A validation error keeps the dialog open so the reason
-                    // can be corrected; nothing was sent to the ERP.
-                    setError(errors.reason ?? errors.decision);
-                },
-                onFinish: () => {
-                    setProcessing(false);
-                },
-            },
-        );
-    }
-
-    const copy = pending === null ? null : DECISION_COPY[pending];
-    const reasonMissing = pending === 'reject' && reason.trim() === '';
-
-    return (
-        <>
-            <div className="flex gap-2">
-                <Button
-                    size="sm"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('authorize');
-                    }}
-                >
-                    Authorize
-                </Button>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('reject');
-                    }}
-                >
-                    Reject
-                </Button>
-            </div>
-
-            <Dialog
-                open={pending !== null}
-                onOpenChange={(open) => {
-                    if (!open && !processing) {
-                        close();
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{copy?.title}</DialogTitle>
-                        <DialogDescription>
-                            {copy?.description}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {pending === 'reject' && (
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="sp-reject-reason">Reason</Label>
-                            <textarea
-                                id="sp-reject-reason"
-                                className={textareaClass}
-                                maxLength={REASON_MAX}
-                                value={reason}
-                                disabled={processing}
-                                onChange={(event) => {
-                                    setReason(event.target.value);
-                                }}
-                            />
-                            <InputError message={error} />
-                        </div>
-                    )}
-
-                    {pending === 'authorize' && <InputError message={error} />}
-
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={close}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant={
-                                pending === 'reject' ? 'destructive' : 'default'
-                            }
-                            disabled={processing || reasonMissing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Sending…' : copy?.label}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
-function DeleteControl({ number }: { number: string }) {
-    const [open, setOpen] = useState(false);
-    const [processing, setProcessing] = useState(false);
-
-    function submit() {
-        // Not idempotent either; the server holds the same per-document lock
-        // as for a decision.
-        router.delete(destroySimplePurchase(number).url, {
-            onStart: () => {
-                setProcessing(true);
-            },
-            onFinish: () => {
-                setProcessing(false);
-                setOpen(false);
-            },
-        });
-    }
-
-    return (
-        <>
-            <Button
-                size="sm"
-                variant="outline"
-                disabled={processing}
-                onClick={() => {
-                    setOpen(true);
-                }}
-            >
-                Delete
-            </Button>
-
-            <Dialog
-                open={open}
-                onOpenChange={(next) => {
-                    if (!processing) {
-                        setOpen(next);
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete {number}?</DialogTitle>
-                        <DialogDescription>
-                            The simple purchase is deleted in the ERP straight
-                            away. This cannot be undone from the gateway.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => {
-                                setOpen(false);
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            disabled={processing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Deleting…' : 'Delete'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
 export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
     const { can } = usePermissions();
     const currencyParts = [
@@ -299,37 +64,37 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
             <Head title={sp.number} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={simplePurchasesIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Simple purchases
-                        </Link>
-                    </Button>
-                </div>
-
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Heading
-                        title={sp.number}
-                        description="Read live from the ERP."
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                        {sp.statusName && (
-                            <Badge variant="secondary">{sp.statusName}</Badge>
-                        )}
-                        {/* Offered on every purchase: which statuses accept a
-                            decision or a delete is not documented, so the ERP
-                            is left to refuse one it does not accept. */}
-                        {can('esb.invoke') &&
-                            can('simple-purchases.approve') && (
-                                <DecisionControls number={sp.number} />
-                            )}
-                        {can('esb.invoke') &&
-                            can('simple-purchases.manage') && (
-                                <DeleteControl number={sp.number} />
-                            )}
-                    </div>
-                </div>
+                <PageHeader
+                    title={sp.number}
+                    description="Read live from the ERP."
+                    back={{
+                        href: simplePurchasesIndex(),
+                        label: 'Simple purchases',
+                    }}
+                    actions={
+                        <>
+                            <StatusBadge status={sp.statusName} />
+                            {/* Offered on every document: which statuses accept a
+                                decision or a delete is not documented, so the ERP
+                                is left to refuse one it does not accept. */}
+                            <ApprovalActions
+                                documentLabel="simple purchase"
+                                number={sp.number}
+                                decisionUrl={storeDecision(sp.number).url}
+                                deleteUrl={destroySimplePurchase(sp.number).url}
+                                canDecide={
+                                    can('esb.invoke') &&
+                                    can('simple-purchases.approve')
+                                }
+                                canDelete={
+                                    can('esb.invoke') &&
+                                    can('simple-purchases.manage')
+                                }
+                                rejectReason={{ max: REASON_MAX }}
+                            />
+                        </>
+                    }
+                />
 
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Field label="Supplier" value={sp.supplierName} />
@@ -555,12 +320,3 @@ export default function SimplePurchaseShow({ simplePurchase: sp }: Props) {
         </>
     );
 }
-
-SimplePurchaseShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Simple purchases',
-            href: simplePurchasesIndex(),
-        },
-    ],
-};

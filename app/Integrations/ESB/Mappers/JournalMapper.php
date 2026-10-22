@@ -7,6 +7,7 @@ use App\Domain\Canonical\JournalLine;
 use App\Domain\Canonical\LedgerEntry;
 use App\Domain\Canonical\LedgerSummaryRow;
 use App\Domain\Canonical\MemorialJournal;
+use App\Domain\Canonical\MemorialJournalCarryOver;
 use App\Domain\Canonical\MemorialJournalSummary;
 use App\Integrations\ESB\Clients\GeneralJournalClient;
 use App\Integrations\ESB\Clients\MemorialJournalClient;
@@ -207,7 +208,30 @@ class JournalMapper
             editedAt: $this->nullableString($r['editedDate'] ?? null),
             authorizedBy: $this->person($r['authorizer'] ?? null, $r['authorizedBy'] ?? null),
             authorizedAt: $this->nullableString($r['authorizedDate'] ?? null),
+            carryOver: $this->carryOver($r['memorialJournalDetails'] ?? null),
         );
+    }
+
+    /**
+     * Each memorial journal line's cost center and project, by line id, for
+     * an edit to send back ([ESB-045]). Lines without an id are left out.
+     */
+    private function carryOver(mixed $rows): MemorialJournalCarryOver
+    {
+        $lines = [];
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $id = is_array($row) ? $this->nullableId($row['ID'] ?? null) : null;
+
+            if ($id !== null) {
+                $lines[$id] = [
+                    'costCenterId' => $this->nullableId($row['costCenterID'] ?? null),
+                    'projectId' => $this->nullableId($row['projectID'] ?? null),
+                ];
+            }
+        }
+
+        return new MemorialJournalCarryOver($lines);
     }
 
     /**
@@ -231,6 +255,7 @@ class JournalMapper
                 costCenter: $this->nullableString($row['costCenterName'] ?? null),
                 project: $this->nullableString($row['projectName'] ?? null),
                 currencyName: $this->nullableString($row['currencyName'] ?? null),
+                currencyId: $this->nullableId($row['currencyID'] ?? null),
                 rate: $this->amount($row['rate'] ?? null),
                 debit: $this->amount($row['drAmount'] ?? null),
                 credit: $this->amount($row['crAmount'] ?? null),

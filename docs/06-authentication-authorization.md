@@ -50,7 +50,8 @@ Rules that the implementation enforces:
   change in `Role::permissions()` followed by re-running `RolePermissionSeeder`.
 - The ERP records the gateway's shared service credential (ADR-009) as the approver.
   The gateway's audit log (`purchase-request.authorized` / `.rejected` /
-  `.decision-unconfirmed`) is the only record of which person made the decision.
+  `.write-unconfirmed`; `.decision-unconfirmed` before 2026-10-22) is the only record
+  of which person made the decision.
 - Raising purchasing documents is separate from approving them. Creating, editing,
   deleting, and importing purchase requests needs `purchase-requests.manage` **and**
   `esb.invoke` (2026-09-30), so the person who raises a request need not be the one who

@@ -6,7 +6,8 @@ use JsonSerializable;
 
 /**
  * One memorial journal -- a manual journal entry -- with its lines
- * ([ESB-043]). People are named by full name where the ERP gives one.
+ * ([ESB-043]). People are named by full name where the ERP gives one. The
+ * carry-over an edit sends back ([ESB-045]) is never serialized.
  */
 readonly class MemorialJournal implements JsonSerializable
 {
@@ -29,6 +30,7 @@ readonly class MemorialJournal implements JsonSerializable
         public ?string $editedAt = null,
         public ?string $authorizedBy = null,
         public ?string $authorizedAt = null,
+        public MemorialJournalCarryOver $carryOver = new MemorialJournalCarryOver,
     ) {}
 
     /**
@@ -36,6 +38,9 @@ readonly class MemorialJournal implements JsonSerializable
      */
     public function jsonSerialize(): array
     {
-        return get_object_vars($this);
+        $values = get_object_vars($this);
+        unset($values['carryOver']);
+
+        return $values;
     }
 }

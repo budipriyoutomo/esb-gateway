@@ -13,7 +13,7 @@ final class PurchaseRequestLocks
      */
     public static function document(string $number): string
     {
-        return 'purchase-request-write:'.$number;
+        return PurchaseRequestDocument::approvable()->lock($number);
     }
 
     /**

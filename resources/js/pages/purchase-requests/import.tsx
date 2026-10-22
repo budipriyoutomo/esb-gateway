@@ -1,6 +1,5 @@
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import Heading from '@/components/heading';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { PageHeader } from '@/components/page-header';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -49,16 +48,11 @@ export default function PurchaseRequestImport({ maxKilobytes }: Props) {
             <Head title="Import purchase requests" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={purchaseRequestsIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Purchase requests
-                        </Link>
-                    </Button>
-                </div>
-
-                <Heading
+                <PageHeader
+                    back={{
+                        href: purchaseRequestsIndex(),
+                        label: 'Purchase requests',
+                    }}
                     title="Import purchase requests"
                     description="Upload an Excel sheet in the ERP's purchase request import layout. The ERP creates the requests; the gateway only passes the file on."
                 />
@@ -144,12 +138,3 @@ export default function PurchaseRequestImport({ maxKilobytes }: Props) {
         </>
     );
 }
-
-PurchaseRequestImport.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purchase requests',
-            href: purchaseRequestsIndex(),
-        },
-    ],
-};

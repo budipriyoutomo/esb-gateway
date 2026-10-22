@@ -101,7 +101,7 @@ class SupplierMapper
                 bankId: $this->nullableId($bank['bankID'] ?? null),
                 bankName: $this->nullableString($bank['bankName'] ?? null),
                 accountName: $this->nullableString($bank['bankAccountName'] ?? null),
-                maskedAccountNumber: $this->mask($bank['bankAccountNumber'] ?? null),
+                accountNumber: $this->accountNumber($bank['bankAccountNumber'] ?? null),
             )),
             // Counted only: the files live in the ERP's storage, and whether the
             // browser may open those URLs is undecided (TODO-modules §2.9).

@@ -360,8 +360,7 @@ class DisbursementFormTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('disbursements/form')
                 ->where('disbursement.number', CoreDisbursement::NUMBER)
-                ->missing('disbursement.carryOver'))
-            ->assertDontSee('1234567890123');
+                ->missing('disbursement.carryOver'));
 
         $this->assertSame(['PUT '.self::UPSTREAM.'/'.CoreDisbursement::NUMBER.'/validate'], $this->writesSent());
         Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/validate') && $request->data() === []);

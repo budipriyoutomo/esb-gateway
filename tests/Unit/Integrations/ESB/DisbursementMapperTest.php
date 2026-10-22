@@ -130,12 +130,13 @@ class DisbursementMapperTest extends TestCase
     }
 
     #[Test]
-    public function the_bank_account_number_is_masked_and_kept_whole_only_for_an_update(): void
+    public function the_whole_bank_account_number_is_shown_and_carried_for_an_update(): void
     {
         $disbursement = $this->mapper()->fromDetail(CoreDisbursement::detailResult());
 
+        // Business decision 2026-10-22: shown in full, not masked.
         $this->assertNotNull($disbursement);
-        $this->assertSame('•••• 0123', $disbursement->maskedBankAccountNumber);
+        $this->assertSame('1234567890123', $disbursement->bankAccountNumber);
 
         // What an edit sends back unchanged ([ESB-039]).
         $this->assertSame(7, $disbursement->carryOver->costCenterId);
@@ -144,9 +145,7 @@ class DisbursementMapperTest extends TestCase
         $this->assertSame('PT Properti Jaya', $disbursement->carryOver->bankAccountName);
         $this->assertSame('1234567890123', $disbursement->carryOver->bankAccountNumber);
 
-        // The full number never reaches the browser.
-        $json = (string) json_encode($disbursement);
-        $this->assertStringNotContainsString('1234567890123', $json);
+        // The carry-over (cost center / project ids) stays on the server.
         $this->assertArrayNotHasKey('carryOver', $disbursement->jsonSerialize());
     }
 
@@ -172,7 +171,7 @@ class DisbursementMapperTest extends TestCase
         $this->assertSame(1, $disbursement->paymentId);
         $this->assertSame('1101', $disbursement->cashBankCoaNo);
         $this->assertNull($disbursement->creditTerm);
-        $this->assertNull($disbursement->maskedBankAccountNumber);
+        $this->assertNull($disbursement->bankAccountNumber);
         $this->assertNull($disbursement->carryOver->bankAccountNumber);
         $this->assertNull($disbursement->carryOver->costCenterId);
         $this->assertNull($disbursement->carryOver->projectId);

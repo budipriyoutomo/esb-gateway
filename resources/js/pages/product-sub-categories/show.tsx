@@ -61,9 +61,3 @@ export default function ProductSubCategoryShow({
         </>
     );
 }
-
-ProductSubCategoryShow.layout = {
-    breadcrumbs: [
-        { title: 'Product sub-categories', href: subCategoriesIndex() },
-    ],
-};

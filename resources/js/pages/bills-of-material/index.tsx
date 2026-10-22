@@ -1,24 +1,14 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Head, Link } from '@inertiajs/react';
+import { ActiveStatusField } from '@/components/active-status-field';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { FilterBar } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
+import { useFilterForm } from '@/hooks/use-filter-form';
 import {
     index as bomsIndex,
     show as bomsShow,
@@ -39,220 +29,142 @@ type Props = {
     filters: Filters;
 };
 
-const ANY = 'any';
+const columns: DataTableColumn<BillOfMaterialSummary>[] = [
+    {
+        key: 'code',
+        header: 'Code',
+        className: 'font-mono text-xs',
+        cell: (bom) => bom.code ?? '—',
+    },
+    {
+        key: 'name',
+        header: 'Name',
+        className: 'font-medium',
+        cell: (bom) =>
+            bom.id !== null ? (
+                <Link
+                    href={bomsShow(bom.id)}
+                    className="underline-offset-4 hover:underline"
+                >
+                    {bom.name || `#${String(bom.id)}`}
+                </Link>
+            ) : (
+                bom.name || '—'
+            ),
+    },
+    { key: 'type', header: 'Type', cell: (bom) => bom.typeName ?? '—' },
+    {
+        key: 'product',
+        header: 'Product',
+        cell: (bom) => bom.productName ?? '—',
+    },
+    { key: 'unit', header: 'Unit', cell: (bom) => bom.uomName ?? '—' },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (bom) => (
+            <StatusBadge
+                status={
+                    bom.active === null
+                        ? null
+                        : bom.active
+                          ? 'Active'
+                          : 'Inactive'
+                }
+            />
+        ),
+    },
+];
 
 export default function BillsOfMaterialIndex({
     boms,
     pagination,
     filters,
 }: Props) {
-    const [bomName, setBomName] = useState(filters.bomName ?? '');
-    const [bomCode, setBomCode] = useState(filters.bomCode ?? '');
-    const [productName, setProductName] = useState(filters.productName ?? '');
-    const [status, setStatus] = useState(
-        filters.flagActive === undefined ? ANY : String(filters.flagActive),
-    );
-
-    function search(page = 1, nextStatus = status) {
-        const query: Record<string, string | number> = { page };
-
-        if (bomName !== '') {
-            query.bomName = bomName;
-        }
-
-        if (bomCode !== '') {
-            query.bomCode = bomCode;
-        }
-
-        if (productName !== '') {
-            query.productName = productName;
-        }
-
-        if (nextStatus !== ANY) {
-            query.flagActive = nextStatus;
-        }
-
-        router.get(bomsIndex().url, query, {
-            preserveState: true,
-            replace: true,
-        });
-    }
+    const form = useFilterForm(bomsIndex().url, filters, [
+        { key: 'bomName', chip: (value) => `“${value}”` },
+        { key: 'bomCode', chip: (value) => `Code ${value}` },
+        { key: 'productName', chip: (value) => `Product “${value}”` },
+        {
+            key: 'flagActive',
+            chip: (value) => (value === '1' ? 'Active' : 'Inactive'),
+        },
+    ]);
 
     return (
         <>
             <Head title="Bill of material" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="Bill of material"
                     description="Recipes and their materials, from ESB Core."
                 />
 
-                <form
-                    className="flex flex-wrap items-end gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        search();
+                <FilterBar
+                    id="boms"
+                    search={{
+                        label: 'BOM name',
+                        value: form.values.bomName!,
+                        onChange: (value) => form.set('bomName', value),
+                        placeholder: 'BOM name',
                     }}
+                    {...form.bar}
+                    defaultAdvancedOpen={
+                        Boolean(filters.bomCode || filters.productName) ||
+                        filters.flagActive !== undefined
+                    }
                 >
-                    <Input
-                        value={bomName}
-                        onChange={(event) => {
-                            setBomName(event.target.value);
-                        }}
-                        placeholder="BOM name"
-                        aria-label="BOM name"
-                        className="w-56"
-                    />
-                    <Input
-                        value={bomCode}
-                        onChange={(event) => {
-                            setBomCode(event.target.value);
-                        }}
-                        placeholder="BOM code"
-                        aria-label="BOM code"
-                        className="w-40"
-                    />
-                    <Input
-                        value={productName}
-                        onChange={(event) => {
-                            setProductName(event.target.value);
-                        }}
-                        placeholder="Product name"
-                        aria-label="Product name"
-                        className="w-56"
-                    />
-                    <Select
-                        value={status}
-                        onValueChange={(value) => {
-                            setStatus(value);
-                            search(1, value);
-                        }}
-                    >
-                        <SelectTrigger className="w-36" aria-label="Status">
-                            <SelectValue placeholder="Any status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any status</SelectItem>
-                            <SelectItem value="1">Active</SelectItem>
-                            <SelectItem value="0">Inactive</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
-
-                <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Code</TableHead>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Product</TableHead>
-                                <TableHead>Unit</TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {boms.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={6}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No bills of material matched.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-
-                            {boms.map((bom, index) => (
-                                <TableRow
-                                    key={`${String(bom.id)}-${String(index)}`}
-                                >
-                                    <TableCell className="font-mono text-xs">
-                                        {bom.code ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {bom.id !== null ? (
-                                            <Link
-                                                href={bomsShow(bom.id)}
-                                                className="hover:underline"
-                                            >
-                                                {bom.name ||
-                                                    `#${String(bom.id)}`}
-                                            </Link>
-                                        ) : (
-                                            bom.name || '—'
-                                        )}
-                                    </TableCell>
-                                    <TableCell>{bom.typeName ?? '—'}</TableCell>
-                                    <TableCell>
-                                        {bom.productName ?? '—'}
-                                    </TableCell>
-                                    <TableCell>{bom.uomName ?? '—'}</TableCell>
-                                    <TableCell>
-                                        {bom.active !== null && (
-                                            <Badge
-                                                variant={
-                                                    bom.active
-                                                        ? 'default'
-                                                        : 'secondary'
-                                                }
-                                            >
-                                                {bom.active
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </Badge>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {pagination && (
-                    <div className="flex items-center justify-between gap-4">
-                        <p className="text-muted-foreground text-sm">
-                            Page {pagination.page} of {pagination.lastPage} —{' '}
-                            {pagination.count} bills of material
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pagination.page <= 1}
-                                onClick={() => {
-                                    search(pagination.page - 1);
-                                }}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!pagination.hasMorePages}
-                                onClick={() => {
-                                    search(pagination.page + 1);
-                                }}
-                            >
-                                Next
-                            </Button>
-                        </div>
+                    <div className="grid w-full gap-1.5 sm:w-40">
+                        <Label htmlFor="boms-code">BOM code</Label>
+                        <Input
+                            id="boms-code"
+                            value={form.values.bomCode}
+                            onChange={(event) => {
+                                form.set('bomCode', event.target.value);
+                            }}
+                        />
                     </div>
-                )}
+                    <div className="grid w-full gap-1.5 sm:w-56">
+                        <Label htmlFor="boms-product">Product name</Label>
+                        <Input
+                            id="boms-product"
+                            value={form.values.productName}
+                            onChange={(event) => {
+                                form.set('productName', event.target.value);
+                            }}
+                        />
+                    </div>
+                    <ActiveStatusField
+                        id="boms-status"
+                        value={form.values.flagActive!}
+                        onChange={(flagActive) => {
+                            // A status applies at once, as it did before.
+                            form.set('flagActive', flagActive);
+                            form.apply({ ...form.values, flagActive });
+                        }}
+                    />
+                </FilterBar>
+
+                <DataTable
+                    caption="Bills of material"
+                    columns={columns}
+                    rows={boms}
+                    rowKey={(bom, index) =>
+                        `${String(bom.id)}-${String(index)}`
+                    }
+                    rowHref={(bom) =>
+                        bom.id !== null ? bomsShow(bom.id).url : null
+                    }
+                    empty="No bills of material matched."
+                />
+
+                <ListPagination
+                    pagination={pagination}
+                    noun="bills of material"
+                    onPageChange={form.goToPage}
+                />
             </div>
         </>
     );
 }
-
-BillsOfMaterialIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Bill of material',
-            href: bomsIndex(),
-        },
-    ],
-};

@@ -13,7 +13,7 @@ describe('PageHeader', () => {
         );
 
         expect(
-            screen.getByRole('heading', { name: 'PO-0001' }),
+            screen.getByRole('heading', { level: 1, name: 'PO-0001' }),
         ).toBeInTheDocument();
         expect(screen.getByText('Read live from the ERP.')).toBeVisible();
         expect(

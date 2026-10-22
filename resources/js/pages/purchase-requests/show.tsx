@@ -1,17 +1,10 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Pencil } from 'lucide-react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
+import { Head, Link } from '@inertiajs/react';
+import { Pencil } from 'lucide-react';
+import { ApprovalActions } from '@/components/approval-actions';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -89,191 +82,6 @@ function Field({ label, value }: { label: string; value: string | null }) {
     );
 }
 
-type Decision = 'authorize' | 'reject';
-
-const DECISION_COPY: Record<
-    Decision,
-    { label: string; title: string; description: string }
-> = {
-    authorize: {
-        label: 'Authorize',
-        title: 'Authorize this purchase request?',
-        description:
-            'The request is authorized in the ERP straight away. The ERP records the gateway as the approver; the gateway records you.',
-    },
-    reject: {
-        label: 'Reject',
-        title: 'Reject this purchase request?',
-        description:
-            'The request is rejected in the ERP straight away. The ERP records the gateway as the approver; the gateway records you.',
-    },
-};
-
-function DecisionControls({ number }: { number: string }) {
-    const [pending, setPending] = useState<Decision | null>(null);
-    const [processing, setProcessing] = useState(false);
-
-    function submit() {
-        if (pending === null) {
-            return;
-        }
-
-        // The write is not idempotent. Buttons stay disabled until the
-        // request finishes, and the server holds a lock per document too.
-        router.post(
-            storeDecision(number).url,
-            { decision: pending },
-            {
-                preserveScroll: true,
-                onStart: () => {
-                    setProcessing(true);
-                },
-                onFinish: () => {
-                    setProcessing(false);
-                    setPending(null);
-                },
-            },
-        );
-    }
-
-    const copy = pending === null ? null : DECISION_COPY[pending];
-
-    return (
-        <>
-            <div className="flex gap-2">
-                <Button
-                    size="sm"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('authorize');
-                    }}
-                >
-                    Authorize
-                </Button>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={processing}
-                    onClick={() => {
-                        setPending('reject');
-                    }}
-                >
-                    Reject
-                </Button>
-            </div>
-
-            <Dialog
-                open={pending !== null}
-                onOpenChange={(open) => {
-                    if (!open && !processing) {
-                        setPending(null);
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{copy?.title}</DialogTitle>
-                        <DialogDescription>
-                            {copy?.description}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => {
-                                setPending(null);
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant={
-                                pending === 'reject' ? 'destructive' : 'default'
-                            }
-                            disabled={processing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Sending…' : copy?.label}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
-function DeleteControl({ number }: { number: string }) {
-    const [open, setOpen] = useState(false);
-    const [processing, setProcessing] = useState(false);
-
-    function submit() {
-        // Not idempotent either; the server holds the same per-document lock
-        // as for a decision.
-        router.delete(destroyPurchaseRequest(number).url, {
-            onStart: () => {
-                setProcessing(true);
-            },
-            onFinish: () => {
-                setProcessing(false);
-                setOpen(false);
-            },
-        });
-    }
-
-    return (
-        <>
-            <Button
-                size="sm"
-                variant="outline"
-                disabled={processing}
-                onClick={() => {
-                    setOpen(true);
-                }}
-            >
-                Delete
-            </Button>
-
-            <Dialog
-                open={open}
-                onOpenChange={(next) => {
-                    if (!processing) {
-                        setOpen(next);
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete {number}?</DialogTitle>
-                        <DialogDescription>
-                            The purchase request is deleted in the ERP straight
-                            away. This cannot be undone from the gateway.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => {
-                                setOpen(false);
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            disabled={processing}
-                            onClick={submit}
-                        >
-                            {processing ? 'Deleting…' : 'Delete'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
 export default function PurchaseRequestShow({ purchaseRequest: pr }: Props) {
     const { can } = usePermissions();
     const canManage = can('esb.invoke') && can('purchase-requests.manage');
@@ -283,49 +91,47 @@ export default function PurchaseRequestShow({ purchaseRequest: pr }: Props) {
             <Head title={pr.number} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={purchaseRequestsIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Purchase requests
-                        </Link>
-                    </Button>
-                </div>
-
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Heading
-                        title={pr.number}
-                        description="Read live from the ERP."
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                        {pr.isTemplate && (
-                            <Badge variant="outline">Template</Badge>
-                        )}
-                        {pr.statusName && (
-                            <Badge variant="secondary">{pr.statusName}</Badge>
-                        )}
-                        {/* Offered on every request: which statuses accept a
-                            decision is not documented, so the ERP is left to
-                            refuse one that does not. */}
-                        {can('esb.invoke') &&
-                            can('purchase-requests.approve') && (
-                                <DecisionControls number={pr.number} />
+                <PageHeader
+                    title={pr.number}
+                    description="Read live from the ERP."
+                    back={{
+                        href: purchaseRequestsIndex(),
+                        label: 'Purchase requests',
+                    }}
+                    actions={
+                        <>
+                            {pr.isTemplate && (
+                                <Badge variant="outline">Template</Badge>
                             )}
-                        {/* Offered on every request for the same reason: the
-                            ERP refuses a change it does not accept. */}
-                        {canManage && (
-                            <>
+                            <StatusBadge status={pr.statusName} />
+                            {/* Offered on every request: which statuses accept a
+                                change is not documented, so the ERP is left to
+                                refuse one it does not accept. */}
+                            {canManage && (
                                 <Button size="sm" variant="outline" asChild>
                                     <Link href={editPurchaseRequest(pr.number)}>
                                         <Pencil className="size-4" />
                                         Edit
                                     </Link>
                                 </Button>
-                                <DeleteControl number={pr.number} />
-                            </>
-                        )}
-                    </div>
-                </div>
+                            )}
+                            {/* The ESB takes no reason for a rejection. */}
+                            <ApprovalActions
+                                documentLabel="purchase request"
+                                number={pr.number}
+                                decisionUrl={storeDecision(pr.number).url}
+                                deleteUrl={
+                                    destroyPurchaseRequest(pr.number).url
+                                }
+                                canDecide={
+                                    can('esb.invoke') &&
+                                    can('purchase-requests.approve')
+                                }
+                                canDelete={canManage}
+                            />
+                        </>
+                    }
+                />
 
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Field label="Request date" value={formatDate(pr.date)} />
@@ -448,12 +254,3 @@ export default function PurchaseRequestShow({ purchaseRequest: pr }: Props) {
         </>
     );
 }
-
-PurchaseRequestShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purchase requests',
-            href: purchaseRequestsIndex(),
-        },
-    ],
-};

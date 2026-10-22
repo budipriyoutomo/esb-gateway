@@ -7,6 +7,7 @@ use App\Actions\PurchaseRequests\DeletePurchaseRequest;
 use App\Actions\PurchaseRequests\UpdatePurchaseRequest;
 use App\Actions\Support\WriteAlreadyInFlight;
 use App\Domain\Canonical\PurchaseRequest;
+use App\Http\Controllers\Concerns\HandlesDocumentWrites;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PurchaseRequests\PurchaseRequestFormQuery;
 use App\Http\Requests\PurchaseRequests\SavePurchaseRequestRequest;
@@ -35,6 +36,8 @@ use Inertia\Response;
  */
 class PurchaseRequestFormController extends Controller
 {
+    use HandlesDocumentWrites;
+
     /**
      * The vendor's request field names, and the form fields they belong to.
      * An error on anything else is shown for the form as a whole.
@@ -124,33 +127,7 @@ class PurchaseRequestFormController extends Controller
 
     public function destroy(string $number, DeletePurchaseRequest $delete): RedirectResponse
     {
-        try {
-            $delete->handle($number);
-        } catch (WriteAlreadyInFlight) {
-            $this->toast('warning', sprintf('Another change to %s is still being processed. Check it before trying again.', $number));
-
-            return redirect()->route('purchase-requests.show', $number);
-        } catch (EsbNotFoundException $exception) {
-            throw $exception;
-        } catch (EsbException $exception) {
-            if ($exception->mayHaveBeenApplied()) {
-                $this->toast('warning', sprintf(
-                    'The ERP did not confirm deleting %s. It may or may not be gone -- check the list before trying again. (reference: %s)',
-                    $number,
-                    $exception->context->correlationId,
-                ));
-
-                return redirect()->route('purchase-requests.index');
-            }
-
-            $this->toast('error', sprintf('Could not delete %s. %s', $number, $exception->safeMessage()));
-
-            return redirect()->route('purchase-requests.show', $number);
-        }
-
-        $this->toast('success', sprintf('Purchase request %s was deleted.', $number));
-
-        return redirect()->route('purchase-requests.index');
+        return $this->deleteOutcome('Purchase request', 'purchase-requests', $number, fn () => $delete->handle($number));
     }
 
     private function form(

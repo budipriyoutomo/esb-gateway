@@ -6,7 +6,8 @@ use JsonSerializable;
 
 /**
  * One disbursement with its lines ([ESB-037]). The bank account number is
- * masked; the whole one is kept in the carry-over, which is not serialized.
+ * shown in full (business decision 2026-10-22); the carry-over an update
+ * sends back is not serialized.
  */
 readonly class Disbursement implements JsonSerializable
 {
@@ -37,7 +38,7 @@ readonly class Disbursement implements JsonSerializable
         public ?string $notes,
         public ?string $bankName,
         public ?string $bankAccountName,
-        public ?string $maskedBankAccountNumber,
+        public ?string $bankAccountNumber,
         public ?string $costCenter,
         public ?string $project,
         public ?float $grandTotal,

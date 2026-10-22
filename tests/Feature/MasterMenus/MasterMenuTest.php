@@ -17,7 +17,8 @@ use Tests\TestCase;
 /**
  * OMS master menu, read-only: GET {{fnb_backend}}/corev1/master/get-menu
  * ([ESB-013]). The vendor documents no detail operation, so the detail page
- * reads the list filtered by menu code and keeps only an exact match.
+ * reads the list filtered by menu code and keeps only an exact match. The
+ * list itself is the oms tab of /menus (ADR-030, MenuTest).
  */
 class MasterMenuTest extends TestCase
 {
@@ -56,7 +57,6 @@ class MasterMenuTest extends TestCase
     #[Test]
     public function guests_are_redirected_to_login(): void
     {
-        $this->get(route('master-menus.index'))->assertRedirect(route('login'));
         $this->get(route('master-menus.show', 'PS01'))->assertRedirect(route('login'));
     }
 
@@ -66,10 +66,7 @@ class MasterMenuTest extends TestCase
         Http::fake();
 
         foreach ([Role::Viewer, Role::ItAdmin] as $role) {
-            $user = $this->userWithRole($role);
-
-            $this->actingAs($user)->get(route('master-menus.index'))->assertForbidden();
-            $this->actingAs($user)->get(route('master-menus.show', 'PS01'))->assertForbidden();
+            $this->actingAs($this->userWithRole($role))->get(route('master-menus.show', 'PS01'))->assertForbidden();
         }
 
         Http::assertNothingSent();
@@ -78,50 +75,15 @@ class MasterMenuTest extends TestCase
     // =================================================================== list
 
     #[Test]
-    public function an_operator_can_list_menus(): void
+    public function the_old_list_url_moves_to_the_oms_tab_of_the_menu_list(): void
     {
-        Http::fake([self::URL.'*' => Http::response(OmsGetMenu::response(count: 45))]);
-
-        $this->actingAs($this->operator())
-            ->get(route('master-menus.index'))
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->component('master-menus/index')
-                ->has('menus', 1)
-                ->where('menus.0.code', 'PS01')
-                ->where('menus.0.name', 'Paket Separate')
-                ->where('menus.0.categoryName', 'Food - RX - Snack')
-                ->where('pagination.page', 1)
-                ->where('pagination.count', 45)
-                ->where('pagination.lastPage', 3)
-                ->where('filters', ['page' => 1]));
-
-        Http::assertSent(fn (Request $request) => $request->method() === 'GET'
-            && $request->url() === self::URL.'?page=1');
-    }
-
-    #[Test]
-    public function the_list_can_be_filtered_by_code_and_paged(): void
-    {
-        Http::fake([self::URL.'*' => Http::response(OmsGetMenu::response())]);
-
-        $this->actingAs($this->operator())
-            ->get(route('master-menus.index', ['menuCode' => 'PS01', 'page' => 2]))
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('filters', ['page' => 2, 'menuCode' => 'PS01']));
-
-        Http::assertSent(fn (Request $request) => $request->url() === self::URL.'?page=2&menuCode=PS01');
-    }
-
-    #[Test]
-    public function bad_filters_are_refused_before_reaching_the_esb(): void
-    {
+        // ADR-030: one menu list; the OMS list is its oms tab.
         Http::fake();
 
         $this->actingAs($this->operator())
-            ->get(route('master-menus.index', ['page' => 0, 'menuCode' => str_repeat('x', 51)]))
-            ->assertSessionHasErrors(['page', 'menuCode']);
+            ->get(route('master-menus.index', ['menuCode' => 'PS01', 'page' => 2, 'other' => 'x']))
+            ->assertStatus(301)
+            ->assertRedirect(route('menus.index', ['source' => 'oms', 'page' => 2, 'menuCode' => 'PS01']));
 
         Http::assertNothingSent();
     }

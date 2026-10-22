@@ -5,7 +5,10 @@ use App\Authorization\Permission;
 use App\Domain\Canonical\InventoryKind;
 use App\Http\Controllers\Accounting\GeneralJournalController;
 use App\Http\Controllers\Accounting\GeneralLedgerController;
+use App\Http\Controllers\Accounting\MemorialJournalAttachmentController;
 use App\Http\Controllers\Accounting\MemorialJournalController;
+use App\Http\Controllers\Accounting\MemorialJournalFormController;
+use App\Http\Controllers\Accounting\MemorialJournalWriteController;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
 use App\Http\Controllers\CoaAccounts\CoaAccountController;
 use App\Http\Controllers\CoaAccounts\CoaAccountWriteController;
@@ -21,6 +24,7 @@ use App\Http\Controllers\DocumentTemplates\DocumentTemplateImportController;
 use App\Http\Controllers\Endpoints\EndpointCatalogController;
 use App\Http\Controllers\EsbConnections\EsbConnectionController;
 use App\Http\Controllers\EsbConnections\EsbConnectionProbeController;
+use App\Http\Controllers\Exports\ListExportController;
 use App\Http\Controllers\Health\HealthController;
 use App\Http\Controllers\IntegrationLogs\IntegrationLogController;
 use App\Http\Controllers\Inventory\InventoryAttachmentController;
@@ -30,6 +34,8 @@ use App\Http\Controllers\Inventory\InventoryDocumentWriteController;
 use App\Http\Controllers\Lookups\LookupController;
 use App\Http\Controllers\MasterData\MasterDataImportController;
 use App\Http\Controllers\MasterMenus\MasterMenuController;
+use App\Http\Controllers\MenuCategories\MenuCategoryController;
+use App\Http\Controllers\MenuCategories\MenuCategoryFormController;
 use App\Http\Controllers\Menus\MenuController;
 use App\Http\Controllers\Pricelists\PricelistController;
 use App\Http\Controllers\Pricelists\PricelistFormController;
@@ -44,6 +50,8 @@ use App\Http\Controllers\Products\ProductWriteController;
 use App\Http\Controllers\ProductSubCategories\ProductSubCategoryController;
 use App\Http\Controllers\ProductSubCategories\ProductSubCategoryFormController;
 use App\Http\Controllers\ProductSubCategories\ProductSubCategoryWriteController;
+use App\Http\Controllers\Promotions\PromotionController;
+use App\Http\Controllers\Promotions\PromotionFormController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceDecisionController;
 use App\Http\Controllers\PurchaseOrders\PurchaseOrderController;
@@ -89,6 +97,23 @@ Route::middleware('auth')->group(function () {
         // is on the form request; an unknown kind is a 404 by enum binding.
         Route::get('lookups/{kind}', [LookupController::class, 'show'])->name('lookups.show');
 
+        // List exports: CSV built by the gateway (ADR-031). Each takes its
+        // list's filters, validated and authorized by the list's form request
+        // (esb.invoke). Registered before the detail routes, whose number
+        // patterns would otherwise take "export".
+        Route::get('units/export', [ListExportController::class, 'units'])->name('units.export');
+        Route::get('product-categories/export', [ListExportController::class, 'productCategories'])->name('product-categories.export');
+        Route::get('product-sub-categories/export', [ListExportController::class, 'productSubCategories'])->name('product-sub-categories.export');
+        Route::get('products/export', [ListExportController::class, 'products'])->name('products.export');
+        Route::get('pricelists/export', [ListExportController::class, 'pricelists'])->name('pricelists.export');
+        Route::get('coa-accounts/export', [ListExportController::class, 'coaAccounts'])->name('coa-accounts.export');
+        Route::get('suppliers/export', [ListExportController::class, 'suppliers'])->name('suppliers.export');
+        Route::get('disbursements/export', [ListExportController::class, 'disbursements'])->name('disbursements.export');
+        Route::get('general-journals/export', [ListExportController::class, 'generalJournals'])->name('general-journals.export');
+        Route::get('memorial-journals/export', [ListExportController::class, 'memorialJournals'])->name('memorial-journals.export');
+        Route::get('general-ledger/export', [ListExportController::class, 'ledgerEntries'])->name('general-ledger.export');
+        Route::get('general-ledger/summary/export', [ListExportController::class, 'ledgerSummary'])->name('general-ledger.summary.export');
+
         Route::get('products', [ProductController::class, 'index'])->name('products.index');
         // [ESB-026]. The id is interpolated upstream next to literal paths
         // (/product/list), so it is held to a positive integer.
@@ -120,19 +145,55 @@ Route::middleware('auth')->group(function () {
             ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageProducts->value])
             ->name('products.restore');
 
-        // Read-only master menu list ([ESB-012]). Authorization is on its
-        // form request (esb.invoke).
+        // The one menu list, source tab core (ESB Core, [ESB-012]) or oms
+        // (ESB OMS, [ESB-013]) -- ADR-030. Authorization is on its form
+        // request (esb.invoke).
         Route::get('menus', [MenuController::class, 'index'])->name('menus.index');
 
-        // Read-only ESB OMS master menu, with prices, packages, and extras
-        // ([ESB-013]). Authorization for the list is on its form request
-        // (esb.invoke). The code is sent as a query parameter, but is still
-        // held to a plain code here.
+        // Read-only ESB OMS master menu detail and extras ([ESB-013]). The old
+        // list URL redirects to the oms tab of /menus. The code is sent as a
+        // query parameter, but is still held to a plain code here.
         Route::get('master-menus', [MasterMenuController::class, 'index'])->name('master-menus.index');
+        // Extras across the menus of one page (TODO-modules §6.3). Registered
+        // before {code}, which would otherwise take "extras" as a menu code.
+        Route::get('master-menus/extras', [MasterMenuController::class, 'extras'])->name('master-menus.extras');
         Route::get('master-menus/{code}', [MasterMenuController::class, 'show'])
             ->where('code', '[A-Za-z0-9][A-Za-z0-9 _.-]{0,49}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('master-menus.show');
+
+        // POS menu categories, ESB OMS ([ESB-047], [ESB-048]). Reading needs
+        // esb.invoke (on the form requests); create / edit need
+        // menu-categories.manage. The id is a positive integer; "create"
+        // comes before the id routes.
+        $manageMenuCategories = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageMenuCategories->value];
+        Route::get('menu-categories/create', [MenuCategoryFormController::class, 'create'])
+            ->middleware($manageMenuCategories)
+            ->name('menu-categories.create');
+        Route::post('menu-categories', [MenuCategoryFormController::class, 'store'])
+            ->name('menu-categories.store');
+        Route::get('menu-categories', [MenuCategoryController::class, 'index'])
+            ->name('menu-categories.index');
+        Route::get('menu-categories/{id}', [MenuCategoryController::class, 'show'])
+            ->where('id', '[1-9][0-9]{0,9}')
+            ->name('menu-categories.show');
+        Route::get('menu-categories/{id}/edit', [MenuCategoryFormController::class, 'edit'])
+            ->where('id', '[1-9][0-9]{0,9}')
+            ->middleware($manageMenuCategories)
+            ->name('menu-categories.edit');
+        Route::put('menu-categories/{id}', [MenuCategoryFormController::class, 'update'])
+            ->where('id', '[1-9][0-9]{0,9}')
+            ->name('menu-categories.update');
+
+        // POS promotions, ESB OMS ([ESB-049], [ESB-050]). Reading needs
+        // esb.invoke (on the form request); create needs promotions.manage.
+        Route::get('promotions', [PromotionController::class, 'index'])
+            ->name('promotions.index');
+        Route::get('promotions/create', [PromotionFormController::class, 'create'])
+            ->middleware(['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManagePromotions->value])
+            ->name('promotions.create');
+        Route::post('promotions', [PromotionFormController::class, 'store'])
+            ->name('promotions.store');
 
         // Read-only ESB Core bills of material ([ESB-014]). Authorization for
         // the list is on its form request (esb.invoke). The id is interpolated
@@ -439,12 +500,40 @@ Route::middleware('auth')->group(function () {
             ->name('general-ledger.index');
         Route::get('general-ledger/summary', [GeneralLedgerController::class, 'summary'])
             ->name('general-ledger.summary');
+        // Memorial journal writes ([ESB-044]–[ESB-046]): decisions need
+        // memorial-journals.approve (checked by the form request); everything
+        // else memorial-journals.manage. The form routes come first: "create"
+        // would match the number pattern.
+        $manageMemorialJournals = ['can:'.Permission::InvokeEsbOperations->value, 'can:'.Permission::ManageMemorialJournals->value];
+        Route::get('memorial-journals/create', [MemorialJournalFormController::class, 'create'])
+            ->middleware($manageMemorialJournals)
+            ->name('memorial-journals.create');
+        Route::post('memorial-journals', [MemorialJournalFormController::class, 'store'])
+            ->name('memorial-journals.store');
         Route::get('memorial-journals', [MemorialJournalController::class, 'index'])
             ->name('memorial-journals.index');
         Route::get('memorial-journals/{number}', [MemorialJournalController::class, 'show'])
             ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('memorial-journals.show');
+        Route::get('memorial-journals/{number}/edit', [MemorialJournalFormController::class, 'edit'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageMemorialJournals)
+            ->name('memorial-journals.edit');
+        Route::put('memorial-journals/{number}', [MemorialJournalFormController::class, 'update'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('memorial-journals.update');
+        Route::post('memorial-journals/{number}/decisions', [MemorialJournalWriteController::class, 'decide'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->name('memorial-journals.decisions.store');
+        Route::delete('memorial-journals/{number}', [MemorialJournalWriteController::class, 'destroy'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageMemorialJournals)
+            ->name('memorial-journals.destroy');
+        Route::post('memorial-journals/{number}/images', [MemorialJournalAttachmentController::class, 'store'])
+            ->where('number', '[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+            ->middleware($manageMemorialJournals)
+            ->name('memorial-journals.images.store');
 
         // Master data spreadsheet imports ([ESB-032], S4). esb.invoke here;
         // the module's own manage permission is checked per kind by the

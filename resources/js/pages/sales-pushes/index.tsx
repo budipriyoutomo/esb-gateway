@@ -1,29 +1,21 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
+import { Head, Link } from '@inertiajs/react';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { FilterBar } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { SelectFilterField } from '@/components/select-filter-field';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
+import { useFilterForm } from '@/hooks/use-filter-form';
+import { formatDateTime } from '@/lib/format';
+import { fromPaginator } from '@/lib/pagination';
+import type { LaravelPaginator } from '@/lib/pagination';
 import {
     index as salesPushesIndex,
     show as showSalesPush,
 } from '@/routes/sales-pushes';
-import { formatDateTime } from '@/lib/format';
 
 export type SalesPushStatus =
     | 'queued'
@@ -44,21 +36,16 @@ type SalesPushRow = {
     createdAt: string | null;
 };
 
-type Paginated = {
-    data: SalesPushRow[];
-    total: number;
-    current_page: number;
-    last_page: number;
-};
-
 type Props = {
-    pushes: Paginated;
+    pushes: LaravelPaginator<SalesPushRow>;
     filters: Record<string, string>;
     statuses: SalesPushStatus[];
 };
 
-const ANY = '__any__';
-
+/**
+ * The gateway's own push states, not ERP statuses, so they keep their own
+ * colours rather than StatusBadge's keyword guess.
+ */
 export function statusVariant(
     status: SalesPushStatus,
 ): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -69,191 +56,126 @@ export function statusVariant(
     return 'destructive';
 }
 
+const columns: DataTableColumn<SalesPushRow>[] = [
+    {
+        key: 'received',
+        header: 'Received',
+        className: 'text-muted-foreground text-xs',
+        cell: (push) => formatDateTime(push.createdAt),
+    },
+    {
+        key: 'salesNum',
+        header: 'Sales number',
+        className: 'font-medium',
+        cell: (push) => (
+            <Link
+                href={showSalesPush(push.id)}
+                className="underline-offset-4 hover:underline"
+            >
+                {push.salesNum}
+            </Link>
+        ),
+    },
+    { key: 'branch', header: 'Branch', cell: (push) => push.branchCode },
+    {
+        key: 'salesDate',
+        header: 'Sales date',
+        cell: (push) => push.salesDate ?? '—',
+    },
+    {
+        key: 'client',
+        header: 'Client',
+        className: 'text-muted-foreground text-xs',
+        cell: (push) => push.client ?? '—',
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (push) => (
+            <Badge variant={statusVariant(push.status)}>{push.status}</Badge>
+        ),
+    },
+    {
+        key: 'attempts',
+        header: 'Attempts',
+        align: 'right',
+        className: 'text-muted-foreground text-xs',
+        cell: (push) => push.attempts,
+    },
+];
+
 export default function SalesPushesIndex({ pushes, filters, statuses }: Props) {
-    const [salesNum, setSalesNum] = useState(filters.salesNum ?? '');
-    const [branchCode, setBranchCode] = useState(filters.branchCode ?? '');
-
-    function apply(overrides: Record<string, string> = {}) {
-        const next: Record<string, string> = {
-            ...filters,
-            salesNum,
-            branchCode,
-            ...overrides,
-        };
-
-        for (const key of Object.keys(next)) {
-            if (next[key] === '' || next[key] === ANY) {
-                delete next[key];
-            }
-        }
-
-        router.get(salesPushesIndex().url, next, {
-            preserveState: true,
-            replace: true,
-        });
-    }
+    const form = useFilterForm(salesPushesIndex().url, filters, [
+        { key: 'salesNum', chip: (value) => `“${value}”` },
+        { key: 'branchCode', chip: (value) => `Branch ${value}` },
+        { key: 'status', chip: (value) => `Status ${value}` },
+    ]);
 
     return (
         <>
             <Head title="Sales pushes" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="Sales pushes"
                     description="Sales transactions POS clients sent through the gateway, and what the ERP said about each."
                 />
 
-                <form
-                    className="flex flex-wrap items-end gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        apply();
+                <FilterBar
+                    id="pushes"
+                    search={{
+                        label: 'Sales number',
+                        value: form.values.salesNum!,
+                        onChange: (value) => form.set('salesNum', value),
+                        placeholder: 'Sales number',
                     }}
+                    {...form.bar}
+                    defaultAdvancedOpen={Boolean(
+                        filters.branchCode || filters.status,
+                    )}
                 >
-                    <Input
-                        value={salesNum}
-                        onChange={(event) => {
-                            setSalesNum(event.target.value);
-                        }}
-                        placeholder="Sales number"
-                        aria-label="Sales number"
-                        className="w-56"
-                    />
-                    <Input
-                        value={branchCode}
-                        onChange={(event) => {
-                            setBranchCode(event.target.value);
-                        }}
-                        placeholder="Branch code"
-                        aria-label="Branch code"
-                        className="w-40"
-                    />
-                    <Select
-                        value={filters.status ?? ANY}
-                        onValueChange={(value) => {
-                            apply({ status: value });
-                        }}
-                    >
-                        <SelectTrigger className="w-44" aria-label="Status">
-                            <SelectValue placeholder="Any status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any status</SelectItem>
-                            {statuses.map((status) => (
-                                <SelectItem key={status} value={status}>
-                                    {status}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
-
-                <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Received</TableHead>
-                                <TableHead>Sales number</TableHead>
-                                <TableHead>Branch</TableHead>
-                                <TableHead>Sales date</TableHead>
-                                <TableHead>Client</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Attempts</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {pushes.data.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={7}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No sales pushes matched these filters.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-
-                            {pushes.data.map((push) => (
-                                <TableRow key={push.id}>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {formatDateTime(push.createdAt)}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        <Link
-                                            href={showSalesPush(push.id)}
-                                            className="hover:underline"
-                                        >
-                                            {push.salesNum}
-                                        </Link>
-                                    </TableCell>
-                                    <TableCell>{push.branchCode}</TableCell>
-                                    <TableCell>
-                                        {push.salesDate ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {push.client ?? '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant={statusVariant(push.status)}
-                                        >
-                                            {push.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-xs">
-                                        {push.attempts}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                    <p className="text-muted-foreground text-sm">
-                        Page {pushes.current_page} of {pushes.last_page} —{' '}
-                        {pushes.total} pushes
-                    </p>
-                    <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={pushes.current_page <= 1}
-                            onClick={() => {
-                                apply({
-                                    page: String(pushes.current_page - 1),
-                                });
+                    <div className="grid w-full gap-1.5 sm:w-40">
+                        <Label htmlFor="pushes-branch">Branch code</Label>
+                        <Input
+                            id="pushes-branch"
+                            value={form.values.branchCode}
+                            onChange={(event) => {
+                                form.set('branchCode', event.target.value);
                             }}
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={pushes.current_page >= pushes.last_page}
-                            onClick={() => {
-                                apply({
-                                    page: String(pushes.current_page + 1),
-                                });
-                            }}
-                        >
-                            Next
-                        </Button>
+                        />
                     </div>
-                </div>
+                    <SelectFilterField
+                        id="pushes-status"
+                        label="Status"
+                        anyLabel="Any status"
+                        options={statuses.map((status) => ({
+                            value: status,
+                            label: status,
+                        }))}
+                        value={form.values.status!}
+                        onChange={(status) => {
+                            // A status applies at once, as it did before.
+                            form.set('status', status);
+                            form.apply({ ...form.values, status });
+                        }}
+                    />
+                </FilterBar>
+
+                <DataTable
+                    caption="Sales pushes"
+                    columns={columns}
+                    rows={pushes.data}
+                    rowKey={(push) => push.id}
+                    rowHref={(push) => showSalesPush(push.id).url}
+                    empty="No sales pushes matched these filters."
+                />
+
+                <ListPagination
+                    pagination={fromPaginator(pushes)}
+                    noun="pushes"
+                    onPageChange={form.goToPage}
+                />
             </div>
         </>
     );
 }
-
-SalesPushesIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Sales pushes',
-            href: salesPushesIndex(),
-        },
-    ],
-};

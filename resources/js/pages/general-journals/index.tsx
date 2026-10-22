@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { useState } from 'react';
 import { DataTable } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
@@ -10,6 +11,7 @@ import { PageHeader } from '@/components/page-header';
 import { useListQuery } from '@/hooks/use-list-query';
 import { formatDate } from '@/lib/format';
 import {
+    exportMethod as exportRoute,
     index as indexRoute,
     show as showRoute,
 } from '@/routes/general-journals';
@@ -115,6 +117,13 @@ export default function GeneralJournalIndex({
                 <PageHeader
                     title="General journal"
                     description="Journals posted in the ERP, read live."
+                    actions={
+                        <ExportCsvButton
+                            href={
+                                exportRoute({ query: exportQuery(filters) }).url
+                            }
+                        />
+                    }
                 />
 
                 <FilterBar

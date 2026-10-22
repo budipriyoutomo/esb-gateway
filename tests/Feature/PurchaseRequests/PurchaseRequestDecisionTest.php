@@ -236,14 +236,20 @@ class PurchaseRequestDecisionTest extends TestCase
 
         // Back to the detail page, which re-reads the document: that GET is
         // how the user finds out what actually happened before trying again.
+        // The banner stays up while they check, unlike a toast.
         $response->assertRedirect(route('purchase-requests.show', self::NUMBER))
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.action', 'authorize '.self::NUMBER)
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference')
+            ->assertSessionMissing('inertia.flash_data.toast');
 
         $this->assertSame(1, $attempts);
 
+        // Same audit shape as every other document's unconfirmed write.
         $audit = AuditLog::query()->sole();
-        $this->assertSame('purchase-request.decision-unconfirmed', $audit->action);
-        $this->assertSame('authorize', $audit->metadata['decision']);
+        $this->assertSame('purchase-request.write-unconfirmed', $audit->action);
+        $this->assertSame('authorize', $audit->metadata['operation']);
+        $this->assertSame(self::NUMBER, $audit->metadata['number']);
+        $this->assertArrayNotHasKey('decision', $audit->metadata);
         $this->assertNotEmpty($audit->metadata['correlation_id']);
     }
 
@@ -255,10 +261,13 @@ class PurchaseRequestDecisionTest extends TestCase
         Http::fake(['*' => Http::response($this->envelope('EC03100032', 'Unknown Error', 'fail'), 500)]);
 
         $this->decide($this->approver(), 'reject')
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.action', 'reject '.self::NUMBER);
 
         Http::assertSentCount(1);
-        $this->assertSame('purchase-request.decision-unconfirmed', AuditLog::query()->sole()->action);
+
+        $audit = AuditLog::query()->sole();
+        $this->assertSame('purchase-request.write-unconfirmed', $audit->action);
+        $this->assertSame('reject', $audit->metadata['operation']);
     }
 
     // ------------------------------------------------------ double submission

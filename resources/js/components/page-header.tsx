@@ -33,7 +33,7 @@ export function PageHeader({ title, description, back, actions }: Props) {
             )}
 
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <Heading title={title} description={description} />
+                <Heading title={title} description={description} level={1} />
                 {actions && (
                     <div
                         role="group"

@@ -4,6 +4,7 @@ namespace App\Integrations\ESB\Clients;
 
 use App\Integrations\ESB\Auth\TokenManager;
 use App\Integrations\ESB\ErrorClassifier;
+use App\Integrations\ESB\ErrorCode;
 use App\Integrations\ESB\EsbConnectionResolver;
 use App\Integrations\ESB\EsbContext;
 use App\Integrations\ESB\EsbFamily;
@@ -55,7 +56,25 @@ class EsbClient
     }
 
     /**
-     * @param  array<string, mixed>  $body
+     * A GET whose documented success is a bare JSON array, not an envelope
+     * (ADR-027) -- opted into per operation, never guessed. Its rows; a
+     * body with a code is still classified by it, and anything else is
+     * malformed.
+     *
+     * @param  array<string, mixed>  $query
+     * @return list<array<string, mixed>>
+     *
+     * @throws EsbException
+     */
+    public function getBareList(EsbFamily $family, string $path, array $query = [], string $operation = ''): array
+    {
+        return $this->send('GET', $family, $path, $operation, $query, bareList: true)->rows();
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $body  An object, or a list where the
+     *                                          vendor documents an array body
+     *                                          (OMS master writes, [ESB-048]).
      */
     public function post(EsbFamily $family, string $path, array $body = [], string $operation = ''): EsbEnvelope
     {
@@ -146,9 +165,10 @@ class EsbClient
 
     /**
      * @param  array<string, mixed>  $query
-     * @param  array<string, mixed>  $body
+     * @param  array<int|string, mixed>  $body
      * @param  list<array{name: string, contents: string, filename: string}>  $files
      * @param  bool  $read  apply the read retry policy to a non-GET (ADR-025)
+     * @param  bool  $bareList  accept a bare JSON array as success (ADR-027)
      *
      * @throws EsbException
      */
@@ -161,6 +181,7 @@ class EsbClient
         array $body = [],
         array $files = [],
         bool $read = false,
+        bool $bareList = false,
     ): EsbEnvelope {
         $method = strtoupper($method);
 
@@ -176,7 +197,7 @@ class EsbClient
         $startedAtMicro = microtime(true);
 
         try {
-            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $files, $context, $read);
+            [$envelope, $attempts, $httpStatus] = $this->attempt($method, $family, $path, $query, $body, $files, $context, $read, $bareList);
         } catch (EsbException $exception) {
             $this->record(
                 $exception->context->withTiming($this->elapsedMs($startedAtMicro)),
@@ -205,7 +226,7 @@ class EsbClient
      * Execute the request, applying the retry policy.
      *
      * @param  array<string, mixed>  $query
-     * @param  array<string, mixed>  $body
+     * @param  array<int|string, mixed>  $body
      * @param  list<array{name: string, contents: string, filename: string}>  $files
      * @return array{EsbEnvelope, int, int|null}
      *
@@ -220,6 +241,7 @@ class EsbClient
         array $files,
         EsbContext $context,
         bool $read = false,
+        bool $bareList = false,
     ): array {
         $isRead = $method === 'GET' || $read;
 
@@ -260,7 +282,7 @@ class EsbClient
 
             $attemptContext = $context->withRetryCount($attempt - 1)->withTiming(0, $response->status());
 
-            $envelope = $this->parse($response, $attemptContext);
+            $envelope = $this->parse($response, $attemptContext, $bareList);
 
             if ($envelope->isSuccessful()) {
                 return [$envelope, $attempt, $response->status()];
@@ -296,7 +318,7 @@ class EsbClient
 
     /**
      * @param  array<string, mixed>  $query
-     * @param  array<string, mixed>  $body
+     * @param  array<int|string, mixed>  $body
      * @param  list<array{name: string, contents: string, filename: string}>  $files
      */
     private function dispatch(string $method, EsbFamily $family, string $path, array $query, array $body, array $files): Response
@@ -331,9 +353,15 @@ class EsbClient
             : $request->send($method, $url, ['json' => $body]);
     }
 
-    private function parse(Response $response, EsbContext $context): EsbEnvelope
+    private function parse(Response $response, EsbContext $context, bool $bareList = false): EsbEnvelope
     {
         $decoded = $response->json();
+
+        // ADR-027: an opted-in read whose documented success is a bare JSON
+        // array. Only a successful HTTP status with a list body qualifies.
+        if ($bareList && $response->successful() && is_array($decoded) && array_is_list($decoded)) {
+            return new EsbEnvelope(code: ErrorCode::HTTP_SUCCESS, result: ['data' => $decoded]);
+        }
 
         $envelope = is_array($decoded) ? EsbEnvelope::tryFromArray($decoded) : null;
 

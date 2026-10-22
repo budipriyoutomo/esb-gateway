@@ -130,7 +130,7 @@ class GoodsTransferRequestWriteTest extends InventoryWriteTestCase
 
         $this->complete($this->superAdmin(), 'reopen')
             ->assertRedirect($this->showRoute())
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $attempts);
 

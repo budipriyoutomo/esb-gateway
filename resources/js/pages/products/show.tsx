@@ -156,7 +156,3 @@ export default function ProductShow({ product }: { product: ProductDetail }) {
         </>
     );
 }
-
-ProductShow.layout = {
-    breadcrumbs: [{ title: 'Products', href: productsIndex() }],
-};

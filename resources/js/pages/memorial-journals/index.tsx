@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { useState } from 'react';
 import { DataTable } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
@@ -8,10 +9,14 @@ import type { ActiveFilter } from '@/components/filter-bar';
 import { ListPagination } from '@/components/list-pagination';
 import { PageHeader } from '@/components/page-header';
 import { StatusBadge } from '@/components/status-badge';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useListQuery } from '@/hooks/use-list-query';
+import { usePermissions } from '@/hooks/use-permissions';
 import { formatDate } from '@/lib/format';
 import {
+    exportMethod as exportRoute,
+    create as createRoute,
     index as indexRoute,
     show as showRoute,
 } from '@/routes/memorial-journals';
@@ -85,6 +90,8 @@ export default function MemorialJournalIndex({
     filters,
     statuses,
 }: Props) {
+    const { can } = usePermissions();
+    const manage = can('esb.invoke') && can('memorial-journals.manage');
     const list = useListQuery(indexRoute().url, filters);
     const [search, setSearch] = useState(filters.number ?? '');
     const [status, setStatus] = useState(
@@ -139,6 +146,23 @@ export default function MemorialJournalIndex({
                 <PageHeader
                     title="Memorial journals"
                     description="Manual journal entries, read live from the ERP."
+                    actions={
+                        <>
+                            <ExportCsvButton
+                                href={
+                                    exportRoute({ query: exportQuery(filters) })
+                                        .url
+                                }
+                            />
+                            {manage && (
+                                <Button asChild>
+                                    <Link href={createRoute().url}>
+                                        New memorial journal
+                                    </Link>
+                                </Button>
+                            )}
+                        </>
+                    }
                 />
 
                 <FilterBar

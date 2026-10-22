@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -16,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { useListQuery } from '@/hooks/use-list-query';
 import { formatAmount, formatDate } from '@/lib/format';
 import {
+    exportMethod as exportRoute,
     index as indexRoute,
     summary as summaryRoute,
 } from '@/routes/general-ledger';
@@ -155,9 +157,24 @@ export default function GeneralLedgerIndex({
                     title="General ledger"
                     description="One account's entries over a period, read live from the ERP."
                     actions={
-                        <Button variant="outline" asChild>
-                            <Link href={summaryRoute().url}>Summary</Link>
-                        </Button>
+                        <>
+                            {entries !== null && (
+                                <ExportCsvButton
+                                    href={
+                                        exportRoute({
+                                            query: exportQuery(filters),
+                                        }).url
+                                    }
+                                />
+                            )}
+                            {
+                                <Button variant="outline" asChild>
+                                    <Link href={summaryRoute().url}>
+                                        Summary
+                                    </Link>
+                                </Button>
+                            }
+                        </>
                     }
                 />
 

@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import { ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import {
     Collapsible,
     CollapsibleContent,
@@ -16,7 +17,36 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { toUrl } from '@/lib/utils';
 import type { NavEntry, NavGroup, NavItem } from '@/types';
+
+/** localStorage key holding which sidebar groups were left open. */
+export const NAV_GROUPS_STORAGE_KEY = 'nav-groups';
+
+function readGroupStates(): Record<string, boolean> {
+    try {
+        const stored = window.localStorage.getItem(NAV_GROUPS_STORAGE_KEY);
+        const parsed: unknown = stored ? JSON.parse(stored) : {};
+
+        return parsed && typeof parsed === 'object'
+            ? (parsed as Record<string, boolean>)
+            : {};
+    } catch {
+        return {};
+    }
+}
+
+function rememberGroupState(title: string, open: boolean): void {
+    try {
+        window.localStorage.setItem(
+            NAV_GROUPS_STORAGE_KEY,
+            JSON.stringify({ ...readGroupStates(), [title]: open }),
+        );
+    } catch {
+        // Private window or blocked storage: the group still opens and
+        // closes, it just starts closed again next time.
+    }
+}
 
 function isNavGroup(entry: NavEntry): entry is NavGroup {
     return 'items' in entry;
@@ -59,15 +89,36 @@ function NavMainItem({ item }: { item: NavItem }) {
 }
 
 function NavMainGroup({ group }: { group: NavGroup }) {
-    const { isCurrentUrl } = useCurrentUrl();
-    const hasActiveChild = group.items.some((item) => isCurrentUrl(item.href));
+    const { currentUrl, isCurrentUrl } = useCurrentUrl();
+    // A detail or edit page belongs to its module's group too.
+    const hasActiveChild = group.items.some((item) => {
+        const href = toUrl(item.href);
 
-    // Start expanded when the current page lives inside the group, so the
-    // active link is never hidden behind a collapsed header.
+        return currentUrl === href || currentUrl.startsWith(`${href}/`);
+    });
+    const [open, setOpen] = useState(
+        () => hasActiveChild || readGroupStates()[group.title] === true,
+    );
+
+    // Open the group whenever the current page lives inside it, so the
+    // active link is never hidden behind a collapsed header -- even when the
+    // person closed the group earlier.
+    useEffect(() => {
+        if (hasActiveChild) {
+            setOpen(true);
+        }
+    }, [hasActiveChild]);
+
+    function toggle(next: boolean) {
+        setOpen(next);
+        rememberGroupState(group.title, next);
+    }
+
     return (
         <Collapsible
             asChild
-            defaultOpen={hasActiveChild}
+            open={open}
+            onOpenChange={toggle}
             className="group/collapsible"
         >
             <SidebarMenuItem>

@@ -907,7 +907,7 @@ Facts that shaped the design:
 
 ## ADR-024 — Frontend Component Tests With `vp test` and React Testing Library
 
-**Status:** Accepted
+**Status:** Accepted — the `vite-plus` / Vitest versions and the Node 20.19 constraint are amended by ADR-028
 
 **Context**
 - The UI is tested only through Inertia props asserted in PHPUnit. Nothing exercises
@@ -1077,3 +1077,255 @@ Facts that shaped the design:
 - Per-document classes like purchase orders — five times the code for the same shape.
 - A loose `array` payload passed through to the browser — loses the canonical boundary
   (ADR-016) and the defensive reads.
+
+---
+
+## ADR-027 — An Opted-In OMS Read May Answer a Bare JSON Array
+
+**Status:** Accepted
+
+**Context**
+- `EsbClient` classifies every response by its `code` field alone; a body without one
+  is "malformed" (`docs/05-api-integration.md`, ADR-021). That keeps an unreadable
+  body from ever being taken for success.
+- ESB OMS `GET /extv1/promotion` ("Promotion List", [ESB-049]) documents its success as
+  a bare JSON array of promotions -- no envelope, no `code`. Its documented 401 is
+  `{name, message, code: 0, status: 401}`.
+- Under the code-only rule the list can never be read, although the vendor documents
+  exactly this shape for it.
+
+**Decision**
+- `EsbClient::getBareList()` sends a `GET` (read retry policy) and accepts, as success,
+  only an HTTP 2xx whose body is a JSON **list**. It returns the rows.
+- Anything else on that call goes through the normal path: a body with a `code` is
+  classified by it (a refusal is still a refusal); any other body is malformed.
+- Opt-in per operation, in the adapter, and named in the operation's `[ESB-0xx]` entry
+  ("bare list, ADR-027"). `get()` and every other method still reject a code-less body.
+- In the integration log the call is recorded with code `200` (the HTTP-style success
+  code of the FnB backend, `ErrorCode::HTTP_SUCCESS`).
+
+**Reason**
+- The shape is the vendor's documented contract for that operation, not a guess; the
+  narrow rule (2xx + list, opted in) cannot mistake an error object or an HTML page for
+  data.
+- Keeping it a separate method keeps the decision visible per operation, as ADR-025
+  did for POST reads.
+
+**Consequences**
+- `tests/Feature/Integrations/ESB/EsbClientTest.php` pins it: a bare list is read and
+  retried like a read; an envelope is still classified; `get()` still calls a bare
+  list malformed; a code-less object is malformed.
+- The vendor's `code: 0` 401 is classified as unknown (code "0" is undocumented), so it
+  does not trigger a token refresh. `TBD` with the ESB team.
+- The rows are untrusted input like any other: the mapper drops what it cannot read.
+
+**Rejected**
+- Treating any 2xx body without a code as success -- would accept an HTML error page
+  or a proxy's JSON.
+- Leaving the promotion list unbuilt -- the shape is documented; refusing it gains no
+  safety.
+
+---
+
+## ADR-028 — `vite-plus` 1.1.0 on Node 22, With `vite` Aliased to Its Core
+
+**Status:** Accepted — amends ADR-024 (tool versions and the Node constraint)
+
+**Context**
+- `npm audit` (2026-10-21) reported a **critical** advisory in `tinypool` <=2.1.1
+  ("Prototype Pollution gadget in worker options leads to Remote Code Execution",
+  GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr), reached through `vite-plus` 0.3.0 → `vitest`
+  4.1.11 and `oxfmt` 0.64.0. The only fix is `vite-plus` >1.0.0, a major version.
+- `vite-plus` 1.x requires Node `^22.18.0 || ^24.11.0 || >=26.0.0` and bundles Vitest
+  5.0.x. Local development moved to Node 22.23.4 (npm 10.9.9) on 2026-10-22; CI already
+  uses `node-version: '22'`.
+- `vite-plus` 1.x refuses to build with a separate `vite` package: "Expected
+  @voidzero-dev/vite-plus-core@1.1.0, but found vite@8.3.5 … Run `vp migrate` to align the
+  Vite alias". Its README (Manual Installation & Migration): "Alias `vite` to
+  `@voidzero-dev/vite-plus-core` … Pin `vitest` to `<vitest-version>` … The project and
+  `vp test` then use the same Vitest copy."
+- `vp migrate` also writes agent instruction files, editor config and pre-commit hooks.
+- Release dates: `vite-plus` 1.1.0 2026-10-07, 1.2.0 2026-10-14, 1.3.0 2026-10-16.
+  The audit still lists a **moderate** advisory for Vitest < 5.0.5 ("Servers misapply
+  `server.fs.deny`, serving `.env`, private keys, `.git`, and the API token file"), fixed
+  only in `vite-plus` 1.3.0.
+
+**Decision**
+- `vite-plus` is pinned to exactly `1.1.0` (devDependency).
+- `vite` is `npm:@voidzero-dev/vite-plus-core@1.1.0`, both as the direct dependency and
+  in `package.json` `overrides`, and `vitest` is overridden to `5.0.3` (the version
+  `vp toolchain vitest` reports). The three move together on every `vite-plus` upgrade.
+- The alias is set by hand; `vp migrate` is not run.
+- Node 22 (`^22.18`) is the minimum for local development and CI.
+- The lockfile is normalized by npm 10.9 (the npm CI runs through `composer setup`).
+  Installs that must re-resolve peers may use `npx npm@11.21.0 install --before=<date>`
+  to get past the npm 10 `#loadPeerSet` crash ("Cannot read properties of null (reading
+  'edgesOut')"); afterwards `npm install` with npm 10 must leave the tree unchanged.
+
+**Reason**
+- Removes the critical `tinypool` path (`tinypool` 2.2.0, `oxfmt` 0.72.0 after the
+  change) with the smallest major step.
+- 1.1.0 is the newest release older than two weeks; 1.3.0 was six days old. A
+  dev-toolchain release is executed on every developer machine and in CI, so a fresh
+  release is a supply-chain risk on its own.
+- The remaining moderate advisory needs a Vitest **server** (UI or browser mode).
+  `npm run test:ui` is `vp test` with jsdom and `vp dev` is local only; neither serves
+  Vitest's UI.
+- Following the vendor's documented alias keeps `vp build`, `vp test` and the Vite
+  plugins (`laravel-vite-plugin`, `@tailwindcss/vite`, `@inertiajs/vite`,
+  `@vitejs/plugin-react`) on one Vite copy.
+
+**Consequences**
+- `node_modules/vite` is the vite-plus core; `vite` is no longer upgraded on its own.
+- Node 20 can no longer install the frontend toolchain.
+- Node 22 unlocks jsdom 30 / jest-dom 7 (ADR-024). Done the same day, still pinned
+  exactly: `jsdom` 30.1.2 (30.1.3 was a week old) and `@testing-library/jest-dom` 7.0.1.
+  `@testing-library/jest-dom/vitest` is unchanged in v7.
+- The moderate Vitest advisory stays until `vite-plus` is raised (1.3.0 or later, once
+  it is two weeks old). Do not run `vp test --ui` or browser mode before that.
+
+**Rejected**
+- `vite-plus` 1.3.0 now — fixes the moderate advisory too, but was six days old.
+- `npm audit fix --force` — picks the newest major and rewrites unrelated ranges.
+- `vp migrate` — adds files and hooks the project does not use.
+- Regenerating the whole lockfile — npm 11 re-resolved React, Radix and Inertia to
+  their newest in-range releases; reverted to keep the change to the toolchain.
+
+---
+
+## ADR-029 — Radix Tabs for Detail Page Sections
+
+**Status:** Accepted
+
+**Context**
+- `TODO-modules.md` UI-2 left `DetailLayout` without tabs: "Tab belum: butuh
+  `@radix-ui/react-tabs` → ADR dulu". Detail pages such as the master menu stack five or
+  six bordered sections (prices, package, extras, related menus) below the header
+  fields.
+- A tab widget needs the WAI-ARIA tabs pattern: `tablist` / `tab` / `tabpanel` roles,
+  `aria-selected`, `aria-controls`, and arrow-key movement with a roving tabindex.
+- The project already uses 13 Radix primitives through shadcn-style wrappers in
+  `resources/js/components/ui/` (MIT, same maintainers, same React 19 peer range).
+- `@radix-ui/react-tabs` releases: 1.1.22 2026-10-05, 1.2.0 / 1.2.1 2026-10-12.
+
+**Decision**
+- Add `@radix-ui/react-tabs` `^1.1.22` (dependency).
+- `components/ui/tabs.tsx` wraps it (Tabs, TabsList, TabsTrigger, TabsContent) in the
+  shadcn style of the other `ui/` files; triggers reach 44px on touch screens
+  (`pointer-coarse:min-h-11`), like Button.
+- `components/detail-tabs.tsx` (`DetailTabs`) is the shared detail-page piece: a named
+  tab list, an optional row count per tab, the first tab open unless `defaultValue`
+  says otherwise. The header fields (`DetailFields` / `DetailSummary`) stay above the
+  tabs, never inside one.
+- First page: `pages/master-menus/show.tsx` — General above; Prices, Package, Extras
+  and (when any) Related menus as tabs.
+
+**Reason**
+- Radix implements the keyboard and ARIA behaviour already used by the other
+  primitives, which a hand-written widget would have to re-test.
+- Consistent with the existing `ui/` layer; no new styling system.
+
+**Consequences**
+- Radix pins its internal packages exactly, so 1.1.22 brings its own copies of six
+  `@radix-ui/react-*` internals (primitive, slot, collection, direction, presence,
+  roving-focus) beside the hoisted ones. Small, and only in chunks that use tabs.
+- The selected tab is not kept in the URL: after a write redirects back to the detail
+  page the first tab opens again.
+- Other detail pages may adopt `DetailTabs` one at a time (UI-6 style).
+
+**Rejected**
+- A hand-written tabs component — repeats Radix's roving focus and ARIA wiring.
+- 1.2.x — newer than two weeks; nothing in it is needed.
+- Keeping the tab in the URL hash — not needed by the first page; add when a page
+  needs it.
+
+---
+
+## ADR-030 — One Menu Module Over Two ESB Sources
+
+**Status:** Accepted
+
+**Context**
+- The gateway had two read-only menu modules: `/menus` from ESB Core
+  (`GET /menu/browse`, [ESB-012]: name / code / active filters, no detail) and
+  `/master-menus` from ESB OMS (`GET corev1/master/get-menu`, [ESB-013]: page and
+  `menuCode` only, active menus only, with prices per template, packages and extras).
+- Create and update exist only in OMS (`create-menu`, `update-menu`).
+- Business decision 2026-10-22 (`TODO-modules.md` §6.2): keep both sources, but as one
+  module — one list with a source tab Core | OMS; detail per source; create/edit only on
+  the OMS tab.
+
+**Decision**
+- `GET /menus` is the one menu list. `source=core` (default) reads ESB Core,
+  `source=oms` reads ESB OMS; both render `menus/index` with a `source` prop. Filters
+  are validated per source (`ListMenusRequest`): Core keeps name / code / active, OMS
+  takes only `page` and `menuCode` (OMS code limit). An unknown source is a validation
+  error and nothing reaches the ESB.
+- The source tabs are links (server-driven query), not client-side tabs: each tab is a
+  different ESB call.
+- `GET /master-menus` redirects (301) to `/menus?source=oms`, keeping `page` and
+  `menuCode`. The OMS detail (`/master-menus/{code}`) and extras
+  (`/master-menus/extras`) keep their URLs.
+- The navigation has one "Menus" entry (plus "Menu extras"); "Master menu" is gone.
+- The two adapters stay separate (`MenuSource`, `MasterMenuSource`): the canonical
+  shapes differ and neither replaces the other.
+
+**Reason**
+- One place to find a menu, as the business asked, without pretending the two ESB
+  families return the same data.
+- Keeping the OMS detail and extras URLs avoids breaking links and bookmarks; the old
+  list URL still lands on the same data.
+
+**Consequences**
+- The Core tab has no detail page (Core documents none); OMS rows open the OMS detail.
+- OMS create/edit (§6.2 S3) belongs on the OMS tab when it is built.
+
+**Rejected**
+- Merging the two lists into one table — different fields, paging, and filters; rows
+  could not be matched reliably across families.
+- Dropping one source — the business chose to keep both.
+
+---
+
+## ADR-031 — List Exports Are CSV Built by the Gateway
+
+**Status:** Accepted
+
+**Context**
+- The ERP's own export endpoints (`[ESB-032]` and the report export
+  `/report/accounting/general-ledger/export`) answer with a URL into the ERP's file
+  storage; the key and host differ between endpoints, and the browser would have to
+  open the ERP's storage directly (ADR-006 keeps vendor URLs out of the browser).
+- Business decision 2026-10-22 (`TODO-modules.md` §9): every export — general ledger,
+  master data, journals, disbursements — is a CSV made by the gateway.
+- Every list already reads the ESB through its contract with a page size of up to 100.
+
+**Decision**
+- `GET /<list>/export` takes the same filters as the list, validated by the same
+  FormRequest and permission (`esb.invoke`), and answers a CSV download.
+- `App\Exports\CsvExport` reads **every page first** (page size 100) and writes the file
+  only when all reads succeeded: an ESB failure is a normal error response, never a
+  truncated file. More than `CsvExport::MAX_ROWS` (5,000) rows is refused before the
+  first page beyond the cap is read, with a "narrow the filters" message on the list.
+- The columns are the gateway's canonical fields, chosen per list (`App\Exports\*`); the
+  file is UTF-8 with a BOM (Excel), comma separated, one header row.
+- A text cell starting with `=`, `+`, `-`, `@`, tab or carriage return is prefixed with
+  `'` (CSV formula injection). Numbers are written as numbers.
+- Each export is audited (`list.exported`: list name, filters, row count).
+- The export routes use the `esb` rate limiter, like the lookups.
+
+**Reason**
+- No dependency on the ERP's inconsistent file URLs, and nothing from the ERP's storage
+  reaches the browser.
+- Reading before writing keeps a failed export from looking like a complete one.
+
+**Consequences**
+- The CSV layout is the gateway's, not the ERP's Excel template; it cannot be
+  re-imported into the ERP as is.
+- A large export is many ESB calls (up to 50 at 100 rows); the cap bounds it.
+
+**Rejected**
+- Proxying the ERP's export file — inconsistent URLs (`[ESB-032]`), and the ERP storage
+  host would have to be trusted.
+- An Excel (.xlsx) writer — a new dependency for no requirement CSV does not meet.
+- Streaming while reading — a mid-way ESB failure would leave a truncated file.

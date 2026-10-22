@@ -1,7 +1,6 @@
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
+import { Head } from '@inertiajs/react';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { index as purposesIndex } from '@/routes/purposes';
 import type { Purpose } from '@/types/purpose';
 
@@ -24,27 +23,18 @@ export default function PurposeShow({ purpose }: { purpose: Purpose }) {
             <Head title={`Purpose ${purpose.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-col gap-2">
-                        <Link
-                            href={purposesIndex()}
-                            className="text-muted-foreground inline-flex items-center gap-1 text-sm hover:underline"
-                        >
-                            <ArrowLeft className="size-4" /> Purposes
-                        </Link>
-                        <Heading
-                            title={purpose.name || `#${String(purpose.id)}`}
-                            description={`Account ${purpose.accountNo ?? '—'}`}
-                        />
-                    </div>
-                    {purpose.active !== null && (
-                        <Badge
-                            variant={purpose.active ? 'default' : 'secondary'}
-                        >
-                            {purpose.active ? 'Active' : 'Inactive'}
-                        </Badge>
-                    )}
-                </div>
+                <PageHeader
+                    title={purpose.name || `#${String(purpose.id)}`}
+                    description={`Account ${purpose.accountNo ?? '—'}`}
+                    back={{ href: purposesIndex(), label: 'Purposes' }}
+                    actions={
+                        purpose.active !== null && (
+                            <StatusBadge
+                                status={purpose.active ? 'Active' : 'Inactive'}
+                            />
+                        )
+                    }
+                />
 
                 <section className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-4">
                     <h2 className="mb-3 text-sm font-medium">General</h2>
@@ -81,12 +71,3 @@ export default function PurposeShow({ purpose }: { purpose: Purpose }) {
         </>
     );
 }
-
-PurposeShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purposes',
-            href: purposesIndex(),
-        },
-    ],
-};

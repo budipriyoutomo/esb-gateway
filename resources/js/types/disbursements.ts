@@ -39,8 +39,8 @@ export type DisbursementLinkedDocument = {
 };
 
 /**
- * Mirrors App\Domain\Canonical\Disbursement. The bank account number comes
- * masked; the carry-over stays on the server.
+ * Mirrors App\Domain\Canonical\Disbursement. The carry-over stays on the
+ * server.
  */
 export type Disbursement = {
     provider: string;
@@ -65,7 +65,7 @@ export type Disbursement = {
     notes: string | null;
     bankName: string | null;
     bankAccountName: string | null;
-    maskedBankAccountNumber: string | null;
+    bankAccountNumber: string | null;
     costCenter: string | null;
     project: string | null;
     grandTotal: number | null;

@@ -125,7 +125,3 @@ export default function SubCategoryForm({
         </>
     );
 }
-
-SubCategoryForm.layout = {
-    breadcrumbs: [{ title: 'Sub-categories', href: subCategoriesIndex() }],
-};

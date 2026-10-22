@@ -1,7 +1,6 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
-import Heading from '@/components/heading';
+import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -78,35 +77,27 @@ export default function SalesPushShow({ push }: { push: SalesPush }) {
             <Head title={`Sales ${push.salesNum}`} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-col gap-2">
-                        <Link
-                            href={salesPushesIndex()}
-                            className="text-muted-foreground inline-flex items-center gap-1 text-sm hover:underline"
-                        >
-                            <ArrowLeft className="size-4" /> Sales pushes
-                        </Link>
-                        <Heading
-                            title={`Sales ${push.salesNum}`}
-                            description={`Branch ${push.branchCode} — from ${push.client ?? 'an unknown client'}`}
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Badge variant={statusVariant(push.status)}>
-                            {push.status}
-                        </Badge>
-                        {push.canRetry && can('sales-pushes.retry') && (
-                            <Button
-                                size="sm"
-                                disabled={processing}
-                                onClick={retry}
-                            >
-                                Send again
-                            </Button>
-                        )}
-                    </div>
-                </div>
+                <PageHeader
+                    title={`Sales ${push.salesNum}`}
+                    description={`Branch ${push.branchCode} — from ${push.client ?? 'an unknown client'}`}
+                    back={{ href: salesPushesIndex(), label: 'Sales pushes' }}
+                    actions={
+                        <>
+                            <Badge variant={statusVariant(push.status)}>
+                                {push.status}
+                            </Badge>
+                            {push.canRetry && can('sales-pushes.retry') && (
+                                <Button
+                                    size="sm"
+                                    disabled={processing}
+                                    onClick={retry}
+                                >
+                                    Send again
+                                </Button>
+                            )}
+                        </>
+                    }
+                />
 
                 {push.errors.length > 0 && (
                     <div className="border-destructive/50 rounded-xl border p-4">
@@ -219,12 +210,3 @@ export default function SalesPushShow({ push }: { push: SalesPush }) {
         </>
     );
 }
-
-SalesPushShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Sales pushes',
-            href: salesPushesIndex(),
-        },
-    ],
-};

@@ -44,10 +44,11 @@ instead of hand-rolled equivalents; `pages/purchase-orders/` is the reference:
 
 | Need | Use |
 | --- | --- |
-| Page title, back link, actions | `PageHeader` |
-| List filters + query string | `FilterBar`, `DateRangeField`, `useListQuery` |
-| List table | `DataTable` (+ `rowHref` for clickable rows) |
-| Paging | `ListPagination` |
+| Page title (the page's one `h1`), back link, actions | `PageHeader` |
+| List filters + query string | `FilterBar` + `useFilterForm` (fields, chips, reset), `DateRangeField`, `SelectFilterField`, `ActiveStatusField`; `useListQuery` underneath |
+| List table | `DataTable` (+ `rowHref` for clickable rows; a card per row below 640px, cells labelled from the header or `label`) |
+| Paging | `ListPagination` (a Laravel paginator through `fromPaginator()`) |
+| Chip × button | `ChipRemoveButton` |
 | ERP status | `StatusBadge` |
 | Detail header | `DetailSummary`, `DetailFields` / `DetailField` |
 | Authorize / reject / delete | `ApprovalActions` |
@@ -75,6 +76,13 @@ ERP UI should prioritize:
 - labels for controls;
 - sufficient contrast;
 - meaningful error messages.
+
+Checked across the whole frontend by `resources/js/test/accessibility-audit.test.tsx`
+(TODO-modules.md UI-5): every icon-only `Button` has an accessible name, every
+application page has a `PageHeader` (one `h1`), colours come from the theme tokens (no
+raw `red-600` / `neutral-200` outside `components/ui`), and buttons / text inputs reach
+44px on touch screens (`pointer-coarse:`). Links and other focusable elements without a
+ring of their own get a 2px `--foreground` outline (`app.css`).
 
 ## Data Handling
 

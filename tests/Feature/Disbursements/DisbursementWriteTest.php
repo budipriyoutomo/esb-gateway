@@ -226,7 +226,7 @@ class DisbursementWriteTest extends TestCase
 
         $this->decide($this->userWithRole(Role::SuperAdmin), 'reject', ['reason' => 'Wrong supplier'])
             ->assertRedirect($this->showRoute())
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $attempts);
 

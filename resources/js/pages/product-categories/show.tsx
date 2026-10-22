@@ -164,7 +164,3 @@ export default function ProductCategoryShow({
         </>
     );
 }
-
-ProductCategoryShow.layout = {
-    breadcrumbs: [{ title: 'Product categories', href: categoriesIndex() }],
-};

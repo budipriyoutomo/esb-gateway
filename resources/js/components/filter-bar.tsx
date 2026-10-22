@@ -1,6 +1,7 @@
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { ChipRemoveButton } from '@/components/chip-remove-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -110,16 +111,12 @@ export function FilterBar({
                             className="gap-1 pr-1"
                         >
                             {filter.label}
-                            <button
-                                type="button"
-                                aria-label={`Remove filter: ${filter.label}`}
-                                className="hover:bg-background/60 rounded-sm p-0.5"
-                                onClick={() => {
+                            <ChipRemoveButton
+                                label={`Remove filter: ${filter.label}`}
+                                onRemove={() => {
                                     onRemove(filter.key);
                                 }}
-                            >
-                                <X aria-hidden className="size-3" />
-                            </button>
+                            />
                         </Badge>
                     ))}
                     <Button

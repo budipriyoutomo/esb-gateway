@@ -1,4 +1,6 @@
 import { Head, router } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
+import { exportMethod as exportRoute } from '@/routes/general-ledger/summary';
 import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -119,6 +121,19 @@ export default function GeneralLedgerSummary({
                     title="General ledger summary"
                     description="Debit and credit per branch and account, read live from the ERP."
                     back={{ href: ledgerRoute().url, label: 'General ledger' }}
+                    actions={
+                        <>
+                            {rows !== null && (
+                                <ExportCsvButton
+                                    href={
+                                        exportRoute({
+                                            query: exportQuery(filters),
+                                        }).url
+                                    }
+                                />
+                            )}
+                        </>
+                    }
                 />
 
                 <form

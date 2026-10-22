@@ -141,6 +141,30 @@ class JournalMapperTest extends TestCase
         $this->assertSame(500000.0, $journal->lines[1]->credit);
         $this->assertNull($journal->lines[1]->notes);
         $this->assertNull($journal->lines[1]->costCenter);
+        $this->assertSame(1, $journal->lines[0]->currencyId);
+    }
+
+    #[Test]
+    public function a_memorial_journal_keeps_each_lines_cost_center_and_project_on_the_server(): void
+    {
+        $detail = CoreAccounting::mjDetailResult();
+        $detail['memorialJournalDetails'][0] = [...$detail['memorialJournalDetails'][0], 'costCenterID' => 7, 'projectID' => 4];
+
+        $journal = $this->mapper()->memorialJournalFromDetail($detail);
+
+        $this->assertNotNull($journal);
+        $this->assertSame(['costCenterId' => 7, 'projectId' => 4], $journal->carryOver->forLine(71));
+        // The placeholder 0 is none; an unknown or missing id carries nothing.
+        $this->assertSame(['costCenterId' => null, 'projectId' => null], $journal->carryOver->forLine(72));
+        $this->assertSame(['costCenterId' => null, 'projectId' => null], $journal->carryOver->forLine(555));
+        $this->assertSame(['costCenterId' => null, 'projectId' => null], $journal->carryOver->forLine(null));
+        $this->assertArrayNotHasKey('carryOver', $journal->jsonSerialize());
+    }
+
+    #[Test]
+    public function a_general_journal_line_has_its_currency_id(): void
+    {
+        $this->assertSame(1, $this->mapper()->journalLinesFrom([CoreAccounting::journalLine()])[0]->currencyId);
     }
 
     #[Test]

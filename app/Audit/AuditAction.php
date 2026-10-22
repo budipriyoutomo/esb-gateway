@@ -32,13 +32,6 @@ enum AuditAction: string
     case PurchaseRequestRejected = 'purchase-request.rejected';
 
     /**
-     * A decision was sent but the ESB gave no definite answer. It may or may
-     * not have been applied; the metadata carries the correlation id needed to
-     * trace it.
-     */
-    case PurchaseRequestDecisionUnconfirmed = 'purchase-request.decision-unconfirmed';
-
-    /**
      * A purchase request was created, replaced, or deleted in the ERP through
      * the gateway. As with decisions, the ERP sees the shared service
      * credential, so these rows are the record of which person did it.
@@ -57,12 +50,22 @@ enum AuditAction: string
 
     case MasterDataImported = 'master-data.imported';
 
+    /**
+     * A list was downloaded as CSV (ADR-031). The metadata names the list,
+     * its filters and the row count -- never the rows.
+     */
+    case ListExported = 'list.exported';
+
     case MasterDataImportUnconfirmed = 'master-data.import-unconfirmed';
 
     /**
-     * A create, update, delete, or import was sent but the ESB gave no
-     * definite answer. The metadata names the operation and carries the
-     * correlation id needed to trace it.
+     * A create, update, authorize, reject, delete, or import was sent but the
+     * ESB gave no definite answer. The metadata names the operation and
+     * carries the correlation id needed to trace it.
+     *
+     * Rows written before 2026-10-22 record an unconfirmed authorize/reject
+     * as `purchase-request.decision-unconfirmed` with a `decision` key; they
+     * are left as they are.
      */
     case PurchaseRequestWriteUnconfirmed = 'purchase-request.write-unconfirmed';
 
@@ -340,6 +343,57 @@ enum AuditAction: string
      * correlation id.
      */
     case DisbursementWriteUnconfirmed = 'disbursement.write-unconfirmed';
+
+    /**
+     * A memorial journal was authorized, rejected (with the reason, when one
+     * was given) or deleted through the gateway ([ESB-044]). The ERP records
+     * the shared service credential, so this row is the record of the person.
+     */
+    case MemorialJournalAuthorized = 'memorial-journal.authorized';
+
+    case MemorialJournalRejected = 'memorial-journal.rejected';
+
+    case MemorialJournalDeleted = 'memorial-journal.deleted';
+
+    /**
+     * A memorial journal was created or replaced through the gateway
+     * ([ESB-045]). The metadata carries the number (when the ERP gave one),
+     * the date and how many lines -- never the amounts.
+     */
+    case MemorialJournalCreated = 'memorial-journal.created';
+
+    case MemorialJournalUpdated = 'memorial-journal.updated';
+
+    /**
+     * An image was attached to a memorial journal ([ESB-046]): its name,
+     * size and SHA-256, never its contents.
+     */
+    case MemorialJournalImageUploaded = 'memorial-journal.image-uploaded';
+
+    /**
+     * A memorial journal write the ERP did not confirm either way, with its
+     * correlation id.
+     */
+    case MemorialJournalWriteUnconfirmed = 'memorial-journal.write-unconfirmed';
+
+    /**
+     * A POS menu category was created or replaced through the gateway
+     * ([ESB-048]); the metadata carries its id (when the ERP gave one) and
+     * name.
+     */
+    case MenuCategoryCreated = 'menu-category.created';
+
+    case MenuCategoryUpdated = 'menu-category.updated';
+
+    case MenuCategoryWriteUnconfirmed = 'menu-category.write-unconfirmed';
+
+    /**
+     * A POS promotion was created through the gateway ([ESB-050]); the
+     * metadata carries its id (when the ERP gave one), type, code and notes.
+     */
+    case PromotionCreated = 'promotion.created';
+
+    case PromotionWriteUnconfirmed = 'promotion.write-unconfirmed';
 
     /**
      * A document template was created in the ERP through the gateway. The

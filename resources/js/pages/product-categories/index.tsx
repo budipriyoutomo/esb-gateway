@@ -1,10 +1,12 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/use-permissions';
 import {
+    exportMethod as exportRoute,
     index as categoriesIndex,
     show as categoriesShow,
     create as createRoute,
@@ -34,22 +36,32 @@ export default function ProductCategoriesIndex({
 
             <ReferenceDataIndex
                 actions={
-                    can('esb.invoke') && can('product-categories.manage') ? (
-                        <>
-                            <ImportLinks
-                                canImport
-                                imports={[
-                                    {
-                                        kind: 'product-categories',
-                                        label: 'Import',
-                                    },
-                                ]}
-                            />
-                            <Button asChild>
-                                <Link href={createRoute()}>New category</Link>
-                            </Button>
-                        </>
-                    ) : undefined
+                    <>
+                        <ExportCsvButton
+                            href={
+                                exportRoute({ query: exportQuery(filters) }).url
+                            }
+                        />
+                        {can('esb.invoke') &&
+                        can('product-categories.manage') ? (
+                            <>
+                                <ImportLinks
+                                    canImport
+                                    imports={[
+                                        {
+                                            kind: 'product-categories',
+                                            label: 'Import',
+                                        },
+                                    ]}
+                                />
+                                <Button asChild>
+                                    <Link href={createRoute()}>
+                                        New category
+                                    </Link>
+                                </Button>
+                            </>
+                        ) : undefined}
+                    </>
                 }
                 id="product-categories"
                 title="Product categories"
@@ -99,7 +111,3 @@ export default function ProductCategoriesIndex({
         </>
     );
 }
-
-ProductCategoriesIndex.layout = {
-    breadcrumbs: [{ title: 'Product categories', href: categoriesIndex() }],
-};

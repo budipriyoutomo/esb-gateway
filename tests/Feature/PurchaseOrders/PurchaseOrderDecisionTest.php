@@ -268,7 +268,7 @@ class PurchaseOrderDecisionTest extends TestCase
 
         $this->decide($this->approver(), 'authorize')
             ->assertRedirect(route('purchase-orders.show', self::NUMBER))
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $attempts);
 
@@ -285,7 +285,7 @@ class PurchaseOrderDecisionTest extends TestCase
         Http::fake(['*' => Http::response(CorePurchaseOrder::writeEnvelope('EC03100032', 'Unknown Error', 'fail'), 500)]);
 
         $this->decide($this->approver(), 'reject', ['reason' => 'Wrong supplier'])
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         Http::assertSentCount(1);
 

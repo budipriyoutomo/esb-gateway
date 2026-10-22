@@ -366,8 +366,8 @@ Built test-first on 2026-10-01 (`[ESB-012]`), on ESB Core `GET /menu/browse`.
 - [ ] Ask the ESB team about `get-menu`: active-flag parameter name; whether `menuCode`
       is exact; the real update path; the menu code character set; whether the FnB
       backend accepts the Core login token.
-- [ ] OMS create / update: needs `get-menu-category` and `get-menu-template` lookups,
-      and parsing `EC0110` per-field errors from the JSON in `message`.
+- [ ] OMS create / update: needs a `get-menu-template` lookup. The menu category lookup
+      and `EC0110` per-field parsing exist since TODO-modules.md P15 ([ESB-047], [ESB-048]).
 - [ ] Not built: create / update (not in the Core Menu group), `browse-for-product`,
       `validate-bom-usage`, category filters (need a category lookup).
 
@@ -542,7 +542,14 @@ Still open, and **not** claimable from this machine:
 - [ ] Decide the integration log retention period. The mechanism exists; 90 days is a
       placeholder, not a decision.
 - [ ] Alert thresholds and delivery (`docs/11-logging-monitoring.md` leaves them `TBD`).
-- [ ] `composer audit` / `npm audit` review pass.
+- [ ] `composer audit` / `npm audit` review pass. (2026-10-22: npm critical / high / low
+      cleared under ADR-028; 5 moderate remain, see `TODO-modules.md` UI-0.)
+- [x] Test isolation: `config/inertia.php` hard-coded `'ssr' => ['enabled' => true]`. Once
+      `npm run build:ssr` has written `bootstrap/ssr/` (gitignored), every Inertia render
+      in PHPUnit POSTs to the SSR server, which `Http::fake()` records — 62 tests failed
+      with an extra request on 2026-10-22 until the folder was deleted. Proposed: read
+      `env('INERTIA_SSR_ENABLED', true)` and set it `false` in `phpunit.xml`. Done
+      2026-10-22, pinned by `tests/Feature/Hardening/InertiaSsrInTestsTest.php`.
 
 ---
 

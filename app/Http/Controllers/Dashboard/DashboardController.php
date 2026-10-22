@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Dashboard;
 
 use App\Http\Controllers\Controller;
 use App\Services\IntegrationMetrics;
+use App\Services\PendingApprovals;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -11,7 +13,7 @@ use Throwable;
 
 class DashboardController extends Controller
 {
-    public function index(IntegrationMetrics $metrics): Response
+    public function index(Request $request, IntegrationMetrics $metrics, PendingApprovals $approvals): Response
     {
         return Inertia::render('dashboard', [
             'metrics' => $metrics->summary(),
@@ -27,6 +29,12 @@ class DashboardController extends Controller
             'queue' => [
                 'pending' => $this->pendingJobs(),
             ],
+            // Deferred: the counts are ERP reads, and the dashboard should
+            // not wait on the ERP to show the gateway's own health.
+            'pendingApprovals' => Inertia::defer(
+                fn (): array => $approvals->for($request->user()),
+                'approvals',
+            ),
         ]);
     }
 

@@ -16,7 +16,7 @@ jawaban ESB/bisnis).
 
 1. **Dokumentasi kontrak dulu.** Baca operasi di `docs/esb/esb-core-endpoints.md` /
    `esb-oms-endpoints.md` + halaman vendor. Tulis entri `[ESB-0xx]` di
-   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-044]`**). Jangan mengarang
+   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-051]`**). Jangan mengarang
    field yang tidak terdokumentasi — tandai sebagai asumsi/TBD.
 2. **Fixture** `tests/Fixtures/Core<Module>.php` dari contoh respons vendor.
 3. **Tulis test yang gagal (RED)**, jalankan, pastikan gagal karena alasan yang benar:
@@ -84,10 +84,18 @@ memberi usulan pesan commit.
 | P11 | Inventory S2–S4 | `[x]` siap commit (GD/GR create-from-reference & aset `[!]`) |
 | P12 | Finance: Disbursement S1–S4 | `[x]` siap commit (export `[!]`) |
 | P13 | Accounting S1 (General Journal, General Ledger, Memorial Journal) | `[x]` siap commit (filter array, `/access`, export `[!]`) |
-| P14 | Accounting S2–S4 (Memorial Journal) | `[ ]` |
-| P15 | POS: Menu Category, Promotion (+ Menu setelah keputusan sumber) | `[ ]` |
-| P16 | UI-3 navigasi + UI-4 dashboard | `[ ]` |
-| P17 | UI-5 responsif/aksesibilitas + UI-6 migrasi halaman lama | `[ ]` |
+| P14 | Accounting S2–S4 (Memorial Journal) | `[x]` siap commit (upload/form-upload, export `[!]`) |
+| P15 | POS: Menu Category, Promotion (+ Menu setelah keputusan sumber) | `[x]` siap commit (Menu `[!]` keputusan sumber; promosi update/nonaktif `[!]`) |
+| P16 | UI-3 navigasi + UI-4 dashboard | `[x]` siap commit (approval dokumen purchasing/GTR/GD/GR/ST `[!]`) |
+| P17 | UI-5 responsif/aksesibilitas + UI-6 migrasi halaman lama | `[x]` siap commit (kontrol keputusan PR/PI/SP tetap lokal, lihat UI-6) |
+| P18 | Sisa tanpa blocker: wiring `UnconfirmedWriteNotice`, Menu Extras read-only, npm audit (lockfile) | `[x]` siap commit (`vite-plus` 1.x / Node 22 `[!]`) |
+| P19 | ADR-028 `vite-plus` 1.1.0 (Node 22, alias `vite`), jsdom 30 / jest-dom 7, ADR-029 Radix Tabs + `DetailTabs` (master menu, BOM, supplier), SSR off di PHPUnit | `[x]` siap commit (moderate Vitest server `[!]` → `vite-plus` 1.3.0 setelah 2026-10-30) |
+| P20 | §1 migrasi Purchase Request ke `DocumentWrites` (audit `write-unconfirmed`, banner) + `ApprovalActions` di detail PR; keputusan bisnis 2026-10-22 + `docs/esb/open-questions.md` | `[x]` siap commit |
+| P21 | Nomor rekening supplier & disbursement tampil utuh (keputusan bisnis) | `[x]` siap commit |
+| P22 | PI / SP detail ke `ApprovalActions` | `[x]` siap commit |
+| P23 | Sapu string UI ke Inggris — tidak ada perubahan kode (sudah Inggris) | `[x]` (tanpa commit) |
+| P24 | ADR-030 satu modul Menu (Core + OMS) | `[x]` siap commit |
+| P25 | ADR-031 export CSV dari gateway (12 list) | `[x]` siap commit |
 
 Item `[!]` (butuh jawaban ESB/bisnis) dilewati dalam phase-nya dan tidak memblokir
 commit phase tersebut.
@@ -368,6 +376,209 @@ JournalLinesTable are shared by both journals. Accounting group in the
 sidebar.
 ```
 
+Usulan pesan commit P14:
+
+```
+feat: memorial journal writes, edit form and images
+
+[ESB-044] authorize / reject / delete under memorial-journals.approve /
+.manage (Super Admin only): one attempt, one write per journal, audited
+with the person. The page asks for a reject reason only while the
+journal waits for approval; the ERP enforces it.
+
+[ESB-045] create / edit with debit / credit lines (branch, account,
+currency, rate; exactly one side per line, at least two lines). The
+totals are a hint; the ERP judges the balance. An edit sends back each
+kept line's cost center and project, read from the ERP by line id.
+
+[ESB-046] one image per upload to the journal's asset images
+(AttachmentActions gains a single-file mode). The spreadsheet upload,
+form-upload and export are not built: the vendor documents them as a
+JSON row, not a file field.
+```
+
+Usulan pesan commit P15:
+
+```
+feat: POS menu categories and promotions (ESB OMS)
+
+[ESB-047] / [ESB-048] menu categories: list page by page (no search, no
+detail operation: a category is found on the page it was listed on, then
+the others, at most 20 pages) and create / edit with category details
+under menu-categories.manage. An edit keeps every current detail. The
+accounts are sent as COA descriptions, as the vendor documents.
+
+[ESB-049] / [ESB-050] promotions: the list (a bare JSON array, read via
+EsbClient::getBareList(), ADR-027; paged by the gateway) and create for
+the five documented types under promotions.manage. Each type sends only
+its own fields; booleans as "Yes" / "No".
+
+ErrorClassifier reads the OMS field errors: EC0110's JSON message and
+`data` keyed by field. New OMS lookups (menu categories, category
+details, POS menus) and a LookupChips multi-picker. POS group in the
+sidebar.
+```
+
+Usulan pesan commit P16:
+
+```
+feat(ui): grouped navigation, command palette, breadcrumbs, dashboard cards
+
+The menu moves to resources/js/lib/navigation.ts, shared by the sidebar,
+a new Ctrl+K command palette and the breadcrumbs. Gateway pages join a
+System group; groups remember being opened or closed and always open on
+the page they hold. The palette jumps to any page the person may open, or
+opens a typed document number in the twelve modules that read by number
+(no new dependency: Radix Dialog plus its own listbox).
+
+Breadcrumbs are derived from the URL and the menu on every page inside
+it (module, number, New / Edit / Import); the per-page static
+breadcrumbs are removed.
+
+Dashboard: a deferred "Waiting for approval" card (PendingApprovals:
+status 38 for disbursements, memorial journals, item journals and
+proposed prices, only where the person approves; a failed read shows as
+unknown), the last call per ESB family, and permission-gated shortcuts.
+```
+
+Usulan pesan commit P17:
+
+```
+feat(ui): responsive, accessible lists and the older pages migrated
+
+UI-5. DataTable becomes a card per row below 640px (visually hidden
+header, cells labelled from their column, explicit table roles).
+Buttons, inputs and chip remove buttons reach 44px on touch screens
+(pointer-coarse). PageHeader renders the page's h1. Links and other
+focusables without their own ring get a visible outline. Raw palette
+colours in the starter kit pages move to theme tokens. An audit test
+checks the whole frontend: named icon buttons, a PageHeader on every
+page, theme colours only, touch target sizes.
+
+UI-6. Products, menus, master menus, bills of material, purposes,
+document templates (+ imports), purchase requests, purchase invoices,
+simple purchases, sales pushes, integration logs, endpoints and users
+now use PageHeader, FilterBar, DataTable, ListPagination and
+StatusBadge, like the purchase order list; their detail, form and
+import pages use PageHeader. New shared pieces: useFilterForm,
+SelectFilterField / ActiveStatusField, fromPaginator, ChipRemoveButton.
+Filters, paging and server behaviour are unchanged.
+```
+
+Usulan pesan commit P18:
+
+```
+feat: unconfirmed write banner, menu extras page, dependency fixes
+
+An unconfirmed decision, transition or upload that lands on a document's
+detail page is now flashed as unconfirmedWrite (action, reference) and
+shown by UnconfirmedWriteBanner in both app layouts, instead of a toast
+that disappears while the person checks the status. Deletes and
+authorizations that consume the document still toast on the list.
+
+GET /master-menus/extras lists the extras of one page of OMS Get Menu
+with their menu ([ESB-013]); there is no extra endpoint to read.
+
+Lockfile only: concurrently 10.0.6 (shell-quote 1.12.0), vite 8.3.4,
+source-map-js 1.2.2. tinypool (via vite-plus 0.3.0) remains.
+```
+
+Usulan pesan commit P25:
+
+```
+feat: CSV exports built by the gateway
+
+ADR-031 (business decision 2026-10-22). GET /<list>/export takes the
+list's own filters, FormRequest and permission, and answers a CSV
+(UTF-8 BOM) for units, product categories and sub-categories, products,
+pricelists, chart of accounts, suppliers, disbursements, general and
+memorial journals, and the general ledger with its summary.
+
+CsvExport reads every page before writing, so an ESB failure is an
+error, never a truncated file; it stops on the row count, not the
+provider's page number. Over 5,000 rows is refused on the list. The
+ledger and the chart of accounts are read once. Formula-looking text is
+prefixed with '. Each export is audited as list.exported. The ERP's own
+export files are not used.
+```
+
+Usulan pesan commit P24:
+
+```
+feat(menus): one menu list with a Core | OMS source tab
+
+ADR-030 (business decision 2026-10-22). GET /menus?source=core|oms reads
+ESB Core [ESB-012] or ESB OMS [ESB-013]; filters are validated per
+source and only that source is called. The tabs are links. GET
+/master-menus redirects (301) to the OMS tab with its page and code; the
+OMS detail and extras keep their URLs. One "Menus" navigation entry.
+```
+
+Usulan pesan commit P22:
+
+```
+refactor(ui): purchase invoice and simple purchase detail use ApprovalActions
+
+The local authorize / reject / delete controls are replaced by the
+shared component. A simple purchase rejection still requires a reason
+(max 500); a purchase invoice rejection takes none.
+```
+
+Usulan pesan commit P21:
+
+```
+feat: show supplier bank account numbers in full
+
+Business decision 2026-10-22. Supplier and disbursement details carry
+the account number as the ERP sent it (accountNumber /
+bankAccountNumber) instead of the last four digits. The integration log
+stores no response bodies, so the number is not logged.
+```
+
+Usulan pesan commit P20:
+
+```
+refactor: purchase request decisions through DocumentWrites
+
+Business decision 2026-10-22: an unconfirmed purchase request
+authorize/reject is now audited like every other document, as
+purchase-request.write-unconfirmed with an `operation` key. Rows written
+before keep purchase-request.decision-unconfirmed / `decision`.
+
+Decide and delete go through DocumentWrites (PurchaseRequestDocument),
+same lock key as before. An unconfirmed decision shows the
+unconfirmed-write banner instead of a toast. The detail page uses the
+shared ApprovalActions; a rejection still sends no reason.
+
+Records the business answers to the open questions in TODO-modules.md
+and lists the questions for ESB in docs/esb/open-questions.md.
+```
+
+Usulan pesan commit P19:
+
+```
+build: vite-plus 1.1.0 on Node 22; feat(ui): detail page tabs
+
+ADR-028. vite-plus 0.3.0 pulled tinypool <=2.1.1 (critical RCE
+advisory) through vitest 4. vite-plus 1.1.0 bundles vitest 5.0.3 and
+needs Node 22.18+. As its README documents, vite is aliased to
+@voidzero-dev/vite-plus-core@1.1.0 (direct dependency and overrides) and
+vitest is overridden to 5.0.3. @babel/core goes to 8.0.7. A moderate
+advisory remains for Vitest servers (UI / browser mode, not used) until
+vite-plus 1.3.0 is two weeks old.
+
+jsdom 30.1.2 and @testing-library/jest-dom 7.0.1, still pinned exactly.
+
+ADR-029. @radix-ui/react-tabs 1.1.22 behind ui/tabs.tsx, and a shared
+DetailTabs (named tab list, row count per tab). Master menu, bill of
+material and supplier details keep their header fields above and move
+their line lists into tabs.
+
+Inertia SSR follows INERTIA_SSR_ENABLED and phpunit.xml turns it off: a
+local bootstrap/ssr/ bundle made every render POST through the faked
+HTTP client.
+```
+
 Usulan pesan commit P10:
 
 ```
@@ -405,10 +616,12 @@ Tanpa ini, 24 modul akan menggandakan kode yang sama ±24 kali.
       `Http\Controllers\Concerns\HandlesDocumentWrites` (toast + redirect). PO, Simple
       Purchase, dan Purchase Invoice dimigrasi. Modul baru cukup bikin
       `<X>Document::approvable()` + action tipis.
-  - [ ] Purchase Request **belum** dimigrasi: audit unconfirmed decision-nya
+  - [x] Purchase Request dimigrasi (P20, 2026-10-22): audit unconfirmed decision-nya
         (`purchase-request.decision-unconfirmed`, key `decision`) beda dengan modul
-        lain (`*.write-unconfirmed`, key `operation`). Menyeragamkan = perubahan
-        perilaku audit → butuh keputusan dulu.
+        lain (`*.write-unconfirmed`, key `operation`). **Diputuskan 2026-10-22:
+        seragamkan** — kejadian baru `purchase-request.write-unconfirmed` + key
+        `operation`; log lama tidak diubah. Setelah itu PR pakai `ApprovalActions` +
+        `UnconfirmedWriteNotice` seperti modul lain.
 - [x] Ekstrak tipe `Pagination`/`Filters` TS (2026-10-19): `resources/js/types/pagination.ts`
       (`Pagination`, `PagingFilters`, `DocumentFilters`), dipakai 10 halaman list. Field
       filter khusus modul tetap di page masing-masing.
@@ -427,8 +640,9 @@ Tanpa ini, 24 modul akan menggandakan kode yang sama ±24 kali.
       - [x] Endpoint JSON internal (searchable, paginated), rate limit per user.
       - [!] Format parameter array ESB (`a=1&a=2` vs `a[]=1`) tidak terdokumentasi —
             tanya ESB agar filter branch bisa dikirim ke upstream.
-- [ ] Selesaikan **Fase UI-1 dan UI-2** (§7) dulu agar modul baru langsung memakai
-      komponen baru, bukan menambah halaman gaya lama.
+- [x] Selesaikan **Fase UI-1 dan UI-2** (§7) dulu agar modul baru langsung memakai
+      komponen baru, bukan menambah halaman gaya lama. Selesai di P4/P5 (sisa `[~]`
+      tab `DetailLayout` dan wiring `UnconfirmedWriteNotice` dicatat di UI-2).
 
 ---
 
@@ -449,8 +663,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
       diedit (BOM, CoreTax, custom fields, menu/cubication unit) dibawa. `isTemp` → toast
       "menunggu approval". Tepat satu base unit (asumsi). `pushToGoApp` tidak dikirim (`TBD`).
 - [x] S4 (2026-10-19, `[ESB-032]`): import create (`POST`) / update (`PUT /product/import`).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 - [!] Tanya ESB: beda produk "pending" vs "temp"; siapa yang mengotorisasi.
 
 ### 2.2 Category (`/product/category`)
@@ -461,8 +675,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 - [x] S3 (2026-10-19, `[ESB-030]`): create / update; semua field dikirim (PUT = ganti
       penuh), kosong sebagai `""`/`0`. Picker COA + category type.
 - [x] S4 (2026-10-19, `[ESB-032]`): upload Excel (di-queue ERP).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 
 ### 2.3 Sub Category (`/product/sub-category`)
 
@@ -473,8 +687,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 - [x] S3 (2026-10-19, `[ESB-030]`): create / update. `flagActive` tidak dikirim — `TBD`
       apakah PUT tanpa flag mereset status.
 - [x] S4 (2026-10-19, `[ESB-032]`): upload Excel (di-queue ERP).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 
 ### 2.4 Unit (`/units`)
 
@@ -485,8 +699,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 - [x] S3 (2026-10-19, `[ESB-030]`): create / update, picker metric + tax. Tanpa tax →
       `refTaxID` tidak dikirim (`TBD`: apakah update tanpa field ini menghapus referensi).
 - [x] S4 (2026-10-19, `[ESB-032]`): import (di-queue ERP).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 
 ### 2.5 Pricelist (`/pricelist`)
 
@@ -503,8 +717,8 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 - [!] S3: edit pricelist aktif (`PUT /pricelist/{pricelistID}`) — ambigu ID (lihat S1).
 - [x] S4 (2026-10-19, `[ESB-032]`): import; harga aktif per baris + riwayat 5 purchase
       invoice terakhir di form (harga 0 = tidak ada).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 - [!] Tanya ESB: apakah create selalu menghasilkan temp (alur temp → aktif sudah jelas).
 
 ### 2.6 Food Cost Calculator (`POST /food-cost-calculator`)
@@ -529,9 +743,12 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
       parent tidak ada di skema, detail tidak membawa `currencyID`. Tanya ESB.
 - [x] S4 (2026-10-19, `[ESB-032]`): upload COA + account mapping (sinkron, jumlah tersimpan
       ditampilkan).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
-- [ ] Permission khusus `coa.manage` — data akuntansi sensitif, audit wajib.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
+- [x] Permission khusus `coa.manage` — data akuntansi sensitif, audit wajib.
+      `Permission::ManageCoa` menjaga deactivate/restore/reorder/upload; audit
+      `coa.deactivated` / `coa.restored` / `coa.moved` / `coa.write-unconfirmed` dan
+      `master-data.imported` untuk upload.
 
 ### 2.8 Payment Method
 
@@ -547,16 +764,19 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
 ### 2.9 Supplier (`/supplier`)
 
 - [x] S1 (2026-10-19, `[ESB-024]`): list + detail (kontak, rekening bank, kode produk
-      supplier) dari satu call detail. Nomor rekening dimask di server (4 digit
-      terakhir) — `TBD` keputusan bisnis.
+      supplier) dari satu call detail. Nomor rekening awalnya dimask (4 digit
+      terakhir), utuh sejak P21.
+- [x] Nomor rekening supplier **ditampilkan utuh** (keputusan bisnis 2026-10-22, P21) —
+      masking dihapus di adapter supplier dan disbursement (§4.1); `accountNumber` /
+      `bankAccountNumber`. Log integrasi tidak menyimpan body.
 - [x] S2 (2026-10-19, `[ESB-029]`): deactivate (`DELETE` vendor) / restore (`suppliers.manage`).
 - [!] S3: create / update — `greetingID` PIC wajib tanpa endpoint daftar greeting; `paymentID`
       = Payment Method (blocked); efek PATCH tanpa `supplierBank[]` tidak terdokumentasi dan
-      gateway hanya memegang nomor rekening termask. Tanya ESB.
+      Tanya ESB.
 - [x] S4 (2026-10-19, `[ESB-032]`): upload create/update Excel; attachment upload / hapus
       semua (jumlah saja yang ditampilkan — URL file = soal yang sama dengan export).
-- [!] S4 export: ERP membalas URL file di storage-nya (key & host tidak konsisten) — butuh
-      keputusan proxy vs export dari gateway (ADR) + jawaban ESB. Lihat `[ESB-032]`.
+- [x] S4 export (P25, ADR-031): CSV dibuat gateway, `GET /<list>/export` — file ERP
+      `[ESB-032]` tidak dipakai.
 
 ### 2.10 Supplier Category (`/supplier/category`)
 
@@ -638,7 +858,7 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 
 - [x] S1 (2026-10-20, `[ESB-037]`): list (nomor, status, branch, supplier, cash/credit,
       referensi, overdue, tanggal) + detail (baris akun, purchase payment & supplier
-      settlement terkait). Nomor rekening bank dimask di adapter (sama dengan supplier).
+      settlement terkait). Nomor rekening bank tampil utuh sejak P21 (sama dengan supplier).
 - [x] S2 (2026-10-20, `[ESB-038]`): authorize / reject (alasan opsional) / delete; tombol
       mengikuti status terdokumentasi (decide: New / Waiting For Approval).
 - [x] S3 (2026-10-20, `[ESB-039]`): create / update cash & credit; `PUT /{num}/validate`
@@ -649,10 +869,11 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 - [x] S4 (2026-10-20, `[ESB-040]`): attachment (hanya saat belum ada; vendor tidak punya
       hapus), import Excel (layar import bersama, di-queue ERP), import form → mengisi baris
       form (ERP tidak menyimpan apa pun).
-- [!] S4 export: sama dengan `[ESB-032]`.
-- [x] Permission `disbursements.approve` / `.manage` (Super Admin saja).
-- [!] Pemisahan tugas (pembuat ≠ pengotorisasi) — keputusan bisnis; ERP hanya melihat
-      kredensial bersama, audit gateway mencatat orangnya.
+- [x] S4 export: CSV dari gateway (P25, ADR-031).
+- [x] Permission `disbursements.approve` / `.manage` (Super Admin saja — dipertahankan,
+      keputusan 2026-10-22).
+- [x] Pemisahan tugas: **pembuat boleh mengotorisasi** (keputusan bisnis 2026-10-22). Cukup
+      permission `.approve`; audit gateway mencatat orangnya.
 
 ---
 
@@ -669,15 +890,15 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
 - [x] S1 (2026-10-20, `[ESB-042]`): ledger per COA + periode (wajib, maks. 366 hari, paging
       di gateway karena vendor tidak mem-page) dan summary per branch/akun (paging vendor).
       `postRead()` (ADR-025). Tanpa saldo berjalan (vendor tidak memberi saldo awal).
-- [!] Ekspor CSV di sisi gateway / export report ERP (`/report/accounting/general-ledger/export`)
-      — keputusan bisnis. Filter cost center / project / rekonsiliasi belum ditawarkan.
+- [x] Ekspor **CSV dari gateway** (P25, ADR-031): ledger (satu kali baca ESB) dan summary;
+      export report ERP tidak dipakai. Filter cost center / project / rekonsiliasi belum ditawarkan.
 
 ### 5.3 General Journal (`/accounting/general-journal`)
 
 - [x] S1 (2026-10-20, `[ESB-041]`): list (tanggal, teks bebas) + baris jurnal per halaman.
       Detail vendor hanya berisi baris (tanpa head).
 - [!] Filter branch / akun / cost center / project: parameter array tidak terdokumentasi.
-- [!] S4: export — sama dengan `[ESB-032]`.
+- [x] S4: export — CSV dari gateway (P25, ADR-031).
 
 ### 5.4 Memorial Journal (`/accounting/memorial-journal`)
 
@@ -685,11 +906,19 @@ Semua dokumen transaksional: pola PO/Simple Purchase berlaku penuh (S1–S4).
       debit/kredit (komponen `JournalLinesTable` bersama general journal).
 - [!] `GET /access`: nama parameter query tidak terdokumentasi, dan "current user" = kredensial
       bersama gateway. Aksi S2 memakai permission gateway + status terdokumentasi.
-- [ ] S2: authorize / reject / delete.
-- [ ] S3: create / update — baris debit/kredit dengan picker COA; validasi seimbang
-      hanya sebagai UX hint, ERP tetap otoritas.
-- [ ] S4: upload bulk (`form-upload` → `upload`, pola ADR-021/ADR-023), export,
-      asset images.
+- [x] S2 (2026-10-20, `[ESB-044]`): authorize / reject / delete. Alasan reject wajib di
+      halaman hanya saat Waiting For Approval (ERP yang menegakkan); delete ditawarkan di
+      semua status (ERP menolak jurnal yang sudah direkonsiliasi).
+- [x] S3 (2026-10-20, `[ESB-045]`): create / update — baris debit/kredit (branch, COA,
+      currency, rate; tepat satu sisi per baris, min. 2 baris). Total seimbang hanya hint;
+      ERP otoritas. Update mengirim ulang cost center / project tiap baris lama (dibaca dari
+      ERP per ID baris).
+- [x] S4 (2026-10-20, `[ESB-046]`): asset images — satu gambar per upload (jpg/png, 2 MB,
+      batas gateway), ditambahkan bukan mengganti (asumsi, `TBD`).
+- [!] S4: `form-upload` / `upload` — didokumentasikan sebagai body JSON satu baris Excel,
+      bukan field file multipart; nama field dan arti `typeID` tidak terdokumentasi.
+- [x] S4: export — CSV dari gateway (P25, ADR-031).
+- [!] Picker cost center / project — tidak ada lookup.
 
 ---
 
@@ -700,35 +929,49 @@ Master Menu (token FnB, parsing `EC0110`).
 
 ### 6.1 Menu Category (OMS `get/create/update-menu-category`)
 
-- [ ] S1: list.
-- [ ] S3: create / update; parse error per-field `EC0110` dari JSON di `message`.
+- [x] S1 (2026-10-20, `[ESB-047]`): list per halaman vendor (tanpa search); halaman satu
+      kategori dicari di halaman asal lalu halaman lain, maks. 20 halaman (tidak ada operasi detail).
+- [x] S3 (2026-10-20, `[ESB-048]`): create / update + category details; error per-field `EC0110`
+      dari JSON di `message` (ErrorClassifier). Update wajib mempertahankan semua detail lama.
+- [!] Alias ESB Order, image URL, `themeOptionCategoryOnPos`: tidak ada di list, jadi tidak dikirim
+      (apakah ERP mempertahankannya `TBD`). Hapus detail: hanya di ERP.
 
 ### 6.2 Menu (perluasan `[ESB-012]` / `[ESB-013]`)
 
-- [!] **Keputusan bisnis dulu**: sumber menu Core (`/menu/browse`) atau OMS
-      (`get-menu`) — lalu gabungkan `Menu` & `MasterMenu` atau hapus satu.
-- [ ] S3: create / update OMS (`create-menu`, `update-menu`) — butuh picker Menu
-      Category (§6.1) dan Menu Template.
+- [x] Keputusan bisnis (2026-10-22): **dua sumber tetap, satu modul**. `Menu` (Core) dan
+      `MasterMenu` (OMS) digabung jadi satu modul "Menu": list dengan tab sumber
+      Core | OMS, detail sesuai sumber, create/edit hanya di tab OMS.
+- [x] Gabung (P24, 2026-10-22, ADR-030): `/menus?source=core|oms` (tab = link, filter per
+      sumber), `/master-menus` → 301 ke tab OMS; detail & extras OMS tetap di URL lamanya;
+      nav satu entri "Menus" (+ "Menu extras"); `pages/master-menus/index.tsx` dihapus.
+- [!] S3: create / update OMS (`create-menu`, `update-menu`) — body terdokumentasi
+      (dicek 2026-10-22 dari `api_data.json` vendor), tetapi field wajib
+      `flagSeparatePrintPackage` / `flagSeparateTaxCalculation` / `checkerList` /
+      `menuCategoryDetailID` tidak terbaca dari `get-menu` (update akan menebak dan menimpa),
+      dan akun penjualan/HPP/diskon hanya "Account Description" tanpa daftar. Tanya ESB
+      (`docs/esb/open-questions.md` 5.1a). Saat dibangun: di tab OMS (ADR-030).
 
 ### 6.3 Menu Extra
 
-- [!] Tidak ada endpoint khusus di katalog. Extra saat ini hanya terbaca dari detail
-      OMS master menu. Tanya ESB: apakah extra dikelola lewat `create/update-menu`
-      (nested) atau endpoint lain yang belum terdokumentasi.
-- [ ] Sementara: tampilan read-only extra lintas menu dari data menu yang sudah ada.
+- [!] Tidak ada endpoint khusus di katalog. Body `create-menu` / `update-menu` memuat
+      `menuExtras[]` nested (dicek 2026-10-22) — extra dikelola lewat create/update menu
+      (§6.2 S3, blocked). Tanya ESB konfirmasi + efek extra yang tidak dikirim (5.1).
+- [x] Sementara: tampilan read-only extra lintas menu dari data menu yang sudah ada
+      (2026-10-21): `GET /master-menus/extras` meratakan extras satu halaman Get Menu
+      (`[ESB-013]`, paging per menu, filter kode menu), menu nav "Menu extras".
 
 ### 6.4 Notes
 
-- [!] Tidak ada operasi "notes" di katalog Core maupun OMS. Klarifikasi dengan bisnis:
-      notes menu POS (catatan pesanan) di ERP, atau fitur lokal gateway? **Jangan
-      dibangun** sampai jelas — bila lokal, butuh ADR karena gateway jadi pemilik data.
+- [x] **Tidak dibutuhkan** (keputusan bisnis 2026-10-22) — modul Notes tidak dibangun.
 
 ### 6.5 Promotion (OMS `Master Promotion`)
 
-- [ ] S1: list `GET /extv1/promotion`.
-- [ ] S3: create — lima varian di path yang sama `POST /corev1/promotion/`
-      (Discount Rp ESO, Discount Limit %, Discount %, Discount % ESO, Free Item).
-      Form dengan pemilih tipe; satu FormRequest per varian; test per varian.
+- [x] S1 (2026-10-20, `[ESB-049]`): list `GET /extv1/promotion` (array mentah tanpa envelope,
+      ADR-027 `getBareList()`), filter branch code / promotion code, paging di gateway.
+- [x] S3 (2026-10-20, `[ESB-050]`): create lima varian, satu form dengan pemilih tipe. Aturan per
+      varian di `PromotionType` (satu FormRequest yang memilih aturan per tipe, bukan lima kelas);
+      test per varian. Lookup OMS baru: menu categories, category details, POS menus.
+- [!] Kode ESB Order payment method, visit purpose, employee group, BIN: diketik (tidak ada lookup).
 - [!] Tanya ESB: update/nonaktifkan promosi; arti "ESO".
 
 ---
@@ -746,9 +989,20 @@ Dikerjakan bertahap. UI-1 dan UI-2 **sebelum** modul baru; UI-3 dst. paralel.
       masuk `composer ci:check` → CI. Test pertama: `components/heading.test.tsx`.
 - [x] Setiap komponen bersama UI-2: test perilaku ditulis dulu (render, empty state,
       keyboard, aksesibilitas dasar) — P5, 2026-10-19.
-- [ ] Follow-up (di luar P3): `npm audit` melaporkan advisory di dependency lama
+- [x] Follow-up (di luar P3): `npm audit` melaporkan advisory di dependency lama
       (`@rolldown/plugin-babel`, `concurrently`, `@tailwindcss/vite`, `vite-plus`);
       upgrade Node lokal ke 22 agar bisa naik ke jsdom 30 / jest-dom 7.
+      - [x] 2026-10-21: lockfile saja (range `package.json` tidak berubah) —
+            `concurrently` 10.0.6 (`shell-quote` 1.12.0), `vite` 8.3.4, `source-map-js`
+            1.2.2. Vite 8.3.5 sengaja dilewati (rilis hari itu; `--before=2026-10-09`).
+      - [x] 2026-10-22 (ADR-028): `vite-plus` 1.1.0 (Vitest 5.0.3), `vite` di-alias ke
+            `@voidzero-dev/vite-plus-core@1.1.0` + `overrides`; `tinypool` 2.2.0 — critical
+            hilang. `@babel/core` 8.0.7 (low hilang).
+      - [x] Node lokal 22.23.4 (npm 10.9.9) — dilakukan developer 2026-10-22.
+      - [!] Sisa 5 advisory moderate: Vitest < 5.0.5 server `fs.deny` (hanya UI/browser
+            mode, tidak dipakai). Fix = `vite-plus` 1.3.0; naikkan setelah ≥ 2026-10-30
+            (umur dua minggu). Jangan pakai `vp test --ui` sebelum itu.
+      - [x] jsdom 30.1.2 / jest-dom 7.0.1 (2026-10-22, pin exact; catatan di ADR-028).
 - [ ] (Opsional, nanti) Playwright smoke test untuk alur login → list → detail.
 
 ### UI-1 Design foundation
@@ -757,16 +1011,21 @@ Dikerjakan bertahap. UI-1 dan UI-2 **sebelum** modul baru; UI-3 dst. paralel.
       (light + dark); bug dark `sidebar-primary-foreground` (kontras 1:1) dan light
       `muted-foreground` di atas `muted` (4,34:1) diperbaiki. Skala tipografi, radius,
       spacing didokumentasikan di `docs/08-frontend-guidelines.md`.
-- [!] Warna aksen brand: masih palet netral shadcn. Butuh keputusan bisnis (warna brand).
+- [x] Warna aksen brand: **tetap palet netral** (keputusan 2026-10-22) sampai ada brand
+      guideline.
 - [x] Mode gelap setara mode terang — dijaga `resources/js/test/theme-tokens.test.ts`
       (paritas token + kontras WCAG AA semua pasangan teks/surface).
 - [x] Format standar (2026-10-19): `resources/js/lib/format.ts` — `formatAmount`,
       `formatQuantity`, `formatDate`, `formatDateTime` (`id-ID`, `dd MMM yyyy`,
       Asia/Jakarta). Semua `Intl` / `toLocaleString` di page diganti (19 halaman).
-- [!] Putuskan bahasa UI (Indonesia / Inggris) — keputusan bisnis. Locale format sudah
-      satu konstanta (`DISPLAY_LOCALE`); string UI belum dipusatkan.
-- [ ] Sisa warna hardcode di halaman starter kit (`auth/login`, `auth/forgot-password`,
-      `input-error`, `delete-user`) → pindah ke token saat UI-6.
+- [x] Bahasa UI: **Inggris** (keputusan bisnis 2026-10-22). Tanpa i18n; format angka/tanggal
+      tetap `DISPLAY_LOCALE` (`id-ID`).
+- [x] Sapu string UI (P23, 2026-10-22): tidak ada string Indonesia tersisa; `APP_LOCALE=en`,
+      `<html lang>` dari locale. Kata Indonesia di `StatusBadge` disengaja (mencocokkan teks
+      status ERP).
+- [x] Sisa warna hardcode di halaman starter kit (`auth/login`, `auth/forgot-password`,
+      `input-error`, `delete-user`, juga `app-header`, `user-info`, `nav-footer`,
+      `appearance-tabs`, `auth-split-layout`) → token (P17). Dijaga audit warna.
 
 ### UI-2 Komponen bersama (test dulu)
 
@@ -785,13 +1044,21 @@ Semua di `resources/js/components/` / `resources/js/hooks/`, test di sebelah fil
 - [x] `StatusBadge` — tone dari kata kunci (EN/ID), fallback netral; teks tetap dari
       ERP. Asumsi: kosakata status ERP tidak terdokumentasi (baru terlihat `New`,
       `Authorized`).
-- [~] `DetailLayout` — `DetailSummary` (kartu ringkasan) + `DetailFields`/`DetailField`
-      selesai. **Tab belum**: butuh `@radix-ui/react-tabs` → ADR dulu.
+- [x] `DetailLayout` — `DetailSummary` (kartu ringkasan) + `DetailFields`/`DetailField`
+      selesai. Tab (2026-10-22, ADR-029): `ui/tabs.tsx` (Radix) + `DetailTabs` (label, jumlah
+      baris per tab, keyboard). Pemakai pertama: `master-menus/show` (General di atas;
+      Prices / Package / Extras / Related menus sebagai tab). Juga `bills-of-material/show`
+      (Materials / Other costs / Replacements) dan `suppliers/show` (Contacts / Bank
+      accounts / Supplier product codes). Halaman dokumen (PO, inventory, …) tidak perlu:
+      satu tabel baris saja.
 - [x] `ApprovalActions` — authorize/reject/delete + dialog konfirmasi, alasan reject
       opsional (`rejectReason`), semua kontrol terkunci selama write berjalan.
-- [~] `UnconfirmedWriteNotice` — komponen selesai. **Belum di-wire**: server baru
-      mengirim toast `warning` berisi teks; banner butuh flash terstruktur
-      (`operation`, `number`, `correlation_id`) dari `HandlesDocumentWrites`.
+- [x] `UnconfirmedWriteNotice` — di-wire (2026-10-21): `HandlesDocumentWrites` mem-flash
+      `unconfirmedWrite` (`action`, `reference`) untuk decision/transition/upload yang
+      mendarat di halaman detail (ganti toast `warning`); `UnconfirmedWriteBanner` di
+      kedua app layout. Delete dan authorize yang menghapus dokumen (temp pricelist)
+      tetap toast karena mendarat di list. Purchase Request ikut banner sejak P20
+      (migrasi ke `DocumentWrites`, lihat §1).
 - [x] Toast (`sonner`) untuk hasil write — sudah ada (`use-flash-toast`).
 - [x] Picker searchable (P6): `Combobox` dibuat sendiri (pola WAI-ARIA 1.2 combobox +
       listbox, keyboard, debounce, load more, respons basi diabaikan) — **tanpa
@@ -802,34 +1069,56 @@ Semua di `resources/js/components/` / `resources/js/hooks/`, test di sebelah fil
       tidak diblok). Label di atas / error di bawah = pola existing (`InputError`).
 ### UI-3 Navigasi
 
-- [ ] Sidebar dikelompokkan: Dashboard, Master Data, Purchase, Inventory, Finance,
-      Accounting, POS, Sales, Sistem (logs, endpoint, koneksi, users). Grup bisa
-      collapse, ingat state, ikon per grup.
-- [ ] Command palette `Ctrl+K` — lompat ke modul/dokumen berdasarkan nomor.
-- [ ] Breadcrumb konsisten di semua halaman.
+- [x] Sidebar dikelompokkan: Dashboard, Master Data, Purchase, Inventory, Finance,
+      Accounting, POS, Sales, System (logs, endpoint, koneksi, users). Grup bisa
+      collapse, ingat state (`localStorage` `nav-groups`), ikon per grup. Konfigurasi
+      menu di `lib/navigation.ts` (P16, 2026-10-21).
+- [x] Command palette `Ctrl+K` — lompat ke halaman / buka dokumen berdasarkan nomor
+      (`components/command-palette.tsx`, tanpa dependency baru).
+- [x] Breadcrumb konsisten: diturunkan dari URL + menu (`lib/breadcrumbs.ts`); blok
+      breadcrumb statis per halaman dihapus. Halaman di luar menu (settings, import)
+      menamai sendiri.
 
 ### UI-4 Dashboard
 
-- [ ] Kartu "Menunggu persetujuan" lintas modul (yang user boleh setujui).
-- [ ] Status koneksi ESB + error integrasi terbaru.
-- [ ] Shortcut ke aksi yang sering dipakai.
-- [ ] Pakai skill `dataviz` bila menambah grafik.
+- [x] Kartu "Waiting for approval" (deferred, `PendingApprovals`): status 38 untuk
+      disbursement, memorial journal, item journal, proposed prices — hanya modul yang
+      user boleh setujui (+ `esb.invoke`); hitungan gagal = "Unknown".
+- [!] Dokumen purchasing (PR/PO/PI/SP) dan GTR/GD/GR/ST: list tanpa filter status /
+      status "waiting" tidak terdokumentasi (§9 `/common/status/mapping`).
+- [x] Status koneksi ESB per family (panggilan terakhir + waktunya) + error integrasi
+      terbaru.
+- [x] Shortcut ke aksi yang sering dipakai (digate permission).
+- [ ] Pakai skill `dataviz` bila menambah grafik (belum ada grafik).
 
 ### UI-5 Responsif & aksesibilitas
 
-- [ ] Tabel jadi daftar kartu di layar < 640px.
-- [ ] Navigasi keyboard penuh, focus ring terlihat, `aria-label` pada tombol ikon,
-      kontras minimal WCAG AA.
-- [ ] Target sentuh ≥ 44px di mobile.
+- [x] Tabel jadi daftar kartu di layar < 640px: `DataTable` (header disembunyikan secara
+      visual, sel berlabel `data-label`, role tabel eksplisit) — P17, 2026-10-21.
+- [x] Focus ring terlihat (outline `--foreground` untuk link/elemen fokus tanpa ring
+      sendiri), `aria-label` pada tombol ikon (2 di `app-header` diperbaiki; select role
+      di Users diberi nama), satu `h1` per halaman (`PageHeader` → `Heading level={1}`).
+      Kontras tetap dijaga `theme-tokens.test.ts`. Audit lintas frontend:
+      `resources/js/test/accessibility-audit.test.tsx`.
+- [x] Target sentuh ≥ 44px di perangkat sentuh (`pointer-coarse:`): `Button`, `Input`,
+      `ChipRemoveButton` (hit area lewat pseudo-element).
+- [ ] (Opsional) Uji manual di browser/perangkat sentuh dan pembaca layar — belum.
 
 ### UI-6 Migrasi halaman lama (satu modul per commit)
 
-- [ ] products, menus, master-menus, bills-of-material, purposes, document-templates,
-      document-template-imports
-- [~] purchase-orders (index + show, 2026-10-19, halaman referensi P5);
-      purchase-requests, purchase-invoices, simple-purchases belum
-- [ ] sales-pushes, integration-logs, endpoints, esb-connections, users, dashboard
-- [ ] Setiap migrasi: test PHP existing tetap hijau; tidak ada perubahan perilaku.
+- [x] products, menus, master-menus, bills-of-material, purposes, document-templates,
+      document-template-imports — list ke `PageHeader` + `FilterBar` (`useFilterForm`) +
+      `DataTable` + `ListPagination` + `StatusBadge`; show ke `PageHeader` (P17).
+- [x] purchase-orders (referensi P5); purchase-requests, purchase-invoices,
+      simple-purchases — list penuh; show/form/import ke `PageHeader` + `StatusBadge`.
+      Kontrol authorize/reject/delete di show PR/PI/SP pakai `ApprovalActions` (PR P20,
+      PI/SP P22; alasan reject hanya SP, wajib, maks. 500).
+- [x] sales-pushes, integration-logs, endpoints, users (list), esb-connections, dashboard
+      (header). Status gateway (push, outcome log) tetap `Badge` warnanya sendiri, bukan
+      tebakan `StatusBadge`.
+- [x] Test PHP existing tetap hijau; filter, paging, select "apply langsung" sama seperti
+      sebelumnya. Perubahan terlihat: filter sekunder pindah ke "More filters" + chip,
+      baris list bisa diklik ke detail, kartu di layar sempit.
 
 ---
 
@@ -842,8 +1131,8 @@ Semua di `resources/js/components/` / `resources/js/hooks/`, test di sebelah fil
    Transfer → Item Journal.
 4. Finance: Disbursement.
 5. Accounting: General Journal → General Ledger → Memorial Journal.
-6. POS: Menu Category → Promotion → Menu (setelah keputusan sumber) → Menu Extra /
-   Notes (setelah klarifikasi).
+6. POS: Menu Category → Promotion → Menu (gabung Core + OMS) → Menu Extra (setelah
+   klarifikasi ESB). Notes tidak dibangun.
 7. UI-3 → UI-6 berjalan paralel setelah komponen bersama stabil.
 
 Setiap modul: S1 dulu untuk semua modul dalam kelompok baru, baru S2/S3 — agar
@@ -859,20 +1148,33 @@ nilai read-only cepat terlihat dan kontrak ESB tervalidasi lebih awal.
       host staging-int family `pos`.
 - [ ] ESB: pricelist — `ID` di list = `pricelistID` di detail?
 - [ ] ESB: COA — akun nonaktif / parent akun (`/accounting/coa/index`?).
-- [ ] Bisnis: tampilkan nomor rekening supplier utuh atau dimask?- [ ] ESB: Promotion — update/nonaktifkan; arti "ESO".
+- [x] Bisnis: nomor rekening supplier — **utuh** (2026-10-22).
+- [ ] ESB: Promotion — update/nonaktifkan; arti "ESO".
 - [ ] ESB: `refNum` valid untuk Goods Delivery & Goods Receipt; cara mengisi batch expirasi.
 - [ ] ESB: memorial journal `/access` — nama parameter query nomor jurnal.
+- [ ] ESB: memorial journal `form-upload` / `upload` — nama field file multipart (dokumentasi
+      menulis body JSON satu baris) dan arti `typeID` (debit/kredit?).
+- [ ] ESB: menu category — field yang tidak dikirim saat update (alias ESO, image, theme option)
+      dipertahankan? Detail yang tidak dikirim dihapus? Filter id untuk get-menu-category.
+- [ ] ESB: promotion — boolean "Yes"/"No" vs Boolean; `applyTo` label vs Integer; `visitPurposeID`
+      integer vs string; respons list tanpa envelope dan 401 `code: 0` (ADR-027).
+- [ ] ESB: memorial journal — baris dengan debit **dan** kredit diterima? `asset-images`
+      menambah atau mengganti? Batas ukuran/tipe gambar?
 - [ ] ESB: disbursement create — apakah `result.disbursementNum` dikirim (contoh `{}`).
-- [ ] Bisnis: ekspor general ledger (CSV dari gateway vs export report ERP).
+- [x] Bisnis: ekspor general ledger — **CSV dari gateway**, juga untuk semua export lain
+      (2026-10-22).
 - [ ] ESB: upload attachment inventory — format field `existing`, dan apakah upload GTR
       menambah atau mengganti.
 - [ ] ESB: nomor dokumen di respons create GTR / Simple Transfer (dokumentasi: map string).
-- [ ] Bisnis: finish / reopen GTR memakai `.manage` (asumsi) atau `.approve`?
+- [x] Bisnis: finish / reopen GTR — **`.manage`** (2026-10-22, sesuai implementasi).
 - [ ] ESB: status mana yang menerima authorize/reject/delete untuk tiap dokumen baru.
 - [ ] ESB: Product pending vs temp.
 - [ ] ESB: format parameter query multi-value (`branchIDs=1&branchIDs=2` atau `branchIDs[]=1`).
 - [ ] ESB: arti `/common/status/mapping` (status mana untuk dokumen mana).
-- [ ] Bisnis: role pemegang `.approve` / `.manage` per modul baru.
-- [ ] Bisnis: sumber menu (Core vs OMS).
-- [ ] Bisnis: bahasa UI.
-- [ ] Bisnis: pemisahan tugas pembuat vs pengotorisasi (Finance/Accounting).
+- [x] Bisnis: role pemegang `.approve` / `.manage` — **Super Admin saja dulu** (2026-10-22).
+- [x] Bisnis: sumber menu — **Core + OMS dalam satu modul** (2026-10-22, §6.2).
+- [x] Bisnis: bahasa UI — **Inggris** (2026-10-22).
+- [x] Bisnis: pemisahan tugas — **pembuat boleh mengotorisasi** (2026-10-22).
+- [x] Bisnis: Notes — **tidak dibutuhkan** (2026-10-22).
+- [x] Bisnis: warna brand — **tetap netral** (2026-10-22).
+- [ ] ESB: semua pertanyaan di atas dikirim lewat `docs/esb/open-questions.md`.

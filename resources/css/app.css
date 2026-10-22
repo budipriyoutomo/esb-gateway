@@ -151,4 +151,19 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    /*
+     * A visible focus ring for keyboard users on links and other focusable
+     * elements that bring no ring of their own (TODO-modules.md UI-5).
+     * Components that draw their own (buttons, inputs: outline-none plus a
+     * ring) override this from the utilities layer. Foreground, not --ring:
+     * the light --ring is under the 3:1 a focus indicator needs on white.
+     */
+    a:focus-visible,
+    summary:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 2px solid var(--foreground);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
 }

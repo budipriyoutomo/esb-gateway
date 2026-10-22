@@ -1,8 +1,8 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useEffect } from 'react';
 import AlertError from '@/components/alert-error';
-import Heading from '@/components/heading';
+import { PageHeader } from '@/components/page-header';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -351,28 +351,19 @@ export default function PurchaseRequestForm({
                 onSubmit={submit}
                 className="flex h-full flex-1 flex-col gap-6 p-4"
             >
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link
-                            href={
-                                isEdit
-                                    ? showPurchaseRequest(existing.number)
-                                    : purchaseRequestsIndex()
-                            }
-                        >
-                            <ArrowLeft className="size-4" />
-                            {isEdit ? existing.number : 'Purchase requests'}
-                        </Link>
-                    </Button>
-                </div>
-
-                <Heading
+                <PageHeader
                     title={title}
                     description={
                         isEdit
                             ? 'Saving replaces the request in the ERP with what is below.'
                             : 'Pick a branch and a request template, then fill in the quantities to order.'
                     }
+                    back={{
+                        href: isEdit
+                            ? showPurchaseRequest(existing.number)
+                            : purchaseRequestsIndex(),
+                        label: isEdit ? existing.number : 'Purchase requests',
+                    }}
                 />
 
                 {errors.form && (
@@ -665,12 +656,3 @@ export default function PurchaseRequestForm({
         </>
     );
 }
-
-PurchaseRequestForm.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purchase requests',
-            href: purchaseRequestsIndex(),
-        },
-    ],
-};

@@ -1,25 +1,16 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { FileUp, Plus } from 'lucide-react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
+import { ActiveStatusField } from '@/components/active-status-field';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { FilterBar } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { SelectFilterField } from '@/components/select-filter-field';
+import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { useFilterForm } from '@/hooks/use-filter-form';
 import { usePermissions } from '@/hooks/use-permissions';
 import { index as importsIndex } from '@/routes/document-template-imports';
 import {
@@ -46,7 +37,64 @@ type Props = {
     types: DocumentTemplateTypeOption[];
 };
 
-const ANY = 'any';
+const columns: DataTableColumn<DocumentTemplateSummary>[] = [
+    {
+        key: 'name',
+        header: 'Name',
+        className: 'font-medium',
+        cell: (template) =>
+            template.id !== null ? (
+                <Link
+                    href={documentTemplatesShow(template.id)}
+                    className="underline-offset-4 hover:underline"
+                >
+                    {template.name || `#${String(template.id)}`}
+                </Link>
+            ) : (
+                template.name || '—'
+            ),
+    },
+    {
+        key: 'type',
+        header: 'Type',
+        cell: (template) =>
+            template.typeNames.length === 0 ? (
+                '—'
+            ) : (
+                <span className="flex flex-wrap gap-1">
+                    {template.typeNames.map((typeName) => (
+                        <Badge key={typeName} variant="outline">
+                            {typeName}
+                        </Badge>
+                    ))}
+                </span>
+            ),
+    },
+    {
+        key: 'branches',
+        header: 'Branches',
+        className: 'whitespace-normal',
+        cell: (template) =>
+            template.branchNames.length === 0
+                ? '—'
+                : template.branchNames.join(', '),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (template) => (
+            <StatusBadge
+                status={
+                    template.active === null
+                        ? null
+                        : template.active
+                          ? 'Active'
+                          : 'Inactive'
+                }
+            />
+        ),
+    },
+];
 
 export default function DocumentTemplatesIndex({
     templates,
@@ -56,37 +104,24 @@ export default function DocumentTemplatesIndex({
 }: Props) {
     const { can } = usePermissions();
     const canManage = can('esb.invoke') && can('document-templates.manage');
-    const [name, setName] = useState(filters.requestTemplateName ?? '');
-    const [type, setType] = useState(
-        filters.requestTemplateTypeID === undefined
-            ? ANY
-            : String(filters.requestTemplateTypeID),
-    );
-    const [status, setStatus] = useState(
-        filters.flagActive === undefined ? ANY : String(filters.flagActive),
-    );
+    const form = useFilterForm(documentTemplatesIndex().url, filters, [
+        { key: 'requestTemplateName', chip: (value) => `“${value}”` },
+        {
+            key: 'requestTemplateTypeID',
+            chip: (value) =>
+                types.find((option) => String(option.value) === value)?.label ??
+                `Type ${value}`,
+        },
+        {
+            key: 'flagActive',
+            chip: (value) => (value === '1' ? 'Active' : 'Inactive'),
+        },
+    ]);
 
-    function search(page = 1, next: { type?: string; status?: string } = {}) {
-        const nextType = next.type ?? type;
-        const nextStatus = next.status ?? status;
-        const query: Record<string, string | number> = { page };
-
-        if (name !== '') {
-            query.requestTemplateName = name;
-        }
-
-        if (nextType !== ANY) {
-            query.requestTemplateTypeID = nextType;
-        }
-
-        if (nextStatus !== ANY) {
-            query.flagActive = nextStatus;
-        }
-
-        router.get(documentTemplatesIndex().url, query, {
-            preserveState: true,
-            replace: true,
-        });
+    // The selects apply at once, as they did before.
+    function applyNow(key: string, value: string) {
+        form.set(key, value);
+        form.apply({ ...form.values, [key]: value });
     }
 
     return (
@@ -94,211 +129,88 @@ export default function DocumentTemplatesIndex({
             <Head title="Document templates" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <Heading
-                        title="Document templates"
-                        description="Product sets that pre-fill purchase requests, usage, and item journals, from ESB Core."
-                    />
-                    {canManage && (
-                        <div className="flex gap-2">
-                            <Button variant="outline" size="sm" asChild>
-                                <Link href={importsIndex()}>
-                                    <FileUp className="size-4" />
-                                    Import
-                                </Link>
-                            </Button>
-                            <Button size="sm" asChild>
-                                <Link href={documentTemplatesCreate()}>
-                                    <Plus className="size-4" />
-                                    New template
-                                </Link>
-                            </Button>
-                        </div>
-                    )}
-                </div>
+                <PageHeader
+                    title="Document templates"
+                    description="Product sets that pre-fill purchase requests, usage, and item journals, from ESB Core."
+                    actions={
+                        canManage && (
+                            <>
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={importsIndex()}>
+                                        <FileUp className="size-4" />
+                                        Import
+                                    </Link>
+                                </Button>
+                                <Button size="sm" asChild>
+                                    <Link href={documentTemplatesCreate()}>
+                                        <Plus className="size-4" />
+                                        New template
+                                    </Link>
+                                </Button>
+                            </>
+                        )
+                    }
+                />
 
-                <form
-                    className="flex flex-wrap items-end gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        search();
+                <FilterBar
+                    id="templates"
+                    search={{
+                        label: 'Template name',
+                        value: form.values.requestTemplateName!,
+                        onChange: (value) =>
+                            form.set('requestTemplateName', value),
+                        placeholder: 'Template name',
                     }}
+                    {...form.bar}
+                    defaultAdvancedOpen={
+                        filters.requestTemplateTypeID !== undefined ||
+                        filters.flagActive !== undefined
+                    }
                 >
-                    <Input
-                        value={name}
-                        onChange={(event) => {
-                            setName(event.target.value);
+                    <SelectFilterField
+                        id="templates-type"
+                        label="Type"
+                        anyLabel="Any type"
+                        options={types.map((option) => ({
+                            value: String(option.value),
+                            label: option.label,
+                        }))}
+                        value={form.values.requestTemplateTypeID!}
+                        onChange={(value) => {
+                            applyNow('requestTemplateTypeID', value);
                         }}
-                        placeholder="Template name"
-                        aria-label="Template name"
-                        className="w-56"
+                        className="w-48"
                     />
-                    <Select
-                        value={type}
-                        onValueChange={(value) => {
-                            setType(value);
-                            search(1, { type: value });
+                    <ActiveStatusField
+                        id="templates-status"
+                        value={form.values.flagActive!}
+                        onChange={(value) => {
+                            applyNow('flagActive', value);
                         }}
-                    >
-                        <SelectTrigger className="w-48" aria-label="Type">
-                            <SelectValue placeholder="Any type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any type</SelectItem>
-                            {types.map((option) => (
-                                <SelectItem
-                                    key={option.value}
-                                    value={String(option.value)}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select
-                        value={status}
-                        onValueChange={(value) => {
-                            setStatus(value);
-                            search(1, { status: value });
-                        }}
-                    >
-                        <SelectTrigger className="w-36" aria-label="Status">
-                            <SelectValue placeholder="Any status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ANY}>Any status</SelectItem>
-                            <SelectItem value="1">Active</SelectItem>
-                            <SelectItem value="0">Inactive</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
+                    />
+                </FilterBar>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Branches</TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {templates.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={4}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No document templates matched.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                <DataTable
+                    caption="Document templates"
+                    columns={columns}
+                    rows={templates}
+                    rowKey={(template, index) =>
+                        `${String(template.id)}-${String(index)}`
+                    }
+                    rowHref={(template) =>
+                        template.id !== null
+                            ? documentTemplatesShow(template.id).url
+                            : null
+                    }
+                    empty="No document templates matched."
+                />
 
-                            {templates.map((template, index) => (
-                                <TableRow
-                                    key={`${String(template.id)}-${String(index)}`}
-                                >
-                                    <TableCell className="font-medium">
-                                        {template.id !== null ? (
-                                            <Link
-                                                href={documentTemplatesShow(
-                                                    template.id,
-                                                )}
-                                                className="hover:underline"
-                                            >
-                                                {template.name ||
-                                                    `#${String(template.id)}`}
-                                            </Link>
-                                        ) : (
-                                            template.name || '—'
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-1">
-                                            {template.typeNames.length === 0
-                                                ? '—'
-                                                : template.typeNames.map(
-                                                      (typeName) => (
-                                                          <Badge
-                                                              key={typeName}
-                                                              variant="outline"
-                                                          >
-                                                              {typeName}
-                                                          </Badge>
-                                                      ),
-                                                  )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                        {template.branchNames.length === 0
-                                            ? '—'
-                                            : template.branchNames.join(', ')}
-                                    </TableCell>
-                                    <TableCell>
-                                        {template.active !== null && (
-                                            <Badge
-                                                variant={
-                                                    template.active
-                                                        ? 'default'
-                                                        : 'secondary'
-                                                }
-                                            >
-                                                {template.active
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </Badge>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {pagination && (
-                    <div className="flex items-center justify-between gap-4">
-                        <p className="text-muted-foreground text-sm">
-                            Page {pagination.page} of {pagination.lastPage} —{' '}
-                            {pagination.count} templates
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pagination.page <= 1}
-                                onClick={() => {
-                                    search(pagination.page - 1);
-                                }}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!pagination.hasMorePages}
-                                onClick={() => {
-                                    search(pagination.page + 1);
-                                }}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                <ListPagination
+                    pagination={pagination}
+                    noun="templates"
+                    onPageChange={form.goToPage}
+                />
             </div>
         </>
     );
 }
-
-DocumentTemplatesIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Document templates',
-            href: documentTemplatesIndex(),
-        },
-    ],
-};

@@ -26,6 +26,8 @@ type Props = {
     accept?: string;
     /** Why no files can be attached right now; hides the upload. */
     uploadBlocked?: string | null;
+    /** One image per upload, sent as "file" ([ESB-046]). */
+    single?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export function AttachmentActions({
     deleteUrl,
     accept = '.pdf,.jpg,.jpeg,.png',
     uploadBlocked = null,
+    single = false,
 }: Props) {
     const [files, setFiles] = useState<File[]>([]);
     const [confirming, setConfirming] = useState(false);
@@ -56,7 +59,7 @@ export function AttachmentActions({
         event.preventDefault();
         router.post(
             uploadUrl,
-            { files, name },
+            single ? { file: files[0], name } : { files, name },
             {
                 ...visit,
                 forceFormData: true,
@@ -121,12 +124,12 @@ export function AttachmentActions({
                 >
                     <div className="grid gap-1.5 sm:w-80">
                         <Label htmlFor="attachment-files">
-                            Files to attach
+                            {single ? 'Image to attach' : 'Files to attach'}
                         </Label>
                         <Input
                             id="attachment-files"
                             type="file"
-                            multiple
+                            multiple={!single}
                             accept={accept}
                             onChange={(event) =>
                                 setFiles(Array.from(event.target.files ?? []))

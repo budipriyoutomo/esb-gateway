@@ -343,12 +343,3 @@ export default function PurchaseOrderShow({ purchaseOrder: po }: Props) {
         </>
     );
 }
-
-PurchaseOrderShow.layout = {
-    breadcrumbs: [
-        {
-            title: 'Purchase orders',
-            href: purchaseOrdersIndex(),
-        },
-    ],
-};

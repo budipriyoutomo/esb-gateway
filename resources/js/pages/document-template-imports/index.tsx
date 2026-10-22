@@ -1,20 +1,13 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft, Download, Upload } from 'lucide-react';
-import Heading from '@/components/heading';
+import { Download, Upload } from 'lucide-react';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
 import InputError from '@/components/input-error';
+import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    index as importsIndex,
     show as importsShow,
     store as importsStore,
     template as importsTemplate,
@@ -40,6 +33,65 @@ const SHOWN: ImportEntryStatus[] = [
     'unconfirmed',
 ];
 
+const columns: DataTableColumn<ImportSummary>[] = [
+    {
+        key: 'file',
+        header: 'File',
+        className: 'font-medium',
+        cell: (item) => (
+            <span>
+                <Link
+                    href={importsShow(item.id)}
+                    className="underline-offset-4 hover:underline"
+                >
+                    {item.filename}
+                </Link>
+                <span className="text-muted-foreground block text-xs">
+                    #{item.id}
+                </span>
+            </span>
+        ),
+    },
+    {
+        key: 'uploaded',
+        header: 'Uploaded',
+        cell: (item) => (
+            <span>
+                {formatDateTime(item.createdAt)}
+                <span className="text-muted-foreground block text-xs">
+                    {item.uploadedBy ?? '—'}
+                </span>
+            </span>
+        ),
+    },
+    {
+        key: 'templates',
+        header: 'Templates',
+        cell: (item) =>
+            item.templates === 0 ? (
+                '—'
+            ) : (
+                <span className="flex flex-wrap gap-1">
+                    {SHOWN.filter(
+                        (status) => (item.counts[status] ?? 0) > 0,
+                    ).map((status) => (
+                        <Badge
+                            key={status}
+                            variant={ENTRY_STATUS_VARIANTS[status]}
+                        >
+                            {item.counts[status]} {ENTRY_STATUS_LABELS[status]}
+                        </Badge>
+                    ))}
+                </span>
+            ),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (item) => (item.status === 'idle' ? '—' : `${item.status}…`),
+    },
+];
+
 export default function DocumentTemplateImportsIndex({
     imports,
 }: {
@@ -57,18 +109,13 @@ export default function DocumentTemplateImportsIndex({
             <Head title="Import document templates" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={documentTemplatesIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Document templates
-                        </Link>
-                    </Button>
-                </div>
-
-                <Heading
+                <PageHeader
                     title="Import document templates"
                     description="Upload a spreadsheet. It is stored here first; validate it against the ERP, then sync the templates that are ready."
+                    back={{
+                        href: documentTemplatesIndex(),
+                        label: 'Document templates',
+                    }}
                 />
 
                 <form
@@ -118,90 +165,15 @@ export default function DocumentTemplateImportsIndex({
                     <InputError message={form.errors.file} />
                 </form>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>File</TableHead>
-                                <TableHead>Uploaded</TableHead>
-                                <TableHead>Templates</TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {imports.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={4}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        Nothing imported yet.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                            {imports.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">
-                                        <Link
-                                            href={importsShow(item.id)}
-                                            className="hover:underline"
-                                        >
-                                            {item.filename}
-                                        </Link>
-                                        <span className="text-muted-foreground block text-xs">
-                                            #{item.id}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                        {formatDateTime(item.createdAt)}
-                                        <span className="text-muted-foreground block text-xs">
-                                            {item.uploadedBy ?? '—'}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-1">
-                                            {SHOWN.filter(
-                                                (status) =>
-                                                    (item.counts[status] ?? 0) >
-                                                    0,
-                                            ).map((status) => (
-                                                <Badge
-                                                    key={status}
-                                                    variant={
-                                                        ENTRY_STATUS_VARIANTS[
-                                                            status
-                                                        ]
-                                                    }
-                                                >
-                                                    {item.counts[status]}{' '}
-                                                    {
-                                                        ENTRY_STATUS_LABELS[
-                                                            status
-                                                        ]
-                                                    }
-                                                </Badge>
-                                            ))}
-                                            {item.templates === 0 && '—'}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                        {item.status === 'idle'
-                                            ? '—'
-                                            : `${item.status}…`}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                <DataTable
+                    caption="Uploaded spreadsheets"
+                    columns={columns}
+                    rows={imports}
+                    rowKey={(item) => String(item.id)}
+                    rowHref={(item) => importsShow(item.id).url}
+                    empty="Nothing imported yet."
+                />
             </div>
         </>
     );
 }
-
-DocumentTemplateImportsIndex.layout = {
-    breadcrumbs: [
-        { title: 'Document templates', href: documentTemplatesIndex() },
-        { title: 'Import', href: importsIndex() },
-    ],
-};

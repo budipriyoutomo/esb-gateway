@@ -577,7 +577,3 @@ export default function ProductForm({
         </>
     );
 }
-
-ProductForm.layout = {
-    breadcrumbs: [{ title: 'Products', href: productsIndex() }],
-};

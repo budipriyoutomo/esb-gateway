@@ -25,3 +25,33 @@ if (!('ResizeObserver' in globalThis)) {
         disconnect() {}
     };
 }
+
+// jsdom has no matchMedia; useIsMobile reads one when the sidebar renders.
+// Tests run at desktop width: no query matches.
+if (typeof window.matchMedia !== 'function') {
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: (query: string): MediaQueryList =>
+            ({
+                matches: false,
+                media: query,
+                onchange: null,
+                addEventListener: () => {},
+                removeEventListener: () => {},
+                addListener: () => {},
+                removeListener: () => {},
+                dispatchEvent: () => false,
+            }) as MediaQueryList,
+    });
+}
+
+// jsdom lacks the pointer-capture and scrolling APIs Radix Select calls when
+// it opens. Nothing a test asserts depends on them.
+if (typeof Element.prototype.hasPointerCapture !== 'function') {
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = () => {};
+}
+
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+    Element.prototype.scrollIntoView = () => {};
+}

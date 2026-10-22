@@ -116,6 +116,89 @@ class ErrorClassifierTest extends TestCase
         );
     }
 
+    #[Test]
+    public function an_oms_master_refusal_carries_its_field_errors_as_json_in_the_message(): void
+    {
+        // ESB OMS master operations (EC0110, [ESB-048]): the per-field
+        // errors are a JSON object inside `message`.
+        $exception = app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray([
+                'code' => 'EC0110',
+                'status' => 'failed',
+                'message' => '{"menuCategoryName":["Menu Category Name cannot be blank."],"salesAccount":["Sales    Test not found"," "],"bad key!":["dropped field"]}',
+                'result' => [],
+            ]),
+            new EsbContext(correlationId: 'corr-1', operation: 'menu-categories.create'),
+        );
+
+        $this->assertInstanceOf(EsbValidationException::class, $exception);
+        $this->assertSame(
+            [
+                ['row' => null, 'field' => 'menuCategoryName', 'message' => 'Menu Category Name cannot be blank.'],
+                ['row' => null, 'field' => 'salesAccount', 'message' => 'Sales    Test not found'],
+                ['row' => null, 'field' => null, 'message' => 'dropped field'],
+            ],
+            array_map(fn ($error) => $error->toArray(), $exception->fieldErrors),
+        );
+    }
+
+    #[Test]
+    public function an_oms_master_refusal_with_a_plain_message_keeps_it_for_the_form(): void
+    {
+        $exception = app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray([
+                'code' => 'EC0110',
+                'message' => 'Menu Category not found. Invalid menuCategoryID',
+                'result' => [],
+            ]),
+            new EsbContext(correlationId: 'corr-1', operation: 'menu-categories.update'),
+        );
+
+        $this->assertSame(
+            [['row' => null, 'field' => null, 'message' => 'Menu Category not found. Invalid menuCategoryID']],
+            array_map(fn ($error) => $error->toArray(), $exception->fieldErrors),
+        );
+    }
+
+    #[Test]
+    public function only_an_oms_master_refusal_has_its_message_read_as_errors(): void
+    {
+        $exception = app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray(['code' => 'EC03100003', 'message' => '{"coaNo":["required"]}']),
+            new EsbContext(correlationId: 'corr-1', operation: 'x'),
+        );
+
+        $this->assertSame([], $exception->fieldErrors);
+    }
+
+    #[Test]
+    public function field_errors_keyed_by_field_in_data_are_read(): void
+    {
+        // The OMS promotion create ([ESB-050]): `data` maps each field to
+        // its messages.
+        $exception = app(ErrorClassifier::class)->classify(
+            EsbEnvelope::fromArray([
+                'code' => 400,
+                'message' => '{Attribute} cannot be blank.',
+                'data' => [
+                    'branchCode' => ['Branch Code cannot be blank.'],
+                    'endDate' => 'End date must be greater then start date 2023-02-23 12:20:00',
+                    'notes' => [['not' => 'a string']],
+                ],
+            ]),
+            new EsbContext(correlationId: 'corr-1', operation: 'promotions.create'),
+        );
+
+        $this->assertInstanceOf(EsbValidationException::class, $exception);
+        $this->assertSame(
+            [
+                ['row' => null, 'field' => 'branchCode', 'message' => 'Branch Code cannot be blank.'],
+                ['row' => null, 'field' => 'endDate', 'message' => 'End date must be greater then start date 2023-02-23 12:20:00'],
+            ],
+            array_map(fn ($error) => $error->toArray(), $exception->fieldErrors),
+        );
+    }
+
     /**
      * @param  class-string  $expected
      */

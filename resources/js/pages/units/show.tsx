@@ -45,7 +45,3 @@ export default function UnitShow({ unit }: { unit: UnitOfMeasure }) {
         </>
     );
 }
-
-UnitShow.layout = {
-    breadcrumbs: [{ title: 'Units', href: unitsIndex() }],
-};

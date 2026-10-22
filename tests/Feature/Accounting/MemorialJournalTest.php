@@ -107,7 +107,8 @@ class MemorialJournalTest extends AccountingTestCase
     {
         Http::fake();
 
-        foreach (['access', 'export', 'form-upload', 'upload', rawurlencode('1/2'), '..'] as $number) {
+        // "export" is the gateway's CSV export of the list (ADR-031).
+        foreach (['access', 'form-upload', 'upload', rawurlencode('1/2'), '..'] as $number) {
             $this->actingAs($this->operator())->get('/memorial-journals/'.$number)->assertNotFound();
         }
 

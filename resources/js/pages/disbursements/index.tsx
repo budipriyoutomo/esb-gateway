@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { useState } from 'react';
 import { DataTable } from '@/components/data-table';
 import type { DataTableColumn } from '@/components/data-table';
@@ -18,6 +19,7 @@ import { useListQuery } from '@/hooks/use-list-query';
 import type { ListQuery } from '@/hooks/use-list-query';
 import { formatAmount, formatDate } from '@/lib/format';
 import {
+    exportMethod as exportRoute,
     create as createRoute,
     index as indexRoute,
     show as showRoute,
@@ -259,19 +261,32 @@ export default function DisbursementIndex({
                     description="Cash and credit payments out, read live from the ERP."
                     actions={
                         <>
-                            <ImportLinks
-                                canImport={manage}
-                                imports={[
-                                    { kind: 'disbursements', label: 'Import' },
-                                ]}
+                            <ExportCsvButton
+                                href={
+                                    exportRoute({ query: exportQuery(filters) })
+                                        .url
+                                }
                             />
-                            {manage && (
-                                <Button asChild>
-                                    <Link href={createRoute().url}>
-                                        New disbursement
-                                    </Link>
-                                </Button>
-                            )}
+                            {
+                                <>
+                                    <ImportLinks
+                                        canImport={manage}
+                                        imports={[
+                                            {
+                                                kind: 'disbursements',
+                                                label: 'Import',
+                                            },
+                                        ]}
+                                    />
+                                    {manage && (
+                                        <Button asChild>
+                                            <Link href={createRoute().url}>
+                                                New disbursement
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </>
+                            }
                         </>
                     }
                 />

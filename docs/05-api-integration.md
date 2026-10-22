@@ -560,8 +560,10 @@ How a failed decision is handled:
   not found return false: the ESB refused, so the user is told nothing happened. Timeout,
   connection, upstream (5xx), malformed response, and unknown (`EC03100032`) return
   true. For these the user sees "not confirmed; check the status before trying again".
-  The case is also audited as `purchase-request.decision-unconfirmed` with its
-  correlation id.
+  The case is also audited as `purchase-request.write-unconfirmed` with the
+  `operation` (`authorize` / `reject`) and its correlation id, like every other
+  document (rows before 2026-10-22: `purchase-request.decision-unconfirmed` with a
+  `decision` key).
 - **Connection failures count as unknown for writes.** cURL reports a reset after send
   the same way as a refused connection. Reads still retry them.
 - **Reconciliation is the detail read.** Every outcome redirects to the detail page, and
@@ -909,8 +911,9 @@ Decisions and open points:
 - **Core and OMS side by side.** First built on the OMS `get-menu`, switched to Core on
   2026-10-01, then the OMS version was added back as its own screen (`[ESB-013]`,
   `/master-menus`) at the owner's request. Core `/menu/browse` carries only the nine
-  fields above and the Core Menu group has no detail operation, so `/menus` has no
-  detail page; prices, packages, and extras are on `/master-menus`.
+  fields above and the Core Menu group has no detail operation, so the Core tab has no
+  detail page; prices, packages, and extras are on the OMS detail. Since 2026-10-22 both
+  are one list, `/menus?source=core|oms` (ADR-030).
 - **The row has no active flag.** `flagActive` works as a filter only; the list cannot
   show whether a row is active unless the filter is set.
 - **Not built:** create / update (none documented in the Core Menu group),
@@ -936,7 +939,8 @@ Laravel Adapter: App\Integrations\ESB\Clients\MasterMenuClient (contract
                  MasterMenuSource), MasterMenuMapper; canonical MasterMenu,
                  MasterMenuTemplatePrice, MasterMenuPackageGroup, MasterMenuPackageItem,
                  MasterMenuExtra, MasterMenuReference, MasterMenuQuery, MasterMenuPage
-Routes:          GET /master-menus, GET /master-menus/{code}
+Routes:          GET /menus?source=oms (list, ADR-030; GET /master-menus redirects
+                 there, 301), GET /master-menus/{code}, GET /master-menus/extras
 Permissions:     esb.invoke
 Tests:           tests/Feature/MasterMenus/MasterMenuTest.php,
                  tests/Unit/Integrations/ESB/MasterMenuMapperTest.php
@@ -1581,10 +1585,9 @@ Decisions and open points:
 - **One call for the detail.** The detail already nests `supplierPic[]` and
   `supplierBank[]`, so `GET /supplier/{id}/contacts` and `/banks` (same fields) are not
   called.
-- **Bank account numbers are masked in the gateway.** The mapper keeps only the last
-  four digits (`•••• 6789`); the full number never reaches the browser. A read-only
-  screen does not need it and the ERP still has it. `TBD`: the business may decide
-  otherwise, or S3 (edit) may need the full value behind a stronger permission.
+- **Bank account numbers are shown in full** (business decision 2026-10-22; masked to
+  the last four digits before). They are trimmed and never written to the integration
+  log, which holds no response bodies.
 - **Not carried:** `supplierBankOy[]` (payment-provider accounts, purpose undocumented),
   `imageAttachments[]` (vendor URLs, ADR-006), ESB Goods link fields, `greetingID`,
   `paymentID` is carried as an id only (no payment method name in the detail).
@@ -1982,7 +1985,7 @@ Decisions and open points:
   - Supplier create / update: `supplierPic[].greetingID` is required and must exist,
     and no endpoint lists greetings; `paymentID` belongs to Payment Method (blocked,
     [ESB-028]); the update is a PATCH whose effect on omitted `supplierBank[]` is
-    undocumented, and the gateway only holds masked account numbers to send back.
+    undocumented.
   - COA create / update: `coaNo` is "ignored on create" (how the number is assigned is
     undocumented), the parent account is not in the schema, and the detail carries a
     currency name but no `currencyID` to send back.
@@ -2055,15 +2058,19 @@ Decisions and open points:
   (PHP parses multipart only on POST) and PATCH upstream. The vendor removes all
   attachments at once, so the UI confirms "remove all". Accepted: PDF / JPEG / PNG, up to
   5 files of 5 MB — assumed, the vendor documents no limit.
-- **Exports are not built (`[!]`).** Every export (`/units/export`, `/product/category/export`,
-  `/product/sub-category/export`, `POST /product/export`, `/pricelist/export`,
-  `/supplier/export/{mode}`, `/accounting/coa/export`) makes the ERP write a file and answer
-  with its location — under `result.path`, `result.url` or `url` depending on the endpoint,
-  and on an undocumented host. Letting the browser follow that URL bypasses ADR-006
-  (browser never calls the ESB); proxying it means the gateway fetching a URL the ERP
-  chose. Needs: where the files live, whether the URL is signed / authenticated / expiring,
-  and a decision (ADR) between proxying (restricted to the ESB hosts) and generating
-  exports in the gateway from the lists.
+- **The ERP's exports are not used.** Every vendor export (`/units/export`,
+  `/product/category/export`, `/product/sub-category/export`, `POST /product/export`,
+  `/pricelist/export`, `/supplier/export/{mode}`, `/accounting/coa/export`) makes the ERP
+  write a file and answer with its location — under `result.path`, `result.url` or `url`
+  depending on the endpoint, and on an undocumented host. Instead (ADR-031, business
+  decision 2026-10-22) the gateway builds a CSV from its own list reads:
+  `GET /<list>/export` with the list's filters (`App\Exports\CsvExport`,
+  `ListExportController`) — units, product categories / sub-categories, products,
+  pricelists, chart of accounts, suppliers, disbursements, general / memorial journals,
+  general ledger and its summary. Every page is read before the file is written (page
+  size 100; the ledger and the chart of accounts, paged by the gateway from one answer,
+  are read once); more than 5,000 rows is refused on the list; formula-looking text cells
+  are prefixed with `'`; each export is audited as `list.exported`.
 
 ### [ESB-033] Inventory Documents, S1 (list, detail)
 
@@ -2375,9 +2382,9 @@ Decisions and open points:
   segment.
 - **The grand total, overdue flag and amounts are the ERP's** -- shown as sent, never
   summed or recomputed in the gateway.
-- **The bank account number is masked** to its last four digits in the adapter, as for
-  suppliers ([ESB-024]; `TBD` business). The full number never reaches the browser; an
-  edit sends back the ERP's own value read just before ([ESB-039]).
+- **The bank account number is shown in full**, as for suppliers (business decision
+  2026-10-22). An edit still sends back the ERP's own value read just before, from the
+  server-side carry-over ([ESB-039]).
 - **Linked documents**: purchase payments and supplier settlements are listed with number,
   date, total and status; they are not opened from the gateway (their modules are not
   built).
@@ -2529,8 +2536,8 @@ Decisions and open points:
 - **The import form only fills the form.** Its rows become lines on the create / edit
   form, where the person checks them before saving; the gateway sends nothing else
   until the form is submitted. Its rows replace the form's lines.
-- **Not built (`[!]`)**: the ERP export (same open point as [ESB-032]) and opening
-  attachments from the gateway.
+- **Export**: CSV built by the gateway (ADR-031, see [ESB-032]); the ERP export is not
+  used. **Not built (`[!]`)**: opening attachments from the gateway.
 
 ### [ESB-041] General Journal, S1 (list, lines)
 
@@ -2576,8 +2583,8 @@ Decisions and open points:
   is the authority, TODO-modules.md §0.3).
 - `typeHasAccessView` is shown as "not viewable in the ERP" when false; the gateway does
   not hide the row (`TBD` what the ERP means by it beyond its own UI).
-- **Not built (`[!]`)**: the export (same open point as [ESB-032]); filters by branch,
-  account, cost center and project (array parameters).
+- **Export**: CSV built by the gateway (ADR-031, see [ESB-032]). **Not built (`[!]`)**:
+  filters by branch, account, cost center and project (array parameters).
 
 ### [ESB-042] General Ledger, S1 (entries, summary)
 
@@ -2669,6 +2676,322 @@ Decisions and open points:
 - Lines share the canonical `JournalLine` with the general journal ([ESB-041]). Debit and
   credit are shown as sent; the gateway does not check that they balance.
 - Attachment images are counted, not opened (same open point as [ESB-032]).
+
+### [ESB-044] Memorial Journal, S2 (authorize, reject, delete)
+
+```
+Purpose:         Change a memorial journal's state (TODO-modules.md §5.4, S2).
+Family:          Core
+Method / Path:   PATCH  /accounting/memorial-journal/{memorialJournalNum}/authorize  (no body)
+                 PATCH  /accounting/memorial-journal/{memorialJournalNum}/reject     {reason?}
+                 DELETE /accounting/memorial-journal/{memorialJournalNum}
+Response:        result null; ignored
+Statuses:        authorize moves it to Authorized, or to Waiting For Approval while approval
+                 levels remain; reject -> Rejected ("a reason is required when the journal
+                 is waiting for approval"); delete removes its lines and "is blocked when
+                 the related journal has been reconciled"
+Errors:          400 with errors[] -> the ERP's message in the toast; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt, never retried
+Idempotency:     none documented; an unknown outcome is audited as
+                 memorial-journal.write-unconfirmed and the person re-reads the journal
+Laravel:         App\Actions\MemorialJournals\{MemorialJournals, DecideMemorialJournal,
+                 DeleteMemorialJournal} on DocumentWrites; Http\Controllers\Accounting\
+                 MemorialJournalWriteController (HandlesDocumentWrites);
+                 Http\Requests\Accounting\DecideMemorialJournalRequest
+Routes:          POST /memorial-journals/{number}/decisions, DELETE /memorial-journals/{number}
+Permissions:     esb.invoke + memorial-journals.approve (decisions) /
+                 memorial-journals.manage (delete) -- Super Admin only (docs/06)
+Audit:           memorial-journal.authorized / .rejected (+ reason) / .deleted;
+                 memorial-journal.write-unconfirmed (operation, correlation id)
+Tests:           tests/Feature/Accounting/MemorialJournalWriteTest.php,
+                 pages/memorial-journals/show.test.tsx
+```
+
+Decisions and open points:
+
+- **The reason is required by the page only while the journal is Waiting For Approval**,
+  as the vendor describes. The gateway does not re-read the status to enforce it: the
+  ERP refuses a reasonless rejection itself, and its message is shown. Capped at 500
+  characters by the gateway (the vendor documents no length).
+- **What is offered follows the documented statuses**: decisions on New / Waiting For
+  Approval; delete on every status (the vendor names none; the ERP refuses a reconciled
+  one).
+- **Not `/access`** ([ESB-043]): the gateway's permissions decide what is offered.
+- **Segregation of duties** is not enforced by the gateway, as for disbursements
+  ([ESB-038]); the audit names the real person.
+
+### [ESB-045] Memorial Journal, S3 (create, update)
+
+```
+Purpose:         Create and edit memorial journals (TODO-modules.md §5.4, S3).
+Family:          Core
+Method / Path:   POST /accounting/memorial-journal
+                 PUT  /accounting/memorial-journal/{memorialJournalNum}
+Request Body:    {memorialJournalDate, additionalInfo, memorialJournalDetails: [{branchID,
+                 coaNo, currencyID, rate, drAmount | crAmount, notes?, costCenterID?,
+                 projectID?}]}  (min. 2 lines; memorialJournalNum is taken from the path)
+Response:        create: "returns the new memorial journal number in
+                 result.memorialJournalNum" (example {}) -- read when present; update: null
+Errors:          400 with errors[] -> on the form fields they name (ADR-021); anything
+                 unmapped on the form as a whole; EC03100004 -> 404
+Retry Policy:    writes -- exactly one attempt
+Idempotency:     none documented; a create is one per person at a time, an update holds
+                 the journal's lock (shared with [ESB-044])
+Laravel:         Domain\Canonical\{MemorialJournalDraft, MemorialJournalDraftLine,
+                 MemorialJournalCarryOver}; MemorialJournalSource::createJournal() /
+                 updateJournal(); Actions\MemorialJournals\MemorialJournalForms;
+                 Http\Requests\Accounting\SaveMemorialJournalRequest;
+                 Http\Controllers\Accounting\MemorialJournalFormController
+                 (HandlesRecordForms)
+Routes:          GET /memorial-journals/create, POST /memorial-journals,
+                 GET /memorial-journals/{number}/edit, PUT /memorial-journals/{number}
+Permissions:     esb.invoke + memorial-journals.manage
+Audit:           memorial-journal.created (number when the ERP gave one, date, lines) /
+                 .updated (number, lines); memorial-journal.write-unconfirmed
+Tests:           tests/Feature/Accounting/MemorialJournalFormTest.php,
+                 pages/memorial-journals/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Validated against the vendor schema first** (SaveMemorialJournalRequest): YYYY-MM-DD,
+  notes up to 1000, at least two lines (up to 500, gateway bound), each with a branch,
+  account and currency, a rate > 0 (the vendor's "min 0" would convert nothing; same rule
+  as [ESB-039]), notes up to 100, and **exactly one of debit or credit**, >= 0 with at
+  most four decimals. The vendor only says one is "required when the other is empty";
+  a line with both is refused by the gateway (`TBD` with the ESB team whether the ERP
+  accepts one).
+- **Balance is a hint, not a rule.** The form shows the debit and credit totals and says
+  when they differ; it does not block the save. Whether the journal balances is the
+  ERP's to decide (TODO-modules.md §0.3).
+- **An update reads the journal first** (outside the lock) and sends back each kept
+  line's cost center and project, matched by the line's ERP id -- from that read, never
+  from the browser. New lines have none. Cost center / project pickers are not offered
+  (`[!]`, no lookup; same as [ESB-039]).
+- **Pickers**: branch, COA account and currency per line ([ESB-019]).
+
+### [ESB-046] Memorial Journal, S4 (asset images; upload, form-upload and export not built)
+
+```
+Purpose:         Attach images to a memorial journal (TODO-modules.md §5.4, S4).
+Family:          Core
+Method / Path:   POST /accounting/memorial-journal/{memorialJournalNum}/asset-images
+                      multipart "file" (one image per call)
+Response:        {refNum, transactionName, assetImage[{ID, imageUrl, refNum}]} -- ignored;
+                 the detail is re-read
+Errors:          400 with errors[]; EC03100004 -> 404
+Retry Policy:    one attempt (upload)
+Laravel:         MemorialJournalSource::attachImage(); Actions\MemorialJournals\
+                 MemorialJournalAttachments (DocumentWrites::transition());
+                 Http\Requests\Accounting\AttachMemorialJournalImageRequest;
+                 Http\Controllers\Accounting\MemorialJournalAttachmentController
+Routes:          POST /memorial-journals/{number}/images
+Permissions:     esb.invoke + memorial-journals.manage
+Audit:           memorial-journal.image-uploaded (file name, size, sha256);
+                 memorial-journal.write-unconfirmed (attach)
+Tests:           tests/Feature/Accounting/MemorialJournalAttachmentTest.php,
+                 pages/memorial-journals/show.test.tsx
+```
+
+Decisions and open points:
+
+- **One image per call, jpg / jpeg / png, at most 2 MB** -- the vendor names "e.g. jpg,
+  png" and no size; the bound is the gateway's (`TBD` with the ESB team).
+- **Images are added, not replaced**: the vendor "saves them as asset images linked to
+  the memorial journal number" and takes no list of existing ones, unlike the
+  attachment uploads of [ESB-036] / [ESB-040]. `TBD` -- confirm with the ESB team.
+- **Not built (`[!]`)**:
+  - `POST /form-upload` and `POST /upload`: described as "Excel file (.xlsx)" but
+    documented as a JSON body of one spreadsheet row, so the multipart field name is
+    unknown; `form-upload`'s `typeID` (debit or credit?) is undocumented too.
+  - `GET /export`: same open point as [ESB-032].
+
+### [ESB-047] Menu Category, ESB OMS, S1 (list)
+
+```
+Purpose:         List the POS menu categories and their category details
+                 (TODO-modules.md §6.1, S1).
+Family:          FnB backend (ESB OMS group Master_Menu_Category)
+Method / Path:   GET {{base_url}}/corev1/master/get-menu-category?page=
+Query:           page (the only documented parameter; page size fixed by the ESB, 10 in
+                 the example). No search, no id filter.
+Response:        code "EC011200"; result {page (string), limit, count, data[{menuCategoryID,
+                 menuCategoryName, menuCategoryCode, salesAccount, cogsAccount,
+                 discountAccount, notes, description, status ("Active"), buttonColor,
+                 menuCategoryDetails[{menuCategoryDetailID, menuCategoryDetailName,
+                 menuCategoryDetailCode, maxOrderQty, status, orderID, description,
+                 buttonColor}]}]}; next / prev URLs (dropped)
+Errors:          401 {code: 401, message} -> authentication
+Retry Policy:    reads -- the GET policy
+Laravel:         Integrations\Contracts\MenuCategorySource; ESB\Clients\MenuCategoryClient;
+                 ESB\Mappers\MenuCategoryMapper; Domain\Canonical\{MenuCategory,
+                 MenuCategoryDetail, MenuCategoryPage}; Http\Controllers\MenuCategories\
+                 MenuCategoryController
+Routes:          GET /menu-categories, GET /menu-categories/{id}
+Permissions:     esb.invoke
+Tests:           tests/Feature/MenuCategories/MenuCategoryTest.php,
+                 tests/Unit/Integrations/ESB/MenuCategoryMapperTest.php
+```
+
+Decisions and open points:
+
+- **No detail operation.** One category is found by reading the list: the page the
+  person came from first (`?page=`), then the others, at most 20 pages (200 categories
+  at the documented page size). Beyond that the page says it cannot be found here. `TBD`
+  with the ESB team: an id filter.
+- Button colours are shown only when they are hex colours; image URLs are not carried
+  (ADR-006). `status` is shown as the ERP's text.
+- The aliases on ESB Order (`menuCategoryNameOnEso`, `menuCategoryDetailOnEso`), image
+  URLs and `themeOptionCategoryOnPos` are not in the list response.
+
+### [ESB-048] Menu Category, ESB OMS, S3 (create, update)
+
+```
+Purpose:         Create and edit POS menu categories with their category details
+                 (TODO-modules.md §6.1, S3).
+Family:          FnB backend (ESB OMS group Master_Menu_Category)
+Method / Path:   POST {{base_url}}/corev1/master/create-menu-category
+                 POST {{base_url}}/corev1/master/update-menu-category
+Request Body:    a JSON array of categories; the gateway sends one:
+                 [{menuCategoryID (update), menuCategoryName, menuCategoryCode,
+                 salesAccount, cogsAccount, discountAccount, description,
+                 themeCategoryOnPos, menuCategoryDetails: [{menuCategoryDetailID (update;
+                 "" = new), menuCategoryDetailName, menuCategoryDetailCode, description,
+                 maxOrderQty, menuCategoryDetailTheme}]}]
+Response:        code "EC011200"; result [the saved categories, with ids]
+Errors:          code "EC0110": the per-field errors are a JSON object in `message`
+                 ({"salesAccount": ["Sales Test not found"]}), or a plain sentence
+                 ("Menu Category not found. Invalid menuCategoryID") -- both shown on the
+                 form (ADR-021); 401 -> authentication
+Retry Policy:    writes -- exactly one attempt (both are POSTs that write)
+Idempotency:     none documented; a create is one per person at a time, an update holds
+                 the category's lock
+Laravel:         Domain\Canonical\{MenuCategoryDraft, MenuCategoryDraftDetail};
+                 MenuCategorySource::createCategory() / updateCategory();
+                 Actions\MenuCategories\MenuCategoryWrites (RecordWrites);
+                 Http\Requests\MenuCategories\SaveMenuCategoryRequest;
+                 Http\Controllers\MenuCategories\MenuCategoryFormController
+                 (HandlesRecordForms); ErrorClassifier reads the EC0110 message
+Routes:          GET /menu-categories/create, POST /menu-categories,
+                 GET /menu-categories/{id}/edit, PUT /menu-categories/{id}
+Permissions:     esb.invoke + menu-categories.manage (Super Admin only)
+Audit:           menu-category.created (id when the ERP gave one, name) / .updated;
+                 menu-category.write-unconfirmed
+Tests:           tests/Feature/MenuCategories/MenuCategoryFormTest.php,
+                 ErrorClassifierTest (EC0110), pages/menu-categories/form.test.tsx
+```
+
+Decisions and open points:
+
+- **Validated against the vendor sizes first**: name and code up to 50; the three
+  accounts up to 20 (the vendor's String(20)) and required; at least one detail, each
+  with a name up to 50, a code up to 50 and a max order quantity >= 0 with four decimals;
+  colours `#rrggbb` or empty (the vendor: "to apply default color, set value to empty
+  string"); at most 100 details (gateway bound).
+- **The accounts are account descriptions**, as the vendor documents ("Sales Account
+  Description"; its example sends "Sales - Food"). The form picks a COA account and
+  sends its description.
+- **An update sends every current detail.** The vendor updates a detail whose id it
+  knows and creates one without; what it does with a detail left out is undocumented,
+  so the gateway reads the category first and refuses an update that drops one or
+  names a detail of another category. Removing a detail is done in the ERP (`TBD`).
+- **Not sent**: the ESB Order aliases, image URLs and `themeOptionCategoryOnPos` -- the
+  list does not return them, so an edit could not keep them. Whether leaving them out
+  keeps the ERP's values is `TBD` with the ESB team.
+
+### [ESB-049] Promotion, ESB OMS, S1 (list)
+
+```
+Purpose:         List POS promotions (TODO-modules.md §6.5, S1).
+Family:          FnB backend (ESB OMS group Master_Promotion)
+Method / Path:   GET {{base_url}}/extv1/promotion
+Query:           branchCode, promotionCode (visitPurposeID and paymentMethodID are not
+                 offered: no lookup)
+Response:        a bare JSON array (no envelope -- ADR-027): [{promotionID, promotionCode,
+                 promotionTypeDesc, notes, discount, minSubtotal, startDate, endDate,
+                 flagShow, promotionCategory[{menuCategoryID, menuCategoryDetailID,
+                 menuID}], branches[{branchID, branchCode, branchName}],
+                 selfOrderPaymentMethods[{selfOrderPaymentMethodID,
+                 selfOrderPaymentMethodName}], paymentMethod (object in the example, array in
+                 the field list)}]
+Errors:          401 {name, message, code: 0, status: 401} -> unknown (code "0")
+Retry Policy:    reads -- the GET policy (bare list, ADR-027)
+Laravel:         Integrations\Contracts\PromotionSource; ESB\Clients\PromotionClient;
+                 ESB\Mappers\PromotionMapper; Domain\Canonical\{Promotion, PromotionPage,
+                 PromotionQuery}; Http\Controllers\Promotions\PromotionController
+Routes:          GET /promotions
+Permissions:     esb.invoke
+Tests:           tests/Feature/Promotions/PromotionTest.php,
+                 tests/Unit/Integrations/ESB/PromotionMapperTest.php
+```
+
+Decisions and open points:
+
+- **Paged by the gateway** (20 per page): the vendor returns the whole filtered list.
+- `paymentMethod` is read as one object or a list of them.
+- No detail page: the list carries every documented field, and there is no detail
+  operation.
+
+### [ESB-050] Promotion, ESB OMS, S3 (create, five types)
+
+```
+Purpose:         Create POS promotions (TODO-modules.md §6.5, S3).
+Family:          FnB backend (ESB OMS group Master_Promotion)
+Method / Path:   POST {{base_url}}/corev1/promotion/   (one path, five documented bodies)
+Request Body:    common: promotionMasterCode?, branchCode[], promotionType, notes,
+                 promotionDaysID[1..7], startDate / endDate ("YYYY-MM-DD HH:MM:SS"),
+                 allCategories, applyDiscountTo (1 category | 2 category detail | 3 menu)
+                 + menuCategoryID[] / menuCategoryDetailID[] / menuID[], usedForLoyalty?,
+                 promotionCode, promotionDesc?, paymentMethodName?
+                 1 Discount (%) and 10 Discount Limit (%): discount (%),
+                   authorizationNeeded, minSalesPrice, maxSalesPrice, applyTo?,
+                   employeeGroupName[]?, includePackageContent, includeMenuExtra,
+                   promotionTime[{startTime, endTime}]?
+                 5 Discount (%) ESO: discount (%), minSalesPrice, maxDiscount,
+                   showPromotionEzo, maxUsage, maxUsageTotal, visitPurposeID[]?,
+                   selfOrderPaymentMethodCode[], bankIdentificationNumbers[]?
+                 6 Discount (Rp) ESO: discount (amount), minSalesPrice, showPromotionEzo,
+                   maxUsage, maxUsageTotal, visitPurposeID[]?, selfOrderPaymentMethodCode[],
+                   bankIdentificationNumbers[]?
+                 4 Free Item: authorizationNeeded, applyTo?, employeeGroupName[]?,
+                   applyToApplicationID[pos, eso], selfOrderPaymentMethodCode[] / maxUsage /
+                   maxUsageTotal (for eso), visitPurposeID[]?, promotionTime[]?,
+                   voucherSourceName (ESB | Giftee), minSalesPrice, prefixPromotion (Giftee)
+Response:        {code: 200, message: "Save Data Successfully", data: {promotionID, notes}}
+Errors:          {code: 400, message, data: {field: [messages]}} -> on the form fields they
+                 name (ADR-021); 401 -> authentication
+Retry Policy:    write -- exactly one attempt
+Idempotency:     none documented; one create per person at a time
+Laravel:         Domain\Canonical\{PromotionType, PromotionDraft, PromotionTime};
+                 PromotionSource::createPromotion(); Actions\Promotions\PromotionWrites
+                 (RecordWrites); Http\Requests\Promotions\CreatePromotionRequest (rules
+                 per type from PromotionType); Http\Controllers\Promotions\
+                 PromotionFormController (HandlesRecordForms)
+Routes:          GET /promotions/create, POST /promotions
+Permissions:     esb.invoke + promotions.manage (Super Admin only)
+Audit:           promotion.created (id when the ERP gave one, type, code, notes);
+                 promotion.write-unconfirmed
+Tests:           tests/Feature/Promotions/PromotionFormTest.php (one test per type),
+                 ErrorClassifierTest (data keyed by field), pages/promotions/form.test.tsx
+```
+
+Decisions and open points:
+
+- **One form, five bodies.** The type picks the fields shown, validated and sent;
+  fields another type takes are never sent. Rules per type live on `PromotionType`.
+- **Booleans are sent as "Yes" / "No"** -- the vendor's examples, although its field
+  list says Boolean. `applyTo` is sent as its label ("Staff Only"), as in the examples,
+  although the field list says Integer. `visitPurposeID` is sent as integers (the field
+  list), the examples show strings. All three `TBD` with the ESB team.
+- **Pickers**: branches (their codes are sent), menu categories, category details and
+  menus (OMS lookups, [ESB-019]). Self order payment method codes, visit purpose ids,
+  employee group names, bank identification numbers and the POS payment method name
+  are typed: no lookup exists for them; the ERP refuses an unknown one.
+- **Validated first**: branches and days required, days 1-7, end after start, discounts
+  >= 0 and a percentage at most 100, codes and notes within the vendor sizes, the
+  menu list the scope needs. Whether the ERP accepts a value is still its to say.
+- **Not built (`[!]`)**: update and deactivate (not documented), and what "ESO" covers
+  beyond "ESB Order" (§9).
 
 ## Integration Principles
 

@@ -33,7 +33,7 @@ function disbursement(overrides: Partial<Disbursement> = {}): Disbursement {
         notes: 'Sewa ruko Maret',
         bankName: null,
         bankAccountName: null,
-        maskedBankAccountNumber: null,
+        bankAccountNumber: null,
         costCenter: null,
         project: null,
         grandTotal: 15000000.5,

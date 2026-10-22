@@ -169,7 +169,7 @@ class DisbursementAttachmentTest extends TestCase
             throw new ConnectionException('cURL error 28: Operation timed out');
         });
 
-        $this->upload()->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+        $this->upload()->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $writes);
 

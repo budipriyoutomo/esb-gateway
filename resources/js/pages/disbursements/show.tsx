@@ -141,7 +141,7 @@ export default function DisbursementShow({ disbursement }: Props) {
     const bank = [
         disbursement.bankName,
         disbursement.bankAccountName,
-        disbursement.maskedBankAccountNumber,
+        disbursement.bankAccountNumber,
     ].filter((part) => part !== null);
 
     return (

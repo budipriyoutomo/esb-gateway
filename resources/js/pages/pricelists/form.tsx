@@ -18,10 +18,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import {
-    store as storeRoute,
-    index as pricelistsIndex,
-} from '@/routes/pricelists';
+import { store as storeRoute } from '@/routes/pricelists';
 import {
     index as tempIndex,
     show as tempShow,
@@ -541,7 +538,3 @@ export default function PricelistForm({
         </>
     );
 }
-
-PricelistForm.layout = {
-    breadcrumbs: [{ title: 'Pricelists', href: pricelistsIndex() }],
-};

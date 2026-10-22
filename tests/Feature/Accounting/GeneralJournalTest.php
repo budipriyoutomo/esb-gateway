@@ -114,7 +114,8 @@ class GeneralJournalTest extends AccountingTestCase
 
         $this->actingAs($this->operator())->get(route('general-journals.show', 1))->assertNotFound();
 
-        foreach (['export', 'search', '0', '-1', rawurlencode('1/2')] as $id) {
+        // "export" is the gateway's CSV export (ADR-031), not a journal id.
+        foreach (['search', '0', '-1', rawurlencode('1/2')] as $id) {
             $this->actingAs($this->operator())->get('/general-journals/'.$id)->assertNotFound();
         }
 

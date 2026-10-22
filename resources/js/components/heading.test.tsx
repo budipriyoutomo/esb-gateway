@@ -27,4 +27,12 @@ describe('Heading', () => {
 
         expect(screen.getByText('Read from the ERP.')).toBeVisible();
     });
+
+    it('can be the page title (h1)', () => {
+        render(<Heading title="Purchase orders" level={1} />);
+
+        expect(
+            screen.getByRole('heading', { level: 1, name: 'Purchase orders' }),
+        ).toBeInTheDocument();
+    });
 });

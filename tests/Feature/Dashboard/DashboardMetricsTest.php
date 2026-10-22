@@ -182,6 +182,28 @@ class DashboardMetricsTest extends TestCase
     }
 
     #[Test]
+    public function each_family_says_how_its_last_call_went_and_when(): void
+    {
+        // The connection status on the dashboard: a family whose last call
+        // failed is the one to look at, even when most calls succeeded.
+        $this->freezeSecond();
+
+        $this->log(['family' => 'core', 'outcome' => 'success', 'created_at' => now()->subMinutes(30)]);
+        $this->log(['family' => 'core', 'outcome' => 'timeout', 'created_at' => now()->subMinutes(5)]);
+        $this->log(['family' => 'oms', 'outcome' => 'timeout', 'created_at' => now()->subMinutes(20)]);
+        $this->log(['family' => 'oms', 'outcome' => 'success', 'created_at' => now()->subMinutes(10)]);
+
+        $this->actingAs($this->viewer())
+            ->get(route('dashboard'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('byFamily.core.lastOutcome', 'timeout')
+                ->where('byFamily.core.lastCallAt', now()->subMinutes(5)->toIso8601String())
+                ->where('byFamily.oms.lastOutcome', 'success')
+                ->where('byFamily.oms.lastCallAt', now()->subMinutes(10)->toIso8601String()),
+            );
+    }
+
+    #[Test]
     public function it_lists_the_most_recent_failures(): void
     {
         $this->log(['outcome' => 'success']);

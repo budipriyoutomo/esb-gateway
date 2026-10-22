@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ImportLinks } from '@/components/import-links';
 import { useState } from 'react';
@@ -10,7 +11,10 @@ import { Button } from '@/components/ui/button';
 import { useListQuery } from '@/hooks/use-list-query';
 import { formatAmount, formatDate } from '@/lib/format';
 import { branchScopeLabel } from '@/lib/branch-scope';
-import { index as pricelistsIndex } from '@/routes/pricelists';
+import {
+    exportMethod as exportRoute,
+    index as pricelistsIndex,
+} from '@/routes/pricelists';
 import { index as tempIndex } from '@/routes/pricelists/temp';
 import type { PricelistEntry } from '@/types/master-data';
 import type { Pagination, PagingFilters } from '@/types/pagination';
@@ -41,18 +45,33 @@ export default function PricelistsIndex({
                     description="Active supplier prices, read live from the ERP."
                     actions={
                         <>
-                            <ImportLinks
-                                canImport={
-                                    can('esb.invoke') &&
-                                    can('pricelists.manage')
+                            <ExportCsvButton
+                                href={
+                                    exportRoute({ query: exportQuery(filters) })
+                                        .url
                                 }
-                                imports={[
-                                    { kind: 'pricelists', label: 'Import' },
-                                ]}
                             />
-                            <Button variant="outline" size="sm" asChild>
-                                <Link href={tempIndex()}>Proposed prices</Link>
-                            </Button>
+                            {
+                                <>
+                                    <ImportLinks
+                                        canImport={
+                                            can('esb.invoke') &&
+                                            can('pricelists.manage')
+                                        }
+                                        imports={[
+                                            {
+                                                kind: 'pricelists',
+                                                label: 'Import',
+                                            },
+                                        ]}
+                                    />
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link href={tempIndex()}>
+                                            Proposed prices
+                                        </Link>
+                                    </Button>
+                                </>
+                            }
                         </>
                     }
                 />
@@ -156,7 +175,3 @@ export default function PricelistsIndex({
         </>
     );
 }
-
-PricelistsIndex.layout = {
-    breadcrumbs: [{ title: 'Pricelist', href: pricelistsIndex() }],
-};

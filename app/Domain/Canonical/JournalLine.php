@@ -20,6 +20,7 @@ readonly class JournalLine implements JsonSerializable
         public ?string $costCenter,
         public ?string $project,
         public ?string $currencyName,
+        public ?int $currencyId,
         public ?float $rate,
         public ?float $debit,
         public ?float $credit,

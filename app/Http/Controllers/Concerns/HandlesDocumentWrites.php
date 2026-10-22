@@ -8,6 +8,7 @@ use App\Integrations\ESB\Exceptions\EsbException;
 use App\Integrations\ESB\Exceptions\EsbNotFoundException;
 use Closure;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
 
 /**
  * Turns the outcome of a decision or delete on an approvable document into a
@@ -15,7 +16,9 @@ use Illuminate\Http\RedirectResponse;
  *
  * A decision always lands back on the detail page, which re-reads the
  * document from the ESB -- the reconciliation step after an unconfirmed
- * write. An unknown document is left to the 404 handler.
+ * write. An unconfirmed write that lands there is flashed as
+ * `unconfirmedWrite` (a banner) instead of a toast. An unknown document is
+ * left to the 404 handler.
  *
  * Use from a Controller subclass (it calls toast()).
  */
@@ -61,13 +64,18 @@ trait HandlesDocumentWrites
             throw $exception;
         } catch (EsbException $exception) {
             if ($exception->mayHaveBeenApplied()) {
-                $this->toast('warning', sprintf(
-                    'The ERP did not confirm the request to %s %s. It may or may not have been applied -- check the status below before trying again. (reference: %s)',
-                    $verb,
-                    $number,
-                    $exception->context->correlationId,
-                ));
                 $consumed = $authorizeConsumesDocument && $decision === ApprovalDecision::Authorize;
+
+                if ($consumed) {
+                    $this->toast('warning', sprintf(
+                        'The ERP did not confirm the request to %s %s. It may or may not have been applied -- check the list before trying again. (reference: %s)',
+                        $verb,
+                        $number,
+                        $exception->context->correlationId,
+                    ));
+                } else {
+                    $this->flashUnconfirmedWrite($verb, $number, $exception);
+                }
             } else {
                 $this->toast('error', sprintf('Could not %s %s. %s', $verb, $number, $exception->safeMessage()));
             }
@@ -148,17 +156,26 @@ trait HandlesDocumentWrites
             throw $exception;
         } catch (EsbException $exception) {
             if ($exception->mayHaveBeenApplied()) {
-                $this->toast('warning', sprintf(
-                    'The ERP did not confirm the request to %s %s. It may or may not have been applied -- check the status below before trying again. (reference: %s)',
-                    $verb,
-                    $number,
-                    $exception->context->correlationId,
-                ));
+                $this->flashUnconfirmedWrite($verb, $number, $exception);
             } else {
                 $this->toast('error', sprintf('Could not %s %s. %s', $verb, $number, $exception->safeMessage()));
             }
         }
 
         return redirect()->route($routePrefix.'.show', $number);
+    }
+
+    /**
+     * A write that may or may not have reached the ERP, reported on the
+     * detail page it lands on. The page keeps the banner up (unlike a toast)
+     * while the person checks the re-read status -- see
+     * unconfirmed-write-banner.tsx.
+     */
+    private function flashUnconfirmedWrite(string $verb, string $number, EsbException $exception): void
+    {
+        Inertia::flash('unconfirmedWrite', [
+            'action' => $verb.' '.$number,
+            'reference' => $exception->context->correlationId,
+        ]);
     }
 }

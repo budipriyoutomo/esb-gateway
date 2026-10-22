@@ -211,6 +211,33 @@ enum Permission: string
     case ManageDisbursements = 'disbursements.manage';
 
     /**
+     * Permission to authorize or reject a memorial journal in the ERP
+     * (TODO-modules.md §5.4, S2). A manual journal changes the books once it
+     * is authorized, so it is kept apart from esb.invoke and from managing.
+     * No role holds it yet; only Super Admin can use it (docs/06).
+     */
+    case ApproveMemorialJournals = 'memorial-journals.approve';
+
+    /**
+     * Permission to create, edit and delete memorial journals and attach
+     * images to them (S2-S4). No role holds it yet (docs/06).
+     */
+    case ManageMemorialJournals = 'memorial-journals.manage';
+
+    /**
+     * Permission to create and edit POS menu categories in the ERP
+     * (TODO-modules.md §6.1, S3). No role holds it yet (docs/06).
+     */
+    case ManageMenuCategories = 'menu-categories.manage';
+
+    /**
+     * Permission to create POS promotions in the ERP (§6.5, S3). A
+     * promotion changes what customers pay, so it is its own permission.
+     * No role holds it yet (docs/06).
+     */
+    case ManagePromotions = 'promotions.manage';
+
+    /**
      * See the sales transactions POS clients pushed through the gateway, and
      * what the ESB said about each (ADR-022). Never the card details.
      */

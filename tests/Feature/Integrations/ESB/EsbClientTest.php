@@ -274,6 +274,65 @@ class EsbClientTest extends TestCase
     }
 
     #[Test]
+    public function a_documented_bare_list_is_read_as_its_rows(): void
+    {
+        // ADR-027: the OMS promotion list answers a bare JSON array.
+        Http::fake(['*' => Http::response([['promotionID' => 52], ['promotionID' => 53]])]);
+
+        $rows = $this->client()->getBareList(EsbFamily::FnbBackend, '/extv1/promotion', ['branchCode' => 'OUT1'], 'promotions.list');
+
+        $this->assertSame([['promotionID' => 52], ['promotionID' => 53]], $rows);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+            && str_contains($request->url(), '/extv1/promotion?branchCode=OUT1'));
+        $this->assertSame(IntegrationLog::OUTCOME_SUCCESS, IntegrationLog::query()->sole()->outcome);
+    }
+
+    #[Test]
+    public function a_bare_list_read_is_retried_like_any_read(): void
+    {
+        Http::fake(['*' => Http::sequence()->pushFailedConnection()->push([])]);
+
+        $this->assertSame([], $this->client()->getBareList(EsbFamily::FnbBackend, '/extv1/promotion', operation: 'promotions.list'));
+        Http::assertSentCount(2);
+    }
+
+    #[Test]
+    public function a_bare_list_read_still_classifies_an_envelope_by_its_code(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 400, 'message' => 'bad', 'data' => []], 400)]);
+
+        $this->expectException(EsbValidationException::class);
+
+        $this->client()->getBareList(EsbFamily::FnbBackend, '/extv1/promotion', operation: 'promotions.list');
+    }
+
+    #[Test]
+    public function only_an_opted_in_read_accepts_a_bare_list(): void
+    {
+        Http::fake(['*' => Http::response([['promotionID' => 52]])]);
+
+        try {
+            $this->client()->get(EsbFamily::FnbBackend, '/extv1/promotion', operation: 'promotions.list');
+            $this->fail('Expected EsbMalformedResponseException.');
+        } catch (EsbMalformedResponseException) {
+            // expected
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    #[Test]
+    public function an_object_without_a_code_is_not_a_bare_list(): void
+    {
+        // The vendor's own 401 example for this list: {name, message, code: 0, status}.
+        Http::fake(['*' => Http::response(['name' => 'Unauthorized'])]);
+
+        $this->expectException(EsbMalformedResponseException::class);
+
+        $this->client()->getBareList(EsbFamily::FnbBackend, '/extv1/promotion', operation: 'promotions.list');
+    }
+
+    #[Test]
     public function a_file_upload_is_sent_as_multipart_with_the_bearer_token(): void
     {
         Http::fake(['*' => Http::response($this->success())]);

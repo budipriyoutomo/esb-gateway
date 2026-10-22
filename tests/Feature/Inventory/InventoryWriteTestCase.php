@@ -334,7 +334,7 @@ abstract class InventoryWriteTestCase extends TestCase
 
         $this->decide($this->superAdmin(), 'reject', ['reason' => 'Wrong destination'])
             ->assertRedirect($this->showRoute())
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $attempts);
 

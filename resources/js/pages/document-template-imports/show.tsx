@@ -1,8 +1,8 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CloudUpload, ListChecks } from 'lucide-react';
+import { CloudUpload, ListChecks } from 'lucide-react';
 import { useEffect } from 'react';
 import AlertError from '@/components/alert-error';
-import Heading from '@/components/heading';
+import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -183,46 +183,38 @@ export default function DocumentTemplateImportShow({
             <Head title={`Import ${current.filename}`} />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={importsIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Imports
-                        </Link>
-                    </Button>
-                </div>
-
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        title={current.filename}
-                        description={`Import #${String(current.id)} · uploaded ${formatDateTime(current.createdAt)} by ${current.uploadedBy ?? '—'}`}
-                    />
-                    <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={busy || checkable === 0}
-                            onClick={() => {
-                                post(importsValidate(current.id).url);
-                            }}
-                        >
-                            <ListChecks className="size-4" />
-                            {current.status === 'validating'
-                                ? 'Validating…'
-                                : 'Validate against ERP'}
-                        </Button>
-                        <Button
-                            disabled={busy || counts.ready === 0}
-                            onClick={() => {
-                                post(importsSync(current.id).url);
-                            }}
-                        >
-                            <CloudUpload className="size-4" />
-                            {current.status === 'syncing'
-                                ? 'Syncing…'
-                                : `Sync ${String(counts.ready)} ready to ERP`}
-                        </Button>
-                    </div>
-                </div>
+                <PageHeader
+                    title={current.filename}
+                    description={`Import #${String(current.id)} · uploaded ${formatDateTime(current.createdAt)} by ${current.uploadedBy ?? '—'}`}
+                    back={{ href: importsIndex(), label: 'Imports' }}
+                    actions={
+                        <>
+                            <Button
+                                variant="outline"
+                                disabled={busy || checkable === 0}
+                                onClick={() => {
+                                    post(importsValidate(current.id).url);
+                                }}
+                            >
+                                <ListChecks className="size-4" />
+                                {current.status === 'validating'
+                                    ? 'Validating…'
+                                    : 'Validate against ERP'}
+                            </Button>
+                            <Button
+                                disabled={busy || counts.ready === 0}
+                                onClick={() => {
+                                    post(importsSync(current.id).url);
+                                }}
+                            >
+                                <CloudUpload className="size-4" />
+                                {current.status === 'syncing'
+                                    ? 'Syncing…'
+                                    : `Sync ${String(counts.ready)} ready to ERP`}
+                            </Button>
+                        </>
+                    }
+                />
 
                 {current.lastError && (
                     <AlertError
@@ -278,7 +270,3 @@ export default function DocumentTemplateImportShow({
         </>
     );
 }
-
-DocumentTemplateImportShow.layout = {
-    breadcrumbs: [{ title: 'Document template imports', href: importsIndex() }],
-};

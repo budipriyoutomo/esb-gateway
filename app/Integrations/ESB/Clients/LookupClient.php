@@ -10,6 +10,8 @@ use App\Integrations\Contracts\LookupSource;
 use App\Integrations\ESB\EsbFamily;
 use App\Integrations\ESB\Exceptions\EsbException;
 use App\Integrations\ESB\Mappers\LookupMapper;
+use App\Integrations\ESB\Mappers\MasterMenuMapper;
+use App\Integrations\ESB\Mappers\MenuCategoryMapper;
 use App\Integrations\ESB\Responses\EsbEnvelope;
 
 /**
@@ -28,6 +30,8 @@ class LookupClient implements LookupSource
     public function __construct(
         private readonly EsbClient $client,
         private readonly LookupMapper $mapper,
+        private readonly MenuCategoryMapper $menuCategories,
+        private readonly MasterMenuMapper $menus,
     ) {}
 
     public function provider(): string
@@ -54,6 +58,8 @@ class LookupClient implements LookupSource
      * @see https://developers.esb.co.id/esb-core/#/paths/common-currency-active/get
      * @see https://developers.esb.co.id/esb-core/#/paths/product-detail-browse/get
      * @see https://developers.esb.co.id/esb-core/#/paths/purpose/get
+     * @see https://developers.esb.co.id/esb-oms/#api-Master_Menu_Category-get-menu-category
+     * @see https://developers.esb.co.id/esb-oms/#api-Master_Menu-get-menu
      */
     public function lookup(LookupKind $kind, LookupQuery $query): LookupPage
     {
@@ -92,7 +98,50 @@ class LookupClient implements LookupSource
                 'branchID' => $query->branchId,
                 'productName' => $this->searchOrNull($query->search),
             ], $query),
+            LookupKind::MenuCategories, LookupKind::MenuCategoryDetails, LookupKind::PosMenus => $this->oms($kind, $query),
         };
+    }
+
+    /**
+     * An ESB OMS list, paged by the ESB with a fixed page size and no
+     * search parameter: the page asked for is read and searched here.
+     */
+    private function oms(LookupKind $kind, LookupQuery $query): LookupPage
+    {
+        $path = $kind === LookupKind::PosMenus ? '/corev1/master/get-menu' : '/corev1/master/get-menu-category';
+        $envelope = $this->client->get(EsbFamily::FnbBackend, $path, ['page' => $query->page], operation: 'lookup.'.$kind->value);
+
+        $options = [];
+
+        if ($kind === LookupKind::PosMenus) {
+            foreach ($this->menus->fromRows($envelope->rows()) as $menu) {
+                if ($menu->id !== null) {
+                    $options[] = new LookupOption(value: (string) $menu->id, label: $menu->name, code: $menu->code);
+                }
+            }
+        } else {
+            foreach ($this->menuCategories->fromRows($envelope->rows()) as $category) {
+                if ($kind === LookupKind::MenuCategories) {
+                    $options[] = new LookupOption(value: (string) $category->id, label: $category->name, code: $category->code);
+
+                    continue;
+                }
+
+                foreach ($category->details as $detail) {
+                    $options[] = new LookupOption(value: (string) $detail->id, label: $category->name.' › '.$detail->name, code: $detail->code);
+                }
+            }
+        }
+
+        $search = $this->searchOrNull($query->search);
+
+        return new LookupPage(
+            options: $search === null ? $options : array_values(array_filter(
+                $options,
+                static fn (LookupOption $option): bool => $option->matches($search),
+            )),
+            hasMore: $this->hasMore($envelope),
+        );
     }
 
     /**

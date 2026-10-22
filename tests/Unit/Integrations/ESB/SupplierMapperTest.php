@@ -47,30 +47,30 @@ class SupplierMapperTest extends TestCase
     }
 
     #[Test]
-    public function only_the_last_four_digits_of_an_account_number_are_kept(): void
+    public function the_whole_account_number_is_kept(): void
     {
+        // Business decision 2026-10-22: shown in full, not masked.
         $supplier = (new SupplierMapper)->fromDetail(CoreSupplier::detailResponse()['result']);
 
         $this->assertNotNull($supplier);
         $account = $supplier->bankAccounts[0];
         $this->assertSame('BCA', $account->bankName);
-        $this->assertSame('•••• 6789', $account->maskedAccountNumber);
-        $this->assertStringNotContainsString('1234566789', json_encode($supplier, JSON_UNESCAPED_UNICODE));
+        $this->assertSame('1234566789', $account->accountNumber);
     }
 
     #[Test]
-    public function a_short_or_missing_account_number_is_fully_masked(): void
+    public function a_short_account_number_is_kept_as_sent_and_a_blank_one_is_none(): void
     {
         $supplier = (new SupplierMapper)->fromDetail(CoreSupplier::detailResponse([
             'supplierBank' => [
-                ['bankID' => 3, 'bankName' => 'BCA', 'bankAccountName' => 'X', 'bankAccountNumber' => '123'],
+                ['bankID' => 3, 'bankName' => 'BCA', 'bankAccountName' => 'X', 'bankAccountNumber' => ' 123 '],
                 ['bankID' => 4, 'bankName' => 'BRI', 'bankAccountName' => 'Y', 'bankAccountNumber' => ''],
             ],
         ])['result']);
 
         $this->assertNotNull($supplier);
-        $this->assertSame('••••', $supplier->bankAccounts[0]->maskedAccountNumber);
-        $this->assertNull($supplier->bankAccounts[1]->maskedAccountNumber);
+        $this->assertSame('123', $supplier->bankAccounts[0]->accountNumber);
+        $this->assertNull($supplier->bankAccounts[1]->accountNumber);
     }
 
     #[Test]

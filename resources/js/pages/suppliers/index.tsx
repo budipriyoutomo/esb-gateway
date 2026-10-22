@@ -1,9 +1,11 @@
 import { Head, Link } from '@inertiajs/react';
+import { ExportCsvButton, exportQuery } from '@/components/export-csv-button';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ImportLinks } from '@/components/import-links';
 import { ReferenceDataIndex } from '@/components/reference-data-index';
 import type { ReferenceDataFilters } from '@/components/reference-data-index';
 import {
+    exportMethod as exportRoute,
     index as suppliersIndex,
     show as suppliersShow,
 } from '@/routes/suppliers';
@@ -38,16 +40,30 @@ export default function SuppliersIndex({
             <ReferenceDataIndex
                 id="suppliers"
                 actions={
-                    <ImportLinks
-                        canImport={can('esb.invoke') && can('suppliers.manage')}
-                        imports={[
-                            { kind: 'suppliers-create', label: 'Import new' },
-                            {
-                                kind: 'suppliers-update',
-                                label: 'Import changes',
-                            },
-                        ]}
-                    />
+                    <>
+                        <ExportCsvButton
+                            href={
+                                exportRoute({ query: exportQuery(filters) }).url
+                            }
+                        />
+                        {
+                            <ImportLinks
+                                canImport={
+                                    can('esb.invoke') && can('suppliers.manage')
+                                }
+                                imports={[
+                                    {
+                                        kind: 'suppliers-create',
+                                        label: 'Import new',
+                                    },
+                                    {
+                                        kind: 'suppliers-update',
+                                        label: 'Import changes',
+                                    },
+                                ]}
+                            />
+                        }
+                    </>
                 }
                 title="Suppliers"
                 description="Suppliers, read live from the ERP."
@@ -106,7 +122,3 @@ export default function SuppliersIndex({
         </>
     );
 }
-
-SuppliersIndex.layout = {
-    breadcrumbs: [{ title: 'Suppliers', href: suppliersIndex() }],
-};

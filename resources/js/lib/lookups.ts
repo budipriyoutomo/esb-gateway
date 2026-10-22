@@ -17,7 +17,10 @@ export type LookupKind =
     | 'units'
     | 'currencies'
     | 'product-details'
-    | 'purposes';
+    | 'purposes'
+    | 'menu-categories'
+    | 'menu-category-details'
+    | 'pos-menus';
 
 /** Mirrors App\Domain\Canonical\LookupOption. */
 export type LookupOption = {

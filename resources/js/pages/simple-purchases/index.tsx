@@ -1,25 +1,21 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
-import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Head, Link } from '@inertiajs/react';
+import { DataTable } from '@/components/data-table';
+import type { DataTableColumn } from '@/components/data-table';
+import { DateRangeField } from '@/components/date-range-field';
+import { FilterBar } from '@/components/filter-bar';
+import { ListPagination } from '@/components/list-pagination';
+import { PageHeader } from '@/components/page-header';
+import { StatusBadge } from '@/components/status-badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { useFilterForm } from '@/hooks/use-filter-form';
+import { formatAmount, formatDate } from '@/lib/format';
 import {
     index as simplePurchasesIndex,
     show as simplePurchasesShow,
 } from '@/routes/simple-purchases';
-import type { SimplePurchaseSummary } from '@/types/simple-purchase';
 import type { DocumentFilters, Pagination } from '@/types/pagination';
-import { formatAmount, formatDate } from '@/lib/format';
+import type { SimplePurchaseSummary } from '@/types/simple-purchase';
 
 type Filters = DocumentFilters & {
     supplierInvoiceNumber?: string;
@@ -32,234 +28,149 @@ type Props = {
     filters: Filters;
 };
 
+const columns: DataTableColumn<SimplePurchaseSummary>[] = [
+    {
+        key: 'number',
+        header: 'Number',
+        className: 'font-mono text-xs',
+        cell: (purchase) =>
+            purchase.number !== '' ? (
+                <Link
+                    href={simplePurchasesShow(purchase.number)}
+                    className="underline-offset-4 hover:underline"
+                >
+                    {purchase.number}
+                </Link>
+            ) : (
+                '—'
+            ),
+    },
+    {
+        key: 'supplier',
+        header: 'Supplier',
+        className: 'font-medium',
+        cell: (purchase) => purchase.supplierName ?? '—',
+    },
+    {
+        key: 'supplierInvoice',
+        header: 'Supplier invoice',
+        className: 'text-muted-foreground font-mono text-xs',
+        cell: (purchase) => purchase.supplierInvoiceNumber ?? '—',
+    },
+    {
+        key: 'date',
+        header: 'Date',
+        cell: (purchase) => formatDate(purchase.date),
+    },
+    {
+        key: 'branch',
+        header: 'Branch',
+        className: 'text-muted-foreground',
+        cell: (purchase) => purchase.branchName ?? '—',
+    },
+    {
+        key: 'total',
+        header: 'Total',
+        align: 'right',
+        cell: (purchase) => formatAmount(purchase.total, purchase.currencySign),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        cell: (purchase) => <StatusBadge status={purchase.statusName} />,
+    },
+];
+
 export default function SimplePurchasesIndex({
     simplePurchases,
     pagination,
     filters,
 }: Props) {
-    const [search, setSearch] = useState(filters.search ?? '');
-    const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState(
-        filters.supplierInvoiceNumber ?? '',
-    );
-    const [dateFrom, setDateFrom] = useState(filters.dateFrom ?? '');
-    const [dateTo, setDateTo] = useState(filters.dateTo ?? '');
-
-    function applyFilters(event: React.FormEvent) {
-        event.preventDefault();
-
-        // Empty values are dropped rather than sent: the ERP narrows a result
-        // set to rows matching an empty filter.
-        const query = Object.fromEntries(
-            Object.entries({
-                search,
-                supplierInvoiceNumber,
-                dateFrom,
-                dateTo,
-            }).filter(([, value]) => value !== ''),
-        );
-
-        router.get(simplePurchasesIndex().url, query, {
-            preserveState: true,
-            replace: true,
-        });
-    }
-
-    function goToPage(page: number) {
-        router.get(
-            simplePurchasesIndex().url,
-            { ...filters, page },
-            { preserveState: true, preserveScroll: true },
-        );
-    }
+    const form = useFilterForm(simplePurchasesIndex().url, filters, [
+        { key: 'search', chip: (value) => `“${value}”` },
+        {
+            key: 'supplierInvoiceNumber',
+            chip: (value) => `Supplier invoice ${value}`,
+        },
+        { key: 'dateFrom', chip: (value) => `From ${formatDate(value)}` },
+        { key: 'dateTo', chip: (value) => `To ${formatDate(value)}` },
+    ]);
 
     return (
         <>
             <Head title="Simple purchases" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <Heading
+                <PageHeader
                     title="Simple purchases"
                     description="Purchases bought and paid for in one step, read live from the ERP."
                 />
 
-                <form
-                    onSubmit={applyFilters}
-                    className="flex flex-wrap items-end gap-3"
+                <FilterBar
+                    id="sp"
+                    search={{
+                        value: form.values.search!,
+                        onChange: (value) => form.set('search', value),
+                        placeholder: 'Number, supplier, notes…',
+                    }}
+                    {...form.bar}
+                    defaultAdvancedOpen={Boolean(
+                        filters.supplierInvoiceNumber ||
+                        filters.dateFrom ||
+                        filters.dateTo,
+                    )}
                 >
-                    <div className="grid w-full gap-1.5 sm:w-64">
-                        <Label htmlFor="sp-search">Search</Label>
-                        <Input
-                            id="sp-search"
-                            value={search}
-                            onChange={(event) => {
-                                setSearch(event.target.value);
-                            }}
-                            placeholder="Number, supplier, notes…"
-                        />
-                    </div>
                     <div className="grid w-full gap-1.5 sm:w-48">
                         <Label htmlFor="sp-supplier-invoice">
                             Supplier invoice no.
                         </Label>
                         <Input
                             id="sp-supplier-invoice"
-                            value={supplierInvoiceNumber}
+                            value={form.values.supplierInvoiceNumber}
                             maxLength={50}
                             onChange={(event) => {
-                                setSupplierInvoiceNumber(event.target.value);
+                                form.set(
+                                    'supplierInvoiceNumber',
+                                    event.target.value,
+                                );
                             }}
                         />
                     </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="sp-date-from">Date from</Label>
-                        <Input
-                            id="sp-date-from"
-                            type="date"
-                            value={dateFrom}
-                            onChange={(event) => {
-                                setDateFrom(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="sp-date-to">to</Label>
-                        <Input
-                            id="sp-date-to"
-                            type="date"
-                            value={dateTo}
-                            min={dateFrom || undefined}
-                            onChange={(event) => {
-                                setDateTo(event.target.value);
-                            }}
-                        />
-                    </div>
-                    <Button type="submit" variant="secondary">
-                        Apply
-                    </Button>
-                </form>
+                    <DateRangeField
+                        id="sp-date"
+                        label="Date"
+                        from={form.values.dateFrom!}
+                        to={form.values.dateTo!}
+                        onChange={({ from, to }) => {
+                            form.set('dateFrom', from);
+                            form.set('dateTo', to);
+                        }}
+                    />
+                </FilterBar>
 
-                <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border p-2">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Number</TableHead>
-                                <TableHead>Supplier</TableHead>
-                                <TableHead>Supplier invoice</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Branch</TableHead>
-                                <TableHead className="text-right">
-                                    Total
-                                </TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {simplePurchases.length === 0 && (
-                                <TableRow>
-                                    <TableCell
-                                        colSpan={7}
-                                        className="text-muted-foreground py-8 text-center"
-                                    >
-                                        No simple purchases matched this filter.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                <DataTable
+                    caption="Simple purchases"
+                    columns={columns}
+                    rows={simplePurchases}
+                    rowKey={(purchase, index) =>
+                        purchase.number !== ''
+                            ? purchase.number
+                            : `row-${index}`
+                    }
+                    rowHref={(purchase) =>
+                        purchase.number !== ''
+                            ? simplePurchasesShow(purchase.number).url
+                            : null
+                    }
+                    empty="No simple purchases matched this filter. Try a wider date range or reset the filters."
+                />
 
-                            {simplePurchases.map((purchase, index) => (
-                                <TableRow
-                                    key={
-                                        purchase.number !== ''
-                                            ? purchase.number
-                                            : `row-${index}`
-                                    }
-                                >
-                                    <TableCell className="font-mono text-xs">
-                                        {purchase.number !== '' ? (
-                                            <Link
-                                                href={simplePurchasesShow(
-                                                    purchase.number,
-                                                )}
-                                                className="underline-offset-4 hover:underline"
-                                            >
-                                                {purchase.number}
-                                            </Link>
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {purchase.supplierName ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground font-mono text-xs">
-                                        {purchase.supplierInvoiceNumber ?? '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        {formatDate(purchase.date)}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {purchase.branchName ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                        {formatAmount(
-                                            purchase.total,
-                                            purchase.currencySign,
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {purchase.statusName ? (
-                                            <Badge variant="secondary">
-                                                {purchase.statusName}
-                                            </Badge>
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {pagination && (
-                    <div className="flex items-center justify-between gap-4">
-                        <p className="text-muted-foreground text-sm">
-                            Page {pagination.page} of {pagination.lastPage} —{' '}
-                            {pagination.count} simple purchases
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pagination.page <= 1}
-                                onClick={() => {
-                                    goToPage(pagination.page - 1);
-                                }}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!pagination.hasMorePages}
-                                onClick={() => {
-                                    goToPage(pagination.page + 1);
-                                }}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                <ListPagination
+                    pagination={pagination}
+                    noun="simple purchases"
+                    onPageChange={form.goToPage}
+                />
             </div>
         </>
     );
 }
-
-SimplePurchasesIndex.layout = {
-    breadcrumbs: [
-        {
-            title: 'Simple purchases',
-            href: simplePurchasesIndex(),
-        },
-    ],
-};

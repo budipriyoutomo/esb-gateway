@@ -1,8 +1,8 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import AlertError from '@/components/alert-error';
-import Heading from '@/components/heading';
+import { PageHeader } from '@/components/page-header';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -178,18 +178,13 @@ export default function DocumentTemplateCreate({
             <Head title="New document template" />
 
             <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div>
-                    <Button variant="ghost" size="sm" asChild className="-ml-2">
-                        <Link href={documentTemplatesIndex()}>
-                            <ArrowLeft className="size-4" />
-                            Document templates
-                        </Link>
-                    </Button>
-                </div>
-
-                <Heading
+                <PageHeader
                     title="New document template"
                     description="Name the template, choose the branches that may use it, and add the products it pre-fills."
+                    back={{
+                        href: documentTemplatesIndex(),
+                        label: 'Document templates',
+                    }}
                 />
 
                 {errors.form && (
@@ -524,16 +519,3 @@ export default function DocumentTemplateCreate({
         </>
     );
 }
-
-DocumentTemplateCreate.layout = {
-    breadcrumbs: [
-        {
-            title: 'Document templates',
-            href: documentTemplatesIndex(),
-        },
-        {
-            title: 'New',
-            href: createDocumentTemplate(),
-        },
-    ],
-};

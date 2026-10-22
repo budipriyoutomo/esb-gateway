@@ -2,6 +2,7 @@ import { Head } from '@inertiajs/react';
 import { AttachmentActions } from '@/components/attachment-actions';
 import { DataTable } from '@/components/data-table';
 import { DetailField } from '@/components/detail-fields';
+import { DetailTabs } from '@/components/detail-tabs';
 import { RecordActions } from '@/components/record-actions';
 import { ReferenceDataShow } from '@/components/reference-data-show';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -71,126 +72,148 @@ export default function SupplierShow({ supplier }: { supplier: Supplier }) {
                             uploadUrl={storeAttachments(supplier.id).url}
                             deleteUrl={destroyAttachments(supplier.id).url}
                         />
-                        <section className="grid gap-3">
-                            <h2 className="text-base font-medium">Contacts</h2>
-                            <DataTable
-                                caption="Supplier contacts"
-                                columns={[
-                                    {
-                                        key: 'name',
-                                        header: 'Name',
-                                        cell: (contact) => (
-                                            <span className="flex items-center gap-2">
-                                                {contact.name || '—'}
-                                                {contact.isDefault && (
-                                                    <Badge variant="secondary">
-                                                        Default
-                                                    </Badge>
-                                                )}
-                                            </span>
-                                        ),
-                                    },
-                                    {
-                                        key: 'phone',
-                                        header: 'Phone',
-                                        cell: (contact) =>
-                                            contact.cellPhone ?? '—',
-                                    },
-                                    {
-                                        key: 'email',
-                                        header: 'Email',
-                                        cell: (contact) => contact.email ?? '—',
-                                    },
-                                    {
-                                        key: 'poEmail',
-                                        header: 'Receives PO email',
-                                        cell: (contact) =>
-                                            yesNo(
-                                                contact.sendsPurchaseOrderEmail,
-                                            ) ?? '—',
-                                    },
-                                ]}
-                                rows={supplier.contacts}
-                                rowKey={(contact, index) =>
-                                    String(contact.id ?? `contact-${index}`)
-                                }
-                                empty="No contacts recorded in the ERP."
-                            />
-                        </section>
-
-                        <section className="grid gap-3">
-                            <h2 className="text-base font-medium">
-                                Bank accounts
-                            </h2>
-                            <DataTable
-                                caption="Supplier bank accounts"
-                                columns={[
-                                    {
-                                        key: 'bank',
-                                        header: 'Bank',
-                                        cell: (account) =>
-                                            account.bankName ?? '—',
-                                    },
-                                    {
-                                        key: 'holder',
-                                        header: 'Account holder',
-                                        cell: (account) =>
-                                            account.accountName ?? '—',
-                                    },
-                                    {
-                                        key: 'number',
-                                        header: 'Account number',
-                                        className: 'font-mono text-xs',
-                                        cell: (account) =>
-                                            account.maskedAccountNumber ?? '—',
-                                    },
-                                ]}
-                                rows={supplier.bankAccounts}
-                                rowKey={(account, index) =>
-                                    `${account.bankId ?? 'x'}-${index}`
-                                }
-                                empty="No bank accounts recorded in the ERP."
-                            />
-                            <p className="text-muted-foreground text-xs">
-                                Only the last four digits are shown here; the
-                                full number is in the ERP.
-                            </p>
-                        </section>
-
-                        <section className="grid gap-3">
-                            <h2 className="text-base font-medium">
-                                Supplier product codes
-                            </h2>
-                            <DataTable
-                                caption="Supplier product codes"
-                                columns={[
-                                    {
-                                        key: 'code',
-                                        header: 'Supplier code',
-                                        className: 'font-mono text-xs',
-                                        cell: (product) =>
-                                            product.supplierProductCode ?? '—',
-                                    },
-                                    {
-                                        key: 'product',
-                                        header: 'Product',
-                                        cell: (product) =>
-                                            product.productName ?? '—',
-                                    },
-                                    {
-                                        key: 'uom',
-                                        header: 'Unit',
-                                        cell: (product) =>
-                                            product.uomName ?? '—',
-                                    },
-                                ]}
-                                rows={supplier.products}
-                                rowKey={(product, index) =>
-                                    `${product.productDetailId ?? 'x'}-${index}`
-                                }
-                                empty="No supplier product codes recorded."
-                            />
-                        </section>
+                        <DetailTabs
+                            label="Supplier sections"
+                            tabs={[
+                                {
+                                    value: 'contacts',
+                                    label: 'Contacts',
+                                    count: supplier.contacts.length,
+                                    content: (
+                                        <DataTable
+                                            caption="Supplier contacts"
+                                            columns={[
+                                                {
+                                                    key: 'name',
+                                                    header: 'Name',
+                                                    cell: (contact) => (
+                                                        <span className="flex items-center gap-2">
+                                                            {contact.name ||
+                                                                '—'}
+                                                            {contact.isDefault && (
+                                                                <Badge variant="secondary">
+                                                                    Default
+                                                                </Badge>
+                                                            )}
+                                                        </span>
+                                                    ),
+                                                },
+                                                {
+                                                    key: 'phone',
+                                                    header: 'Phone',
+                                                    cell: (contact) =>
+                                                        contact.cellPhone ??
+                                                        '—',
+                                                },
+                                                {
+                                                    key: 'email',
+                                                    header: 'Email',
+                                                    cell: (contact) =>
+                                                        contact.email ?? '—',
+                                                },
+                                                {
+                                                    key: 'poEmail',
+                                                    header: 'Receives PO email',
+                                                    cell: (contact) =>
+                                                        yesNo(
+                                                            contact.sendsPurchaseOrderEmail,
+                                                        ) ?? '—',
+                                                },
+                                            ]}
+                                            rows={supplier.contacts}
+                                            rowKey={(contact, index) =>
+                                                String(
+                                                    contact.id ??
+                                                        `contact-${index}`,
+                                                )
+                                            }
+                                            empty="No contacts recorded in the ERP."
+                                        />
+                                    ),
+                                },
+                                {
+                                    value: 'banks',
+                                    label: 'Bank accounts',
+                                    count: supplier.bankAccounts.length,
+                                    content: (
+                                        <div className="grid gap-3">
+                                            <DataTable
+                                                caption="Supplier bank accounts"
+                                                columns={[
+                                                    {
+                                                        key: 'bank',
+                                                        header: 'Bank',
+                                                        cell: (account) =>
+                                                            account.bankName ??
+                                                            '—',
+                                                    },
+                                                    {
+                                                        key: 'holder',
+                                                        header: 'Account holder',
+                                                        cell: (account) =>
+                                                            account.accountName ??
+                                                            '—',
+                                                    },
+                                                    {
+                                                        key: 'number',
+                                                        header: 'Account number',
+                                                        className:
+                                                            'font-mono text-xs',
+                                                        cell: (account) =>
+                                                            account.accountNumber ??
+                                                            '—',
+                                                    },
+                                                ]}
+                                                rows={supplier.bankAccounts}
+                                                rowKey={(account, index) =>
+                                                    `${account.bankId ?? 'x'}-${index}`
+                                                }
+                                                empty="No bank accounts recorded in the ERP."
+                                            />
+                                        </div>
+                                    ),
+                                },
+                                {
+                                    value: 'products',
+                                    label: 'Supplier product codes',
+                                    count: supplier.products.length,
+                                    content: (
+                                        <DataTable
+                                            caption="Supplier product codes"
+                                            columns={[
+                                                {
+                                                    key: 'code',
+                                                    header: 'Supplier code',
+                                                    className:
+                                                        'font-mono text-xs',
+                                                    cell: (product) =>
+                                                        product.supplierProductCode ??
+                                                        '—',
+                                                },
+                                                {
+                                                    key: 'product',
+                                                    header: 'Product',
+                                                    cell: (product) =>
+                                                        product.productName ??
+                                                        '—',
+                                                },
+                                                {
+                                                    key: 'uom',
+                                                    header: 'Unit',
+                                                    cell: (product) =>
+                                                        product.uomName ?? '—',
+                                                },
+                                            ]}
+                                            rows={supplier.products}
+                                            rowKey={(product, index) =>
+                                                `${product.productDetailId ?? 'x'}-${index}`
+                                            }
+                                            empty="No supplier product codes recorded."
+                                        />
+                                    ),
+                                },
+                            ]}
+                        />
                     </>
                 }
             >
@@ -244,7 +267,3 @@ export default function SupplierShow({ supplier }: { supplier: Supplier }) {
         </>
     );
 }
-
-SupplierShow.layout = {
-    breadcrumbs: [{ title: 'Suppliers', href: suppliersIndex() }],
-};

@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Fixtures\CoreLookup;
+use Tests\Fixtures\OmsGetMenu;
+use Tests\Fixtures\OmsMenuCategory;
 use Tests\TestCase;
 
 /**
@@ -243,6 +245,64 @@ class LookupTest extends TestCase
             ->assertJsonPath('hasMore', false);
 
         $this->assertSame(['purposeName' => 'waste', 'flagActive' => '1', 'page' => '1', 'limit' => '20'], $sent);
+    }
+
+    // ------------------------------------------------------------- OMS kinds
+
+    #[Test]
+    public function menu_categories_are_read_page_by_page_from_the_oms(): void
+    {
+        $sent = [];
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent[] = $request->url();
+
+            return Http::response(OmsMenuCategory::list([
+                OmsMenuCategory::row(),
+                OmsMenuCategory::row(['menuCategoryID' => 17, 'menuCategoryName' => 'Drink-Int', 'menuCategoryCode' => 'DINT']),
+            ], page: 1, count: 16));
+        });
+
+        // The vendor has no search: the page is searched in the gateway.
+        $this->lookup('menu-categories', ['search' => 'drink'])
+            ->assertOk()
+            ->assertJsonCount(1, 'options')
+            ->assertJsonPath('options.0.value', '17')
+            ->assertJsonPath('options.0.label', 'Drink-Int')
+            ->assertJsonPath('options.0.code', 'DINT')
+            ->assertJsonPath('hasMore', true);
+
+        $this->assertSame(['https://stg7.esb.co.id/api-fnb-backend-int/web/corev1/master/get-menu-category?page=1'], $sent);
+    }
+
+    #[Test]
+    public function menu_category_details_are_named_with_their_category(): void
+    {
+        Http::fake(['*' => Http::response(OmsMenuCategory::list([OmsMenuCategory::row()], page: 1, count: 1))]);
+
+        $this->lookup('menu-category-details')
+            ->assertOk()
+            ->assertJsonPath('options.0.value', '34')
+            ->assertJsonPath('options.0.label', 'Food-Int › Main Course-Int')
+            ->assertJsonPath('hasMore', false);
+    }
+
+    #[Test]
+    public function pos_menus_are_read_from_the_oms_master_menu_list(): void
+    {
+        $sent = null;
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent = $request->url();
+
+            return Http::response(OmsGetMenu::response());
+        });
+
+        $this->lookup('pos-menus', ['page' => 2])
+            ->assertOk()
+            ->assertJsonPath('options.0.value', '5564')
+            ->assertJsonPath('options.0.label', 'Paket Separate')
+            ->assertJsonPath('options.0.code', 'PS01');
+
+        $this->assertSame('https://stg7.esb.co.id/api-fnb-backend-int/web/corev1/master/get-menu?page=2', $sent);
     }
 
     // ------------------------------------------------------ ESB-paginated kinds

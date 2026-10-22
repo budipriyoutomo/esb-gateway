@@ -83,7 +83,11 @@ class IntegrationMetrics
      * Availability is per family, not global: the families are different hosts
      * and can fail independently (ADR-010).
      *
-     * @return array<string, array{total: int, failed: int, successRate: float|null}>
+     * Each family also says how its most recent call in the window went and
+     * when: the connection status the dashboard shows. A family whose last
+     * call failed is the one to look at, even when most calls succeeded.
+     *
+     * @return array<string, array{total: int, failed: int, successRate: float|null, lastOutcome: string|null, lastCallAt: string|null}>
      */
     public function byFamily(int $windowHours = self::DEFAULT_WINDOW_HOURS): array
     {
@@ -102,7 +106,7 @@ class IntegrationMetrics
             $family = $row->getAttribute('family');
             $count = (int) $row->getAttribute('aggregate');
 
-            $families[$family] ??= ['total' => 0, 'failed' => 0, 'successRate' => null];
+            $families[$family] ??= ['total' => 0, 'failed' => 0, 'successRate' => null, 'lastOutcome' => null, 'lastCallAt' => null];
             $families[$family]['total'] += $count;
 
             if ($row->getAttribute('outcome') !== IntegrationLog::OUTCOME_SUCCESS) {
@@ -114,6 +118,18 @@ class IntegrationMetrics
             $families[$family]['successRate'] = $counts['total'] === 0
                 ? null
                 : round(($counts['total'] - $counts['failed']) / $counts['total'] * 100, 1);
+
+            // One query per family: there are a handful of families, and the
+            // log table is too large to load the window and pick in PHP.
+            $last = IntegrationLog::query()
+                ->where('created_at', '>=', $since)
+                ->where('family', $family)
+                ->latest('created_at')
+                ->latest('id')
+                ->first(['outcome', 'created_at']);
+
+            $families[$family]['lastOutcome'] = $last?->outcome;
+            $families[$family]['lastCallAt'] = $last?->created_at?->toIso8601String();
         }
 
         return $families;

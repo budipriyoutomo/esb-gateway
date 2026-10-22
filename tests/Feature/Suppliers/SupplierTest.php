@@ -88,7 +88,7 @@ class SupplierTest extends ReadOnlyMasterDataTestCase
     }
 
     #[Test]
-    public function the_detail_is_one_call_with_contacts_and_masked_banks(): void
+    public function the_detail_is_one_call_with_contacts_and_banks(): void
     {
         Http::fake(['*' => Http::response(CoreSupplier::detailResponse())]);
 
@@ -96,11 +96,9 @@ class SupplierTest extends ReadOnlyMasterDataTestCase
 
         $response->assertInertia(fn (AssertableInertia $page) => $page
             ->where('supplier.contacts.0.name', 'Andi')
-            ->where('supplier.bankAccounts.0.maskedAccountNumber', '•••• 6789')
+            ->where('supplier.bankAccounts.0.accountNumber', '1234566789')
             ->where('supplier.products.0.productName', 'Beras Premium'));
 
-        // The full account number never reaches the browser.
-        $this->assertStringNotContainsString('1234566789', (string) $response->getContent());
         Http::assertSentCount(1);
     }
 }

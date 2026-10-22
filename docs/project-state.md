@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-10-20
+2026-10-22
 
 ## Current Phase
 
@@ -1820,3 +1820,419 @@ product, pricelist), P9d (S4).
 - Frontend page tests were written alongside the pages rather than strictly before them;
   the backend followed RED → GREEN.
 - Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-20 — Memorial Journal S2–S4 (`TODO-modules.md` P14, `[ESB-044]`–`[ESB-046]`)
+
+**Selesai** (test-first; RED = missing permissions / routes, then the missing form page)
+
+- S2 `[ESB-044]`: `Actions\MemorialJournals\{MemorialJournals, DecideMemorialJournal,
+  DeleteMemorialJournal}` on `DocumentWrites` (lock `memorial-journal-write:{number}`),
+  `MemorialJournalWriteController`, `DecideMemorialJournalRequest`. Permissions
+  `memorial-journals.approve` / `.manage` (Super Admin only), audit actions
+  `memorial-journal.*`.
+- S3 `[ESB-045]`: `MemorialJournalDraft` / `MemorialJournalDraftLine` /
+  `MemorialJournalCarryOver` (each line's cost center + project by line id, never
+  serialized), `MemorialJournalSource::createJournal()` / `updateJournal()`,
+  `MemorialJournalForms` (create lock `memorial-journal-create:{userId}`),
+  `SaveMemorialJournalRequest`, `MemorialJournalFormController`, page
+  `memorial-journals/form.tsx` (totals + "differ by" hint, no block). `JournalLine` gained
+  `currencyId`.
+- S4 `[ESB-046]`: `attachImage()` (multipart `file`), `MemorialJournalAttachments`,
+  `AttachMemorialJournalImageRequest`, `MemorialJournalAttachmentController`
+  (`POST /memorial-journals/{number}/images`). `ForwardsAttachments::attachment()` (single
+  `file`); `AttachmentActions` gained `single`.
+- Show page: Edit / Authorize / Reject / Delete / image upload by permission and status;
+  index: "New memorial journal".
+
+**Tersisa / blocked**
+
+- `[!]` vendor: `form-upload` / `upload` (documented as a JSON row body, no file field;
+  `typeID` undocumented), export (as `[ESB-032]`), cost center / project pickers (no lookup).
+- Next: P15 (POS: Menu Category, Promotion).
+
+**Assumptions / TBD**
+
+- A line with both debit and credit is refused by the gateway (vendor silent) (`[ESB-045]`).
+- Rate > 0 (vendor "min 0"), at most 500 lines (gateway bound).
+- Reject reason required by the page only while Waiting For Approval; the server leaves it
+  to the ERP (`[ESB-044]`).
+- `asset-images` adds rather than replaces; jpg/jpeg/png, 2 MB, one per call (`[ESB-046]`).
+
+**Checks dijalankan (P14)**
+
+- `php artisan test` — **pass**, 1578 passed, 26 skipped (unchanged skips); 1604 tests, 8607
+  assertions. (The JSON reporter says "passed"; the shell exit code was 1, as in P12/P13 —
+  not investigated.)
+- `npm run test:ui` — pass, 45 files, 267 tests. `vp check`, `tsc --noEmit`, `npm run build`,
+  `pint --test` — pass. `phpstan` — the same 2 pre-existing errors in
+  `app/Services/EsbConnectionInspector.php` (file untouched).
+- Not run against a real ESB; not checked in a browser.
+
+## Update 2026-10-20 — POS: Menu Category + Promotion (`TODO-modules.md` P15, `[ESB-047]`–`[ESB-050]`, ADR-027)
+
+Working tree note: P14 was not yet committed when P15 started, so both phases' changes are
+in the working tree together.
+
+**Selesai** (test-first; RED = missing permissions / routes / classes, then missing pages)
+
+- Infrastructure: `ErrorClassifier` reads OMS field errors -- `EC0110`'s JSON object in
+  `message` (or the plain sentence, kept without a field) and `data` keyed by field
+  (`EsbFieldError::forField()`, `ErrorCode::OMS_VALIDATION`). ADR-027:
+  `EsbClient::getBareList()` accepts an opted-in GET whose documented success is a bare
+  JSON array. `EsbClient` body docblocks allow a list (OMS array bodies).
+- Menu category `[ESB-047]`/`[ESB-048]`: `MenuCategorySource` / `MenuCategoryClient`
+  (`findCategory()` reads the hinted page, then the others, `MAX_PAGES` 20),
+  `MenuCategoryMapper`, canonical `MenuCategory*`, `MenuCategoryWrites` (RecordWrites),
+  `ListMenuCategoriesRequest`, `SaveMenuCategoryRequest`, `MenuCategoryController`,
+  `MenuCategoryFormController` (refuses an update that drops a current detail or names
+  another category's), pages `menu-categories/{index,show,form}.tsx`.
+- Promotion `[ESB-049]`/`[ESB-050]`: `PromotionSource` / `PromotionClient`, `PromotionMapper`,
+  canonical `Promotion`, `PromotionPage` (gateway paging), `PromotionQuery`, `PromotionType`
+  (fields + rules per type), `PromotionDraft`, `PromotionWrites`, `ListPromotionsRequest`,
+  `CreatePromotionRequest`, `PromotionController`, `PromotionFormController`, pages
+  `promotions/{index,form}.tsx`.
+- Lookups: `menu-categories`, `menu-category-details`, `pos-menus` (FnB backend, paged by
+  the ESB, searched per page in the gateway). Component `LookupChips` (multi-pick).
+- Permissions `menu-categories.manage`, `promotions.manage` (Super Admin only); audit
+  `menu-category.*`, `promotion.*`. Sidebar group "POS".
+
+**Tersisa / blocked**
+
+- `[!]` business: menu source (Core vs OMS) before Menu S3 (§6.2); Notes (§6.4) not built.
+- `[!]` vendor: promotion update / deactivate; menu category fields absent from the list
+  (ESO aliases, image, theme option); lookups for ESB Order payment methods, visit
+  purposes, employee groups.
+- Next: P16 (UI-3 navigation + UI-4 dashboard).
+
+**Assumptions / TBD**
+
+- Promotion booleans sent as "Yes"/"No", `applyTo` as its label, `visitPurposeID` as
+  integers (`[ESB-050]`).
+- Menu category update omits fields the list does not return; a detail cannot be
+  removed from the gateway (`[ESB-048]`).
+- Promotion list's 401 (`code: 0`) is classified as unknown, not authentication
+  (ADR-027).
+- `CreatePromotionRequest` is one FormRequest choosing rules per type from
+  `PromotionType`, not five classes as TODO §6.5 first suggested.
+
+**Checks dijalankan (P15)**
+
+- `php artisan test` — **pass**, 1625 passed, 26 skipped (unchanged skips); 1651 tests, 8964
+  assertions. (JSON reporter "passed"; shell exit code 1, as in P12–P14 — not
+  investigated.)
+- `npm run test:ui` — pass, 48 files, 277 tests. `vp check`, `tsc --noEmit`, `npm run build`,
+  `pint --test` — pass. `phpstan` — only the 2 pre-existing errors in
+  `app/Services/EsbConnectionInspector.php` (4 new ones found during P15 were fixed).
+- Frontend page tests were written just before their pages (they failed on the missing
+  module), not run RED separately against a stub.
+- Not run against a real ESB / OMS; not checked in a browser.
+
+
+## Update 2026-10-21 — UI-3 navigation + UI-4 dashboard (`TODO-modules.md` P16)
+
+**Selesai**
+
+- Menu in one place: `resources/js/lib/navigation.ts` (`mainNavigation`,
+  `visibleNavigation`, `flattenNavigation`, `documentTargets`), used by the sidebar, the
+  command palette and the breadcrumbs. New "System" group (integration logs, endpoint
+  catalog, ESB connections, users); every group has an icon.
+- Sidebar groups (`nav-main.tsx`) remember open / closed in `localStorage`
+  (`nav-groups`, wrapped in try/catch) and always open when the current page — including
+  a detail / edit page — lives inside them.
+- Command palette (`components/command-palette.tsx`): Ctrl+K / ⌘K or the header button;
+  jumps to any page the person may open, or opens a typed document number in each module
+  that reads by number (12 targets, `esb.invoke`). Only one-segment numbers with a digit
+  (`[A-Za-z0-9][A-Za-z0-9._-]*`) are put in a URL. Built on the existing Radix Dialog with
+  its own combobox/listbox — no new dependency, no ADR.
+- Breadcrumbs (`lib/breadcrumbs.ts`, wired in `app-sidebar-header.tsx`): derived from the
+  URL and the menu for every page inside it (module → number → New / Edit / Import;
+  `temp` → "Proposed prices"). The static `.layout = { breadcrumbs }` blocks on 52 pages
+  were removed (now dead). Pages outside the menu keep their own (settings) or set them
+  with `setLayoutProps` (`imports/create.tsx`, trail from its `listUrl`).
+- Dashboard: deferred `pendingApprovals` prop (`App\Services\PendingApprovals`,
+  `Inertia::defer`, group `approvals`): one 1-row read per module with the documented
+  status 38 filter — disbursements, memorial journals, item journals, proposed prices —
+  only for modules the person approves and only with `esb.invoke`; a failing read gives
+  `count: null` ("Unknown"). `IntegrationMetrics::byFamily()` adds `lastOutcome` /
+  `lastCallAt` per family ("ESB connection status" card). Shortcuts card (New purchase
+  request / GTR / disbursement / memorial journal, integration logs, ESB connections),
+  gated by permission. Cards are `<section aria-labelledby>` regions.
+- Test setup: `matchMedia` stub in `resources/js/test/setup.ts` (sidebar in tests).
+
+**Tersisa**
+
+- Purchasing documents (PR/PO/PI/SP), GTR/GD/GR/ST are not in "Waiting for approval":
+  their lists take no status filter or document no waiting status (`[!]` vendor, §9
+  `/common/status/mapping`).
+- No grafik on the dashboard (none needed yet; use the `dataviz` skill when added).
+- Next: P17 (UI-5 responsive/a11y + UI-6 migration of old pages).
+
+**Known issues**
+
+- `phpstan` — still only the 2 pre-existing errors in
+  `app/Services/EsbConnectionInspector.php` (untouched).
+- A detail page's crumb shows the raw path segment, so id-routed pages (units, products,
+  categories) show the numeric id, not the name.
+
+**Assumptions / TBD**
+
+- "Waiting for approval" = status 38 only; New (1) documents that can also be authorized
+  are not counted.
+- Command palette does not check a number exists; the module's page answers 404.
+
+**Checks dijalankan (P16)**
+
+- `php artisan test` — pass, 1631 passed, 26 skipped (1657 tests, 9103 assertions).
+- `npm run test:ui` — pass, 53 files, 307 tests. `vp check`, `tsc --noEmit`,
+  `npm run build`, `pint --test` — pass. `phpstan` — 2 pre-existing errors only.
+- RED run first for all new PHP and UI tests (failed on missing props / modules).
+- Not checked in a browser; pending-approval counts not run against a real ESB.
+
+## Update 2026-10-21 — UI-5 responsive / accessibility + UI-6 page migration (`TODO-modules.md` P17)
+
+**Selesai**
+
+- `DataTable`: below 640px each row is a card (header `max-sm:sr-only`, cells show
+  `data-label` from the header or the new column `label`, explicit table roles).
+- Touch targets (`pointer-coarse:`): `Button` sizes ≥ 44px, `Input` 44px tall,
+  `ChipRemoveButton` (new, used by `FilterBar` and `LookupChips`) widens its hit area with a
+  pseudo-element.
+- `Heading` takes `level`; `PageHeader` renders `h1`. Global focus outline (`--foreground`,
+  not the light `--ring`, which is under 3:1 on white) for links / `[tabindex]` in
+  `resources/css/app.css`. Icon buttons in `app-header.tsx` named; Users role select named
+  per row.
+- Starter-kit palette colours replaced by tokens (`input-error`, `delete-user`, auth status
+  messages → `text-success`, `user-info`, `nav-footer`, `appearance-tabs`, `app-header`,
+  `auth-split-layout`).
+- `resources/js/test/accessibility-audit.test.tsx`: whole-frontend checks (icon buttons
+  named, every app page has `PageHeader`/`RecordForm`/`ReferenceData*`, no raw palette
+  colours outside `components/ui`, touch target classes).
+- Shared: `hooks/use-filter-form.ts` (fields from the applied filters, chips, remove,
+  reset, `keep`), `components/select-filter-field.tsx` + `active-status-field.tsx`,
+  `lib/pagination.ts` (`fromPaginator` for Laravel paginators).
+- UI-6 list pages rebuilt on PageHeader / FilterBar / DataTable / ListPagination /
+  StatusBadge: purchase requests, purchase invoices, simple purchases, products, menus,
+  master menus, bills of material, purposes, document templates, document template imports,
+  sales pushes, integration logs, endpoints, users. Show / form / import pages of these
+  modules, `esb-connections` and `dashboard` moved to `PageHeader`
+  (`pages/shared-list-pages.test.tsx` pins the list pages).
+- Test setup: jsdom stubs for `hasPointerCapture` / `scrollIntoView` (Radix Select).
+
+**Tersisa**
+
+- Show pages of PR / PI / SP keep their page-local decision and delete controls (not
+  `ApprovalActions`); their line tables are still `ui/table` (no card layout).
+- `DetailLayout` tabs and the structured unconfirmed-write banner (UI-2 `[~]`) unchanged.
+- Not checked in a real browser, on a touch device or with a screen reader.
+
+**Known issues**
+
+- `phpstan` — still only the 2 pre-existing errors in `app/Services/EsbConnectionInspector.php`.
+
+**Assumptions / TBD**
+
+- Visible changes accepted as "no behaviour change": secondary filters moved behind "More
+  filters" with chips; list rows click through to the detail; `Active`/`Inactive` and ERP
+  statuses coloured by `StatusBadge`. Gateway-owned states (sales push, log outcome) keep
+  their own `Badge` variants.
+
+**Checks dijalankan (P17)**
+
+- `php artisan test` — pass, 1631 passed, 26 skipped (1657 tests, 9103 assertions).
+- `npm run test:ui` — pass, 60 files, 346 tests. `vp check`, `tsc --noEmit`,
+  `npm run build`, `pint --test` — pass. `phpstan` — 2 pre-existing errors only.
+- RED first for the new component / hook / audit / page tests.
+
+## Update 2026-10-22 — Unblocked leftovers: unconfirmed-write banner, menu extras, npm audit (`TODO-modules.md` P18)
+
+**Selesai**
+
+- Checklist tidy in `TODO-modules.md`: §1 "UI-1 dan UI-2 dulu" and §2.7 `coa.manage`
+  ticked (both already true in code); a merged §9 line split.
+- `UnconfirmedWriteNotice` wired. `HandlesDocumentWrites::flashUnconfirmedWrite()` flashes
+  `unconfirmedWrite` (`action`, `reference`) instead of a warning toast when an unconfirmed
+  decision / transition / upload lands on the detail page;
+  `components/unconfirmed-write-banner.tsx` renders it in both app layouts (dismissible,
+  reappears for a newer reference). Unconfirmed delete and consuming authorize (temp
+  pricelist) still toast — they land on the list. Module feature tests now assert
+  `inertia.flash_data.unconfirmedWrite.reference`.
+- Menu extras read-only: `GET /master-menus/extras` (`MasterMenuController::extras`,
+  `pages/master-menus/extras.tsx`, nav "Menu extras" under POS). Flattens the extras of one
+  Get Menu page (`[ESB-013]`); paging and the `menuCode` filter are the menu list's.
+- npm, lockfile only: `concurrently` 10.0.6 (`shell-quote` 1.12.0), `vite` 8.3.4,
+  `source-map-js` 1.2.2. Vite 8.3.5 skipped on purpose (published that day; used
+  `npm update vite --before=2026-10-09`).
+
+**Tersisa**
+
+- `tinypool` critical advisory via `vite-plus` 0.3.0 — fix needs `vite-plus` 1.x (major,
+  ADR-024 revision). `@babel/core` 8.0.0-rc.4 (low) via `@rolldown/plugin-babel`.
+- Purchase Request decisions still use a toast for unconfirmed writes (not migrated to
+  `DocumentWrites`; audit-shape decision pending, `TODO-modules.md` §1).
+- `DetailLayout` tabs (needs `@radix-ui/react-tabs` ADR). Playwright smoke test (optional).
+
+**Known issues**
+
+- Blocked (local environment): npm 10.8.2 (Node 20.19) crashes with
+  `Cannot read properties of null (reading 'edgesOut')` in arborist `#loadPeerSet` on
+  `npm install <pkg>` and `npm audit fix`; `npm update` works. Upgrading local Node to 22
+  is the expected fix — not done (developer machine).
+- `phpstan` — pre-existing errors only (see P17 entry).
+
+**Assumptions / TBD**
+
+- Banner wording is the component's ("check the status below"), so it is only flashed for
+  redirects to a detail page.
+- Menu extras page is paged by menu, not by extra: there is no extra endpoint (`[!]` in
+  `TODO-modules.md` §6.3).
+
+**Checks dijalankan (P18)**
+
+- RED first: `HandlesDocumentWritesTest` (3 new, 1 changed), `MasterMenuExtrasTest`,
+  `unconfirmed-write-banner.test.tsx`, `master-menus/extras.test.tsx`.
+- `npm run test:ui` — pass, 62 files, 353 tests (after the vite 8.3.4 update).
+  `vp check`, `tsc --noEmit`, `npm run build` — pass.
+- `php artisan test` — pass, 1639 passed, 26 skipped (1665 tests, 9160 assertions). `pint --test` — pass. `phpstan` — 2 pre-existing errors only (`EsbConnectionInspector.php`).
+
+## Update 2026-10-22 — vite-plus 1.1.0 on Node 22 (ADR-028), Radix Tabs + `DetailTabs` (ADR-029) (`TODO-modules.md` P19)
+
+**Selesai**
+
+- New ADRs: **ADR-028** (vite-plus 1.1.0, `vite` aliased to
+  `@voidzero-dev/vite-plus-core@1.1.0` as direct dependency and in `overrides`, `vitest`
+  overridden to 5.0.3, Node `^22.18` minimum; amends ADR-024) and **ADR-029**
+  (`@radix-ui/react-tabs` ^1.1.22 for detail page sections).
+- Local Node is 22.23.4 / npm 10.9.9 (developer upgrade). `tinypool` 2.2.0, `oxfmt`
+  0.72.0, `@babel/core` 8.0.7: npm audit critical / high / low are gone.
+- `components/ui/tabs.tsx`, `components/detail-tabs.tsx` (`DetailTabs`: named tab list,
+  optional count per tab). `pages/master-menus/show.tsx`: General above, Prices / Package /
+  Extras / Related menus as tabs. Same for `bills-of-material/show` (Materials / Other
+  costs / Replacements) and `suppliers/show` (Contacts / Bank accounts / Supplier product
+  codes).
+- `jsdom` 30.1.2 and `@testing-library/jest-dom` 7.0.1 (exact pins; noted in ADR-028).
+- Lockfile: only `vite`, `vite-plus`, `@radix-ui/react-tabs` (+ its six exact-pinned
+  internals) and transitive fixes changed among direct deps; normalized by npm 10.9.
+
+**Tersisa**
+
+- 5 moderate advisories: Vitest < 5.0.5 servers misapply `server.fs.deny` (UI / browser
+  mode only — not used). Fix is vite-plus 1.3.0; raise it after 2026-10-30.
+- Document detail pages (PO, inventory, …) stay without tabs: one line table each.
+
+**Known issues**
+
+- Fixed in this phase: `config/inertia.php` hard-coded SSR on, so a local
+  `bootstrap/ssr/` (from `npm run build:ssr`) made every Inertia render POST to the SSR
+  server inside PHPUnit (62 failures). Now `env('INERTIA_SSR_ENABLED', true)`, `false` in
+  `phpunit.xml`, pinned by `tests/Feature/Hardening/InertiaSsrInTestsTest.php`.
+- npm 10.9 still crashes (`edgesOut`, arborist `#loadPeerSet`) when an install must
+  re-resolve the vite-plus peer set; ADR-028 records the `npx npm@11.21.0 … --before=`
+  workaround. Plain `npm install` on the committed lockfile works (CI path).
+- `phpstan` — pre-existing errors only.
+
+**Assumptions / TBD**
+
+- Two-week minimum age for new toolchain releases (why 1.1.0, not 1.3.0; tabs 1.1.22, not
+  1.2.x) — recorded in ADR-028 / ADR-029.
+- The selected tab is not kept in the URL (ADR-029).
+
+**Checks dijalankan (P19)**
+
+- RED first: `detail-tabs.test.tsx`, `pages/master-menus/show.test.tsx`,
+  `pages/bills-of-material/show.test.tsx`, `pages/suppliers/show.test.tsx`,
+  `InertiaSsrInTestsTest`.
+- `npm run test:ui` — pass, 66 files, 369 tests (Vitest 5.0.3, jsdom 30.1.2). `vp check`, `tsc --noEmit`,
+  `npm run build`, `npm run build:ssr` — pass. `npm install` (npm 10.9.9) on the final
+  lockfile — pass, tree unchanged. `npm audit` — 5 moderate, 0 critical/high/low.
+- `php artisan test` — pass, 1641 passed, 26 skipped (1667 tests, 9163 assertions). `pint --test` — pass. `phpstan` — 2 pre-existing errors only.
+
+## Update 2026-10-22 — Business decisions + purchase request on `DocumentWrites` (`TODO-modules.md` P20)
+
+**Selesai**
+
+- Business answers to `TODO-modules.md` §9 recorded (2026-10-22): menus Core + OMS in one
+  module (tabs), every export as gateway CSV, supplier bank account shown in full,
+  `.approve` / `.manage` Super Admin only, GTR finish/reopen `.manage`, maker may
+  authorize, Notes not needed, UI English, neutral palette. The blocked `[!]` items they
+  unblock became `[ ]` tasks.
+- ESB questions for the vendor: `docs/esb/open-questions.md` (priority A/B/C).
+- `PurchaseRequests\PurchaseRequestDocument::approvable()`; `DecidePurchaseRequest` and
+  `DeletePurchaseRequest` go through `DocumentWrites` (lock key unchanged,
+  `purchase-request-write:{number}`). `PurchaseRequestLocks::document()` delegates to it.
+- Audit: an unconfirmed authorize/reject is now `purchase-request.write-unconfirmed` with
+  `operation`; `AuditAction::PurchaseRequestDecisionUnconfirmed` removed. Old rows keep
+  `purchase-request.decision-unconfirmed` / `decision` (noted on the enum case and in
+  docs/05, docs/06).
+- Controllers use `HandlesDocumentWrites` (`decisionOutcome`, `deleteOutcome`): an
+  unconfirmed decision shows the banner, not a toast.
+- `pages/purchase-requests/show.tsx` uses `ApprovalActions` (no reject reason — the ESB
+  takes none).
+
+**Tersisa**
+
+- PI / SP detail pages still have local approval controls.
+- Tasks from the decisions: menu module merge (ADR first), gateway CSV export (ADR),
+  unmask bank accounts (supplier, disbursement), English UI string sweep.
+
+**Known issues**
+
+- `app:check-production-readiness` fails locally: an `esb_connections` row points the
+  `core` connection at production ESB while `APP_ENV=local`. Environment, not code.
+- `phpstan` — 2 pre-existing errors only (`EsbConnectionInspector`).
+
+**Checks dijalankan (P20)**
+
+- RED first: `PurchaseRequestDecisionTest` (2 unconfirmed tests), `pages/purchase-requests/show.test.tsx`.
+- `vp check`, `tsc --noEmit`, `npm run test:ui` — pass, 67 files, 374 tests.
+- `php artisan test` — pass, 1641 passed, 26 skipped. `pint` — pass.
+
+## Update 2026-10-22 — Unblocked work: P21–P25 (`TODO-modules.md` P21–P25, ADR-030, ADR-031)
+
+**Selesai**
+
+- P21: supplier and disbursement bank account numbers shown in full (business decision):
+  `SupplierBankAccount::$accountNumber`, `Disbursement::$bankAccountNumber`; masking removed
+  from `ReadsEsbValues` (`accountNumber()`). The integration log stores no bodies.
+- P22: purchase invoice and simple purchase detail pages use `ApprovalActions` (SP reject
+  reason required, max 500; PI none). Page tests added.
+- P23: UI string sweep — nothing to change (already English; `StatusBadge` Indonesian
+  keywords match ERP status text on purpose).
+- P24 (ADR-030): one menu list `/menus?source=core|oms`; `ListMenusRequest` validates per
+  source; `/master-menus` → 301 to the OMS tab; OMS detail / extras keep their URLs and the
+  detail names its own breadcrumb; nav entry "Master menu" removed;
+  `pages/master-menus/index.tsx` deleted.
+- P25 (ADR-031): CSV exports built by the gateway for 12 lists — `GET /<list>/export`
+  (`ListExportController`, `App\Exports\CsvExport` / `ListColumns` / `PagedQuery`), audit
+  `list.exported`, `ExportCsvButton` on each list page. Reads every page before writing,
+  stops on the row count, max 5,000 rows; ledger and COA read once.
+- OMS create/update menu checked against the vendor's `api_data.json`: body documented,
+  but required fields cannot be read back from `get-menu` → stays `[!]`; questions added
+  to `docs/esb/open-questions.md` (5.1, 5.1a).
+
+**Tersisa**
+
+- Everything else open in `TODO-modules.md` waits for ESB (`docs/esb/open-questions.md`)
+  or is optional (Playwright smoke test, dashboard chart, manual device / screen-reader
+  checks).
+- vite-plus 1.3.0 after 2026-10-30 (moderate advisory).
+
+**Known issues**
+
+- Local `app:check-production-readiness` fails: an `esb_connections` row points `core` at
+  production ESB with `APP_ENV=local`. Environment, not code.
+- `phpstan` — 2 pre-existing errors only (`EsbConnectionInspector`).
+
+**Assumptions / TBD**
+
+- Disbursement bank account = the payee supplier's account, so the supplier decision
+  applies to it too.
+- Exports use the gateway's canonical fields, not the ERP's Excel layout; not re-importable.
+
+**Checks dijalankan (P21–P25)**
+
+- RED first for each phase (mapper/feature tests P21; page tests P22; `MenuTest` /
+  `MasterMenuTest` / `menus/index.test.tsx` P24; `CsvExportTest`, `ListExportTest`,
+  `export-csv-button.test.tsx`, `list-exports.test.tsx` P25). Four older tests that pinned
+  "no /export route" were updated for ADR-031.
+- `php artisan test` — pass, 1670 passed, 26 skipped (1696). `vp test` — pass, 72 files,
+  399 tests. `vp check`, `tsc --noEmit`, `pint --test` — pass. `phpstan` — 2 pre-existing.

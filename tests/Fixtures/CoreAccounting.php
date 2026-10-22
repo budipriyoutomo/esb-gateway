@@ -250,6 +250,21 @@ final class CoreAccounting
     }
 
     /**
+     * A memorial journal write's answer ([ESB-044]–[ESB-046]).
+     *
+     * @return array<string, mixed>
+     */
+    public static function mjWrite(string $code = 'EC03100000', string $message = 'OK', string $status = 'ok', mixed $result = null): array
+    {
+        return [
+            ...self::envelope('/accounting/memorial-journal', $result),
+            'status' => $status,
+            'code' => $code,
+            'message' => $message,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function failure(string $code = 'EC03100003', string $message = 'Validation Error'): array

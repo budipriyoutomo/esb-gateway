@@ -231,7 +231,7 @@ class PurchaseInvoiceDecisionTest extends TestCase
 
         $this->decide($this->approver(), 'authorize')
             ->assertRedirect(route('purchase-invoices.show', self::NUMBER))
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         $this->assertSame(1, $attempts);
 
@@ -248,7 +248,7 @@ class PurchaseInvoiceDecisionTest extends TestCase
         Http::fake(['*' => Http::response($this->envelope('EC03100032', 'Unknown Error', 'fail'), 500)]);
 
         $this->decide($this->approver(), 'reject')
-            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+            ->assertSessionHas('inertia.flash_data.unconfirmedWrite.reference');
 
         Http::assertSentCount(1);
         $this->assertSame('purchase-invoice.write-unconfirmed', AuditLog::query()->sole()->action);
