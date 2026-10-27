@@ -59,7 +59,8 @@ export type InventoryParty = {
 export type InventoryDocumentSummary = {
     provider: string;
     kind: InventoryKind['value'];
-    number: string;
+    /** Null on a "Pending" goods delivery / receipt: a reference awaiting its document. */
+    number: string | null;
     date: string | null;
     statusId: number | null;
     statusName: string | null;
@@ -96,7 +97,11 @@ export type InventoryLinkedDocument = {
     statusName: string | null;
 };
 
-export type InventoryDocument = Omit<InventoryDocumentSummary, 'createdBy'> & {
+export type InventoryDocument = Omit<
+    InventoryDocumentSummary,
+    'number' | 'createdBy'
+> & {
+    number: string;
     referenceDate: string | null;
     costCenter: string | null;
     project: string | null;

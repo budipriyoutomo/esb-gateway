@@ -5,14 +5,16 @@ namespace App\Domain\Canonical;
 use JsonSerializable;
 
 /**
- * One row of an inventory document list ([ESB-033], ADR-026).
+ * One row of an inventory document list ([ESB-033], ADR-026). The number
+ * is null on a "Pending" goods delivery / receipt row: a reference awaiting
+ * its document.
  */
 readonly class InventoryDocumentSummary implements JsonSerializable
 {
     public function __construct(
         public string $provider,
         public string $kind,
-        public string $number,
+        public ?string $number,
         public ?string $date,
         public ?int $statusId,
         public ?string $statusName,

@@ -43,15 +43,26 @@ class InventoryDocumentMapper
     }
 
     /**
-     * A list row, or null when it carries no number.
+     * A list row, or null when it carries neither a number nor a reference.
+     * The goods delivery and receipt lists include "Pending" rows (status 33):
+     * references not yet delivered / received, which have no number of their
+     * own but count toward the vendor's pagination.
      *
      * @param  array<mixed>  $row
      */
     public function summaryFromRow(InventoryKind $kind, array $row): ?InventoryDocumentSummary
     {
         $number = $this->nullableString($row[$this->numberField($kind)] ?? null);
+        $reference = $this->nullableString(match ($kind) {
+            InventoryKind::GoodsTransferRequests => $row['purchaseRequestNum'] ?? null,
+            InventoryKind::GoodsDeliveries => $row['referenceNumber'] ?? null,
+            InventoryKind::GoodsReceipts => $row['refNum'] ?? null,
+            default => null,
+        });
 
-        if ($number === null) {
+        $pendingKinds = [InventoryKind::GoodsDeliveries, InventoryKind::GoodsReceipts];
+
+        if ($number === null && ($reference === null || ! in_array($kind, $pendingKinds, true))) {
             return null;
         }
 
@@ -88,12 +99,7 @@ class InventoryDocumentMapper
             from: $from,
             to: $to,
             transactionType: $this->nullableString($row['transType'] ?? null),
-            reference: $this->nullableString(match ($kind) {
-                InventoryKind::GoodsTransferRequests => $row['purchaseRequestNum'] ?? null,
-                InventoryKind::GoodsDeliveries => $row['referenceNumber'] ?? null,
-                InventoryKind::GoodsReceipts => $row['refNum'] ?? null,
-                default => null,
-            }),
+            reference: $reference,
             notes: $this->nullableString($row['additionalInfo'] ?? null),
             createdBy: $this->nullableString($row['createdBy'] ?? null),
         );

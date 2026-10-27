@@ -226,9 +226,30 @@ class InventoryDocumentMapperTest extends TestCase
     }
 
     #[Test]
-    public function rows_and_details_without_a_number_are_dropped(): void
+    public function pending_rows_are_kept_without_a_number_by_their_reference(): void
     {
-        $this->assertNull($this->mapper()->summaryFromRow(InventoryKind::GoodsDeliveries, CoreInventory::gdRow(['goodsDeliveryNum' => ''])));
+        $delivery = $this->mapper()->summaryFromRow(InventoryKind::GoodsDeliveries, CoreInventory::gdRow([
+            'goodsDeliveryNum' => null, 'statusID' => 33, 'statusName' => 'Pending',
+        ]));
+        $receipt = $this->mapper()->summaryFromRow(InventoryKind::GoodsReceipts, CoreInventory::grRow([
+            'goodsReceiptNum' => null, 'statusID' => 33, 'statusName' => 'Pending',
+        ]));
+
+        $this->assertNotNull($delivery);
+        $this->assertNull($delivery->number);
+        $this->assertSame(CoreInventory::GTR, $delivery->reference);
+        $this->assertSame(33, $delivery->statusId);
+        $this->assertNotNull($receipt);
+        $this->assertNull($receipt->number);
+        $this->assertSame('PO202603200001', $receipt->reference);
+        $this->assertSame('CV Maju Jaya', $receipt->from?->name);
+    }
+
+    #[Test]
+    public function rows_without_a_number_or_reference_and_details_without_a_number_are_dropped(): void
+    {
+        $this->assertNull($this->mapper()->summaryFromRow(InventoryKind::GoodsDeliveries, CoreInventory::gdRow(['goodsDeliveryNum' => '', 'referenceNumber' => ''])));
+        $this->assertNull($this->mapper()->summaryFromRow(InventoryKind::ItemJournals, CoreInventory::ijRow(['itemJournalNum' => null])));
         $this->assertNull($this->mapper()->fromDetail(InventoryKind::SimpleTransfers, ['simpleTransferNum' => null]));
     }
 }

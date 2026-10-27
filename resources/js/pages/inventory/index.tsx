@@ -62,14 +62,18 @@ function columnsFor(
             key: 'number',
             header: 'Number',
             className: 'font-mono text-xs',
-            cell: (document) => (
-                <Link
-                    href={showUrl(kind, document.number)}
-                    className="underline-offset-4 hover:underline"
-                >
-                    {document.number}
-                </Link>
-            ),
+            // A pending row has no document yet, so nothing to open.
+            cell: (document) =>
+                document.number === null ? (
+                    <span className="text-muted-foreground">—</span>
+                ) : (
+                    <Link
+                        href={showUrl(kind, document.number)}
+                        className="underline-offset-4 hover:underline"
+                    >
+                        {document.number}
+                    </Link>
+                ),
         },
         {
             key: 'date',
@@ -326,8 +330,15 @@ export default function InventoryIndex({
                     caption={kind.pluralLabel}
                     columns={columnsFor(kind.value)}
                     rows={documents}
-                    rowKey={(document) => document.number}
-                    rowHref={(document) => showUrl(kind.value, document.number)}
+                    rowKey={(document, index) =>
+                        document.number ??
+                        `pending-${document.reference}-${index}`
+                    }
+                    rowHref={(document) =>
+                        document.number === null
+                            ? null
+                            : showUrl(kind.value, document.number)
+                    }
                     empty={`No ${kind.pluralLabel.toLowerCase()} matched this filter. Try a wider date range or reset the filters.`}
                 />
 

@@ -49,8 +49,9 @@ enum InventoryKind: string
 
         return match ($this) {
             self::GoodsTransferRequests => $common + [6 => 'Delivering', 8 => 'Finished'],
-            self::GoodsDeliveries => $common + [8 => 'Finished', 27 => 'Released'],
-            self::GoodsReceipts => $common + [4 => 'Receiving', 5 => 'Received', 8 => 'Finished', 11 => 'Invoice', 25 => 'Closed'],
+            // 33 "Pending": a reference not yet delivered / received (no number).
+            self::GoodsDeliveries => $common + [8 => 'Finished', 27 => 'Released', 33 => 'Pending'],
+            self::GoodsReceipts => $common + [4 => 'Receiving', 5 => 'Received', 8 => 'Finished', 11 => 'Invoice', 25 => 'Closed', 33 => 'Pending'],
             self::ItemJournals => $common + [38 => 'Waiting For Approval', 53 => 'Approved'],
             self::SimpleTransfers => $common,
         };

@@ -80,12 +80,12 @@ const row: InventoryDocumentSummary = {
     createdBy: null,
 };
 
-function renderPage(kind = deliveries, filters = {}) {
+function renderPage(kind = deliveries, filters = {}, documents = [row]) {
     const get = vi.spyOn(router, 'get').mockImplementation(() => {});
     render(
         <InventoryIndex
             kind={kind}
-            documents={[row]}
+            documents={documents}
             pagination={{
                 page: 1,
                 limit: 20,
@@ -115,6 +115,28 @@ describe('Inventory document list', () => {
         expect(within(table).getByText('PT Pelanggan')).toBeVisible();
         expect(within(table).getByText('21 Mar 2026')).toBeVisible();
         expect(within(table).getByText('PS-1')).toBeVisible();
+    });
+
+    it('lists a pending row by its reference, without a link to a detail', () => {
+        renderPage(deliveries, {}, [
+            {
+                ...row,
+                number: null,
+                statusId: 33,
+                statusName: 'Pending',
+                reference: 'GTR-7',
+            },
+            row,
+        ]);
+
+        const table = screen.getByRole('table', { name: 'Goods deliveries' });
+        const pending = within(table).getByText('GTR-7').closest('tr');
+        expect(pending).not.toBeNull();
+        expect(within(pending!).queryByRole('link')).toBeNull();
+        expect(within(pending!).getByText('Pending')).toBeVisible();
+        expect(
+            within(table).getByRole('link', { name: 'GD202603210001' }),
+        ).toBeVisible();
     });
 
     it('searches by number and filters by the kind’s own statuses', async () => {
