@@ -10,6 +10,9 @@ use App\Http\Controllers\Accounting\MemorialJournalController;
 use App\Http\Controllers\Accounting\MemorialJournalFormController;
 use App\Http\Controllers\Accounting\MemorialJournalWriteController;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
+use App\Http\Controllers\ClosingRecaps\ClosingMappingController;
+use App\Http\Controllers\ClosingRecaps\ClosingRecapController;
+use App\Http\Controllers\ClosingRecaps\ClosingRecapProcessController;
 use App\Http\Controllers\CoaAccounts\CoaAccountController;
 use App\Http\Controllers\CoaAccounts\CoaAccountWriteController;
 use App\Http\Controllers\Dashboard\DashboardController;
@@ -76,6 +79,8 @@ use App\Http\Controllers\Units\UnitOfMeasureController;
 use App\Http\Controllers\Units\UnitWriteController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
+use App\Models\ClosingPurposeMapping;
+use App\Models\ClosingRecapItem;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -837,6 +842,58 @@ Route::middleware('auth')->group(function () {
             'can:'.Permission::RetrySalesPushes->value,
         ])
         ->name('sales-pushes.retry');
+
+    // Closing recaps sync-api Maharasa sent through /api/v1/closing-totals,
+    // and how they meet the ERP (ADR-032). Read and written in the gateway's
+    // own tables; the pickers on the mapping pages call /lookups.
+    Route::get('closing-recaps', [ClosingRecapController::class, 'index'])
+        ->name('closing-recaps.index');
+    Route::get('closing-recaps/{closingRecap}', [ClosingRecapController::class, 'show'])
+        ->middleware('can:'.Permission::ViewClosingRecaps->value)
+        ->name('closing-recaps.show');
+
+    // Writing a recap's item journals to the ERP (ADR-032, P28): these reach
+    // the ESB, so they share its per-user budget.
+    Route::middleware([
+        'throttle:esb',
+        'can:'.Permission::InvokeEsbOperations->value,
+        'can:'.Permission::ProcessClosingRecaps->value,
+    ])->controller(ClosingRecapProcessController::class)->group(function () {
+        Route::post('closing-recaps/{closingRecap}/prepare', 'prepare')->name('closing-recaps.prepare');
+        Route::post('closing-recaps/{closingRecap}/send', 'send')->name('closing-recaps.send');
+        Route::post('closing-recaps/{closingRecap}/sales/prepare', 'prepareSales')->name('closing-recaps.sales.prepare');
+        Route::post('closing-recaps/{closingRecap}/sales/send', 'sendSales')->name('closing-recaps.sales.send');
+        Route::post('closing-item-journals/{closingItemJournal}/resolve', 'resolve')->name('closing-item-journals.resolve');
+    });
+
+    Route::prefix('closing-mappings')
+        ->middleware('can:'.Permission::ViewClosingRecaps->value)
+        ->name('closing-mappings.')
+        ->controller(ClosingMappingController::class)
+        ->group(function () {
+            Route::get('outlets', 'outlets')->name('outlets');
+            Route::put('outlets/{outletCode}', 'updateOutlet')
+                ->where('outletCode', '[A-Za-z0-9._-]{1,20}')
+                ->name('outlets.update');
+            Route::delete('outlets/{outletCode}', 'destroyOutlet')
+                ->where('outletCode', '[A-Za-z0-9._-]{1,20}')
+                ->name('outlets.destroy');
+
+            Route::get('items', 'items')->name('items');
+            Route::put('items/{source}/{key}', 'updateItem')
+                ->whereIn('source', ClosingRecapItem::SOURCES)
+                ->where('key', '[^/]{1,50}')
+                ->name('items.update');
+            Route::delete('items/{source}/{key}', 'destroyItem')
+                ->whereIn('source', ClosingRecapItem::SOURCES)
+                ->where('key', '[^/]{1,50}')
+                ->name('items.destroy');
+
+            Route::get('purposes', 'purposes')->name('purposes');
+            Route::put('purposes/{kind}', 'updatePurpose')
+                ->whereIn('kind', array_keys(ClosingPurposeMapping::KINDS))
+                ->name('purposes.update');
+        });
 
     // Read-only: the catalog mirrors docs/esb/, so it has no write actions.
     Route::get('endpoints', [EndpointCatalogController::class, 'index'])

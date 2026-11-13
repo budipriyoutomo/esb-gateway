@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
+use Tests\Fixtures\CoreBom;
 use Tests\Fixtures\CoreLookup;
 use Tests\Fixtures\OmsGetMenu;
 use Tests\Fixtures\OmsMenuCategory;
@@ -245,6 +246,28 @@ class LookupTest extends TestCase
             ->assertJsonPath('hasMore', false);
 
         $this->assertSame(['purposeName' => 'waste', 'flagActive' => '1', 'page' => '1', 'limit' => '20'], $sent);
+    }
+
+    #[Test]
+    public function active_bills_of_material_are_searched_by_name_in_the_erp(): void // ADR-032
+    {
+        $sent = null;
+        Http::fake(function (Request $request) use (&$sent) {
+            $sent = self::sentQuery($request);
+
+            return Http::response(CoreBom::listResponse([CoreBom::row()], count: 21));
+        });
+
+        $this->lookup('bills-of-material', ['search' => 'nasi'])
+            ->assertOk()
+            ->assertJsonPath('options.0.value', '412')
+            ->assertJsonPath('options.0.label', 'Nasi Goreng Spesial')
+            ->assertJsonPath('options.0.code', 'BOM-NG01')
+            ->assertJsonPath('options.0.meta.productName', 'Nasi Goreng Spesial')
+            ->assertJsonPath('options.0.meta.uomName', 'Porsi')
+            ->assertJsonPath('hasMore', true);
+
+        $this->assertSame(['bomName' => 'nasi', 'flagActive' => '1', 'page' => '1', 'limit' => '20'], $sent);
     }
 
     // ------------------------------------------------------------- OMS kinds

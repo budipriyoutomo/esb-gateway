@@ -17,12 +17,19 @@ class AuthenticateApiClient
 {
     public const ATTRIBUTE = 'apiClient';
 
-    public function handle(Request $request, Closure $next): Response
+    /**
+     * @param  string|null  $scope  What the route needs (ApiClient::SCOPES), e.g. `api-client:closing-totals`.
+     */
+    public function handle(Request $request, Closure $next, ?string $scope = null): Response
     {
         $client = ApiClient::findActiveByToken((string) $request->bearerToken());
 
         if ($client === null) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        if ($scope !== null && ! $client->allows($scope)) {
+            return response()->json(['message' => 'This API client may not call this endpoint.'], 403);
         }
 
         $client->markUsed();

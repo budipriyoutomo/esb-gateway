@@ -165,6 +165,28 @@ dikirim saat `update-menu` akan dihapus.
 - Apakah ada endpoint list untuk payment method ESB Order, visit purpose, employee group, dan
   BIN (saat ini diketik manual)?
 
+## 6. Purchase — laporan PR Outstanding
+
+Diamati di staging (2026-10-28), mohon dikonfirmasi:
+
+**6.1 [B] `POST /purchase/request-monitoring`.**
+- `sumQty` kami baca sebagai **sisa qty PR yang belum dibuatkan PO** (10 dari 11 item PR
+  yang sebagian sudah di-PO: `sumQty = qty PR − qty PO`; satu-satunya selisih adalah PO
+  gabungan beberapa PR). Benar?
+- Respons memakai bentuk terpaginasi, tetapi `page`/`limit` diabaikan dan semua baris
+  dikembalikan (`page: 0`, `limit: 0`, 1668 baris untuk 10 branch). Apakah ada batas jumlah
+  baris?
+- `requestProcessID`: 1 = "- ALL -", 2 = Purchase, 3 = Transfer. Apa arti "- ALL -" —
+  item yang boleh diproses sebagai PO maupun transfer?
+
+**6.2 [B] `GET /purchase/purchase-order`.**
+- Status yang terlihat: 3 Authorized, 4 Receiving, 8 Finished, 25 Closed. Apakah ada status
+  lain untuk PO yang sudah di-authorize?
+- `purchaseRequestNums` berisi nomor PR dipisah koma. Untuk PO gabungan, apakah ada cara
+  mengetahui baris PO berasal dari PR yang mana?
+- `purchaseDetails[].detailQty` (qty diterima) bertambah saat GR di-authorize (konfirmasi
+  bisnis 2026-10-28).
+
 ---
 
 Terima kasih. Kontak teknis: Budi Priyo Utomo.

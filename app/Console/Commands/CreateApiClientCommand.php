@@ -14,7 +14,8 @@ use Illuminate\Console\Command;
 class CreateApiClientCommand extends Command
 {
     protected $signature = 'api-client:create
-        {name : A unique name for the client, e.g. "pos-rxt"}';
+        {name : A unique name for the client, e.g. "pos-rxt"}
+        {--scope=* : What it may call: sales-data (default) or closing-totals}';
 
     protected $description = 'Issue an API token to a POS or other client';
 
@@ -34,15 +35,36 @@ class CreateApiClientCommand extends Command
             return self::FAILURE;
         }
 
-        [$client, $token] = ApiClient::issue($name);
+        $scopes = array_values(array_filter(
+            array_map(fn (mixed $scope): string => trim((string) $scope), (array) $this->option('scope')),
+            fn (string $scope): bool => $scope !== '',
+        ));
+        $scopes = $scopes === [] ? [ApiClient::SCOPE_SALES_DATA] : $scopes;
+        $unknown = array_diff($scopes, ApiClient::SCOPES);
+
+        if ($unknown !== []) {
+            $this->error(sprintf(
+                'Unknown scope "%s". Use one of: %s.',
+                implode('", "', $unknown),
+                implode(', ', ApiClient::SCOPES),
+            ));
+
+            return self::FAILURE;
+        }
+
+        [$client, $token] = ApiClient::issue($name, $scopes);
 
         AuditLog::record(
             action: AuditAction::ApiClientIssued,
             auditable: $client,
-            metadata: ['name' => $client->name],
+            metadata: ['name' => $client->name, 'scopes' => $client->scopes()],
         );
 
-        $this->info(sprintf('Issued a token to %s. It is shown once; store it in the client now:', $client->name));
+        $this->info(sprintf(
+            'Issued a token to %s (scopes: %s). It is shown once; store it in the client now:',
+            $client->name,
+            implode(', ', $client->scopes()),
+        ));
         $this->line($token);
 
         return self::SUCCESS;

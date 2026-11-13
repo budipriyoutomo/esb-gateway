@@ -143,6 +143,7 @@ ADR-013 — this table is metadata/registry only, never a place credentials are 
 | id | |
 | name | 100 chars, unique. Given to `api-client:create`. |
 | token_hash | SHA-256 of the token, unique. The token itself is never stored. |
+| scopes | JSON list: `sales-data` and/or `closing-totals` (ADR-032). Null for clients issued before scopes existed, read as `sales-data`. |
 | is_active | `api-client:revoke` sets it false. Rows are kept so history still names them. |
 | last_used_at | Written at most once a minute per client. |
 | created_at / updated_at | |
@@ -169,6 +170,96 @@ ADR-013 — this table is metadata/registry only, never a place credentials are 
 Indexed on `(sales_num, id)`, `(status, created_at)`, and `(branch_code, created_at)`.
 
 Retention for this table, and especially for `payload`, is `TBD`.
+
+### closing_submissions / closing_recaps / closing_recap_items
+
+**Implemented** (ADR-032, receiving only). Closing recaps sync-api Maharasa sent to
+`POST /api/v1/closing-totals`, held before anything reaches the ESB.
+
+`closing_submissions` stores every accepted request:
+
+| Column | Notes |
+| --- | --- |
+| public_id | ULID, unique. Answered as `id`. |
+| api_client_id | Nullable FK to `api_clients`, `nullOnDelete`. |
+| message_id | UUID, **unique**: the duplicate check and the last guard against a concurrent repeat. |
+| body_hash | SHA-256 of the raw body. A known `message_id` with another hash is refused with `422`. |
+| outlet_code / production_date / sequence / sent_at | From the body. The outlet code is trimmed and upper-cased. |
+| body | The raw body as received, to compare with the sender's copy. |
+
+`closing_recaps` holds one row per outlet and date, unique on
+`(outlet_code, production_date)`. It stores the current `sequence`, the
+`closing_submission_id` the items came from, `status` (`received`), and
+`last_received_at`.
+
+`closing_recap_items` holds the current version's items, replaced in full by a newer
+sequence:
+- `source`: `closing` or `pos_only`;
+- the identity fields `menu_id`, `menu_code`, `menu_name`, `product_id`,
+  `product_code`, `product_name`;
+- the six quantities as `decimal(18,6)`, where `adjustment` can be negative.
+
+A stale sequence is answered `409 stale_sequence` and is not stored. Retention is `TBD`.
+
+### closing_outlet_mappings / closing_item_mappings / closing_purpose_mappings
+
+**Implemented** (ADR-032, P27). Kept by an operator on `/closing-mappings/*`. ERP names
+and codes are copied from the pickers for display; preparing a recap (P28) reads the ERP
+again. Each row has `updated_by` (nullable FK to `users`), and every change is audited.
+
+- `closing_outlet_mappings` is unique on `outlet_code` (trimmed, upper-cased). It holds
+  `branch_id`, `branch_code` (at most 10 characters, because the sales number is
+  `CL` + code + `YYYYMMDD`), `branch_name`, and the stock `location_id` and
+  `location_name`.
+- `closing_item_mappings` is unique on `(source, item_key)`.
+  - The key is the `menuId` (lower-cased UUID) for `closing` and the `productCode`
+    (upper-cased) for `pos_only`.
+  - It holds an optional ERP menu (`esb_menu_id`, `_code`, `_name`) and an optional BOM
+    (`bom_id`, `bom_name`), with at least one of the two set. `pos_only` never has a BOM.
+- `closing_purpose_mappings` is unique on `kind` (`waste`, `adjustment`,
+  `compensation`). It holds `purpose_id`, `purpose_name`, and `direction` (`-1` or `1`).
+
+A recap is *ready* once its outlet is mapped, every item with a non-zero `total_sold`
+has a menu, every closing item with a non-zero stock quantity has a BOM, and every kind
+in use has a purpose (`ClosingMappingSet::missingFor()`).
+
+### closing_item_journals
+
+**Implemented** (ADR-032, P28). There is one row per stock kind per prepared recap
+version. Rows are kept after they are superseded or deleted in the ERP.
+
+| Column | Notes |
+| --- | --- |
+| public_id | ULID. |
+| closing_recap_id | FK, cascade. |
+| recap_sequence / kind | The version it was prepared from; `waste`, `adjustment` or `compensation`. |
+| purpose_id / purpose_name / direction / branch_id / location_id | Copied from the mappings when prepared. |
+| journal_date / notes | The production date; "Closing <outlet> <date>, sequence <n>: <kind>". |
+| lines | JSON `[{productDetailId, productCode, productName, uomName, qty}]`. `qty` is a decimal string, signed, and rounded to 4 decimals. |
+| breakdown | JSON per menu: the quantity, the BOM, and its lines as read from the ERP when prepared. |
+| status | One of `prepared`, `superseded`, `created`, `failed`, `unconfirmed`, `deleted`, `delete_refused`, `delete_unconfirmed` (`ClosingItemJournal`). |
+| item_journal_num | The ERP's number, once created. |
+| failure / correlation_id / errors | The last failure, its integration log correlation id, and the ERP's `[{field, message}]`. |
+| prepared_by / sent_at / deleted_in_erp_at | Who prepared it, and when it was created and deleted in the ERP. |
+
+`closing_recaps.status` moves through `received`, `prepared`, `sent`, `attention` and
+`revised`. A newer sequence after preparing or sending sets it to `revised`.
+
+### closing_sales_pushes (+ sales data columns)
+
+**Implemented** (ADR-032, P29). The sales data comes from contract revision 3 (TBD).
+- `closing_recaps.sales` (JSON, the header totals and `visitPurposeName`) and
+  `closing_recaps.payments` (JSON) are replaced with each version. They are null for a
+  revision 2 recap.
+- `closing_recap_items.prices` holds JSON price lines whose `qty` adds up to
+  `total_sold`.
+- `closing_sales_pushes` has one row per prepared version:
+  - `sales_num` is `CL` + branch code + `YYYYMMDD`;
+  - `payload` is the Push Sales V2 body;
+  - `status` is `prepared`, `superseded` or `sent`;
+  - `sales_push_id` (FK to `sales_pushes`, `nullOnDelete`) is set once it is queued;
+  - it also holds `prepared_by` and `sent_at`.
+- `sales_pushes.api_client_id` is null for a push from a closing recap.
 
 ### document_template_imports / _entries / _lines
 

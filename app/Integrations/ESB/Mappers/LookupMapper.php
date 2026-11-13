@@ -58,6 +58,12 @@ class LookupMapper
                     ['productId' => $this->intOrNull($row['productID'] ?? null), 'uomName' => $this->text($row['uomName'] ?? null)],
                 ),
                 LookupKind::Purposes => $this->inactive($row) ? null : $this->option($this->id($row['purposeID'] ?? null), $row['purposeName'] ?? null, $row['purposeCoaNo'] ?? null),
+                LookupKind::BillsOfMaterial => $this->inactive($row) ? null : $this->option(
+                    $this->id($row['bomID'] ?? null),
+                    $row['bomName'] ?? null,
+                    $row['bomCode'] ?? null,
+                    ['productName' => $this->text($row['productName'] ?? null), 'uomName' => $this->text($row['uomName'] ?? null)],
+                ),
                 LookupKind::TransferProducts => $this->option(
                     $this->id($row['productDetailID'] ?? null),
                     $row['productName'] ?? null,

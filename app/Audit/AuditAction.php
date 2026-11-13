@@ -436,4 +436,40 @@ enum AuditAction: string
 
     /** A failed or rejected sales push was queued again by a person. */
     case SalesPushRetried = 'sales-push.retried';
+
+    /**
+     * A closing recap mapping was saved or removed (ADR-032). The metadata
+     * names the type (outlet, item, purpose), the key, and the values before
+     * and after.
+     */
+    case ClosingMappingSaved = 'closing-mapping.saved';
+
+    case ClosingMappingDeleted = 'closing-mapping.deleted';
+
+    /**
+     * A closing recap's item journals were prepared from its current version
+     * (ADR-032). The metadata names the sequence, the kinds and the line count.
+     */
+    case ClosingRecapPrepared = 'closing-recap.prepared';
+
+    /**
+     * Someone sent a closing recap's documents to the ERP. The metadata lists
+     * what became of each journal: created, failed, unconfirmed, deleted.
+     */
+    case ClosingRecapSent = 'closing-recap.sent';
+
+    /**
+     * Someone settled an item journal whose ERP outcome was unknown, after
+     * checking the ERP: created (with its number) or not, deleted or not.
+     */
+    case ClosingItemJournalResolved = 'closing-item-journal.resolved';
+
+    /**
+     * A closing recap's Push Sales transaction was prepared, or handed to the
+     * sales push queue (ADR-032, P29). The metadata names the salesNum, the
+     * sequence and the totals; never the payment lines.
+     */
+    case ClosingSalesPrepared = 'closing-sales.prepared';
+
+    case ClosingSalesSent = 'closing-sales.sent';
 }

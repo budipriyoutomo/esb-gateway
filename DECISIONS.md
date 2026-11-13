@@ -1329,3 +1329,185 @@ Facts that shaped the design:
   host would have to be trusted.
 - An Excel (.xlsx) writer — a new dependency for no requirement CSV does not meet.
 - Streaming while reading — a mid-way ESB failure would leave a truncated file.
+
+---
+
+## ADR-032 — Closing Recaps From sync-api Maharasa: a Holding Store, Then Operator-Sent Sales and Item Journals
+
+**Status:** Accepted
+
+**Context**
+- sync-api Maharasa will push one closing recap per outlet per production date
+  (`docs/spesifikasi-penerima-kirim-closing.md`, `docs/usulan-kontrak-kirim-closing.md`
+  revision 2). Delivery is at-least-once. A repeat carries the same `messageId` and an
+  identical body. A newer `sequence` for the same `(outlet.code, productionDate)`
+  **replaces the whole recap**. The sender waits 10 s and treats `409` as "already there,
+  do not retry".
+- Business decisions (owner, 2026-11-09/10):
+  - The recap is kept in the gateway first. Nothing reaches the ESB on receipt.
+  - `totalSold` goes to ESB Push Sales Data V2 (`[ESB-011]`). The recap becomes **one**
+    sales transaction. Prices, taxes and payments come from the sender, which revision 3
+    of the contract adds.
+  - `waste`, `adjustment` and `compensation` go to item journals (`[ESB-035]`), each with
+    its own purpose. Lines are **raw materials**: the menu is expanded through its bill of
+    material, **one level** deep.
+  - The operator picks each menu's BOM. Outlet, menu and purpose are all mapped in the
+    gateway. `pos_only` items are identified by `productCode`.
+  - Sending to the ESB is **manual**.
+  - A revision of an item journal is **delete in the ESB, then create again**.
+- Push Sales overwrites by `salesNum` (vendor). Item journals have no documented
+  idempotency, and their deletable statuses are undocumented (`[ESB-034]`).
+- An item journal line names a `productDetailID` once (`SaveInventoryDocumentRequest`),
+  but one menu can have waste and compensation on the same day.
+
+**Decision**
+- **Receive.** `POST /api/v1/closing-totals` uses the existing API client token
+  (ADR-022), with a client issued for sync-api and its own rate limiter.
+  - API clients now carry **scopes**: `sales-data` and `closing-totals`. A route names
+    the scope it needs, and a token without that scope gets `403`. A client created
+    before scopes existed has `sales-data` only, and `api-client:create` defaults to
+    it. A POS token therefore cannot write closing recaps, and the reverse.
+  - It validates the contract (spec §4) and that `Idempotency-Key` equals `messageId`.
+  - It stores the raw body, its SHA-256 and the items, then answers. It never calls the
+    ESB.
+  - Responses:
+    - `201`: a new recap, or a newer `sequence` that replaced the old one.
+    - `409` with `reason: duplicate_message`: the `messageId` is already stored.
+    - `409` with `reason: stale_sequence` and the current sequence: the `sequence` is
+      older.
+    - `422`: a known `messageId` with a different body hash.
+  - A unique-key race on the first recap of an outlet and date is retried inside the
+    request, never answered `409`.
+  - Outlet codes are compared after `UPPER(TRIM())`. Quantities are `NUMERIC`, read
+    without float rounding.
+- **Hold.** A recap has one current version plus every received submission, for audit.
+  A newer sequence replaces the items in full. If the recap was already sent, it is
+  marked *revised, not yet re-sent*.
+- **Map.** These gateway tables are kept by the operator:
+  - outlet code → `branchCode`, `branchID`, `locationID` (the outlet or warehouse
+    location item journals use);
+  - closing `menuId` → ESB menu (for sales) and `bomID` (picked by hand);
+  - `pos_only` `productCode` → ESB menu;
+  - kind (`waste` | `adjustment` | `compensation`) → `purposeID` and a direction (+1/−1).
+  - A recap with any missing mapping cannot be processed, and the screen lists what is
+    missing.
+- **Prepare** (operator action). From the current version, the gateway builds:
+  - **One Push Sales body.**
+    - `salesNum` = `CL` + `branchCode` + `YYYYMMDD`, at most 20 characters, checked when
+      the outlet is mapped.
+    - `salesDate` = `productionDate`.
+    - Menu lines carry `totalSold` and the prices and taxes the sender gave. The header
+      totals and `payment[]` are the sender's, forwarded as given.
+  - **Up to three item journals**, one per kind that has a non-zero line.
+    - Each menu qty is multiplied by the BOM's first-level material lines, then by the
+      purpose direction.
+    - The results are summed per `productDetailID`.
+    - `itemJournalDate` = `productionDate`. `additionalInfo` names the outlet, the date
+      and the sequence.
+  - **A snapshot of the BOM lines used** is stored with the prepared documents.
+    Substitutes are ignored.
+- **Send** (operator action, separate permission).
+  - The sales body goes through the existing `sales_pushes` table and the `PushSalesData`
+    queue. A row with no API client is a closing push, and the existing supersede rule
+    per `salesNum` applies.
+  - Item journals are created through the existing inventory write path (ADR-021), one
+    attempt each. An unknown outcome is *needs checking*, as with `write-unconfirmed`.
+- **Re-send a revision.**
+  - Push Sales is sent again under the same `salesNum`.
+  - Every item journal of the earlier send is deleted in the ESB first, then the new ones
+    are created. There is no `PUT` branch.
+  - Each step has its own status, so a failure resumes from the failed step. Possible
+    states include *delete refused*, *old journals deleted, new not yet created*, and
+    *created*.
+  - An unknown delete outcome is resolved with a GET before anything is created.
+- Permissions: `closing-recaps.view`, `closing-recaps.process` (prepare and send),
+  `closing-mappings.manage`. Every prepare, send, delete and mapping change is audited.
+
+**Reason**
+- Holding first keeps the sender's 10-second budget independent of the ESB, and the
+  operator sees mapping gaps before anything is written.
+- The two `409` reasons keep the sender from reading a refused older sequence as
+  delivered.
+- One sales transaction per recap with a fixed `salesNum` makes revisions safe through
+  the vendor's own overwrite rule.
+- One journal per purpose avoids a duplicate `productDetailID` in one journal, and keeps
+  each purpose reversible on its own.
+- Delete-then-create is the owner's rule, and a single path is simpler to test than
+  "PUT while New, delete otherwise".
+- The BOM snapshot keeps sent journals traceable after a recipe changes.
+
+**Consequences**
+- The sender must add per-item prices and taxes, header totals and payments (contract
+  revision 3). Until it does, sales cannot be prepared. Holding and item journals do not
+  depend on it.
+- Using `totalSold` assumes the outlet's POS does not also push its sales to the ESB.
+  If it does, sales are counted twice.
+- Each revision changes the item journal numbers. Between a delete and a create, the
+  ESB's stock is missing that day's waste, adjustment and compensation, and the screen
+  must show it.
+- Semi-finished materials in a BOM are reduced as semi-finished stock, not as their own
+  ingredients.
+- The mapping screens store the IDs, names and codes the picker sent, so the mapping
+  pages need no ESB call. These values are for display only. Preparing a recap reads
+  each BOM from the ERP again. The branch, location and purpose IDs are sent as mapped;
+  the ERP validates them on create, and a refusal shows on the journal. The branch code
+  needs no second check: the column holds at most 10 characters, so `CL` + code +
+  `YYYYMMDD` always fits the 20-character `salesNum`.
+- As built in P28:
+  - A journal whose create outcome is unknown, or whose delete is unknown and still
+    readable, blocks further preparing and sending of that recap. The ERP has no search
+    by notes, so the operator checks the ERP and settles it: *created* (with the
+    number) or *not created*, *deleted* or *still there*. Settling is audited
+    (`closing-item-journal.resolved`).
+  - A version that already has a journal in the ERP cannot be prepared again, because
+    that would create it twice. Failed journals of that version are sent again with
+    Send.
+  - A create that the ERP accepts without returning `itemJournalNum` is treated as
+    unconfirmed. Without the number, a later revision could not delete it.
+- Five new tables (submissions, recaps, recap items, plus the outlet, menu and purpose
+  mappings) and a prepared-documents table. These are feature tables, not ADR-017's
+  `sync_transactions`.
+
+**Rejected**
+- Sending to the ESB on receipt — the owner wants an operator in between, and a revision
+  would write the ESB without review.
+- One item journal with a `purposeID` per line — the same material would appear twice.
+- `PUT` to an existing item journal on revision — not the owner's rule, and it would
+  still need the delete path for authorized journals.
+- Deriving the BOM from menu → product → active BOM — ambiguous when a product has more
+  than one BOM.
+- Multi-level BOM expansion — not needed yet. Semi-finished goods are stocked.
+- Computing prices or taxes from ESB pricelists — the owner chose the sender's figures.
+- A reconciliation `GET` for the sender — not needed yet. The gateway screen serves the
+  team.
+
+**Open**
+- Contract revision 3: the exact price, tax and payment fields, how one menu sold at more
+  than one price is sent, and the price of colorplate sales.
+  - **Built in P29 against our own proposal** (`docs/balasan-kontrak-kirim-closing.md`
+    §2.1): optional `sales`, `payments` and `items[].prices`. A revision 2 recap is
+    still accepted, but its sales cannot be prepared.
+  - If sync-api changes the shape, only `ReceiveClosingTotalsRequest` and
+    `PrepareClosingSalesPush` need to change.
+- Push Sales values the recap does not carry, **assumed** as constants on
+  `PrepareClosingSalesPush`:
+  - `salesDateIn` / `salesDateOut` = production date `23:59:59`;
+  - `billNum` = `salesNum`;
+  - `createdBy` = `CLOSING`;
+  - head `statusID` 8 and menu `statusID` 13, from the vendor example;
+  - `paxTotal` and the other totals as sync-api sent them.
+- Sales and item journals are prepared and sent separately. Sales need only the outlet
+  and the menu mappings. The recap status follows the item journals; the sales show
+  their own state and the sales push's.
+- Whether the ESB deletes an authorized item journal — try on staging. Until then, a
+  refusal stops the revision at *delete refused*.
+- The BOM quantity basis (per portion or per output qty, recipe UOM or stock UOM).
+  **Assumed in P28:** a BOM line's `qty` is per one unit of the menu, in the material's
+  stock unit, and `uomQty` / `convertionQty` are not applied. This lives in
+  `PrepareClosingItemJournals::perUnit()` alone. Check it against real BOMs on staging.
+- The precision of an item journal quantity. **Assumed:** rounded half-up to 4 decimals
+  (`Decimal::JOURNAL_SCALE`), as for simple transfers.
+- Whether `pos_only` `productCode` equals the ESB `menuCode` often enough to pre-fill the
+  mapping.
+- The `salesDateIn` time, the item journal date if the stock period is closed, and the
+  retention of submissions.

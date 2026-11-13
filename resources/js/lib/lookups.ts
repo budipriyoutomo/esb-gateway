@@ -18,6 +18,7 @@ export type LookupKind =
     | 'currencies'
     | 'product-details'
     | 'purposes'
+    | 'bills-of-material'
     | 'menu-categories'
     | 'menu-category-details'
     | 'pos-menus';

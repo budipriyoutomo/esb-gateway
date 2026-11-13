@@ -15,6 +15,27 @@ class RateLimitServiceProvider extends ServiceProvider
     {
         $this->registerEsbLimiter();
         $this->registerSalesPushApiLimiter();
+        $this->registerClosingTotalsApiLimiter();
+    }
+
+    /**
+     * Budget for sync-api calling /api/v1/closing-totals (ADR-032).
+     *
+     * The 429 carries Laravel's Retry-After header: the sender waits that
+     * long before its next attempt.
+     */
+    protected function registerClosingTotalsApiLimiter(): void
+    {
+        RateLimiter::for('closing-totals-api', function (Request $request): Limit {
+            $perMinute = (int) config('closing_totals.rate_limit_per_minute', 60);
+            $client = $request->attributes->get(AuthenticateApiClient::ATTRIBUTE);
+
+            return Limit::perMinute(max(1, $perMinute))
+                ->by('closing-totals:'.($client?->getKey() ?? $request->ip()))
+                ->response(fn (Request $request, array $headers): Response => response()->json([
+                    'message' => 'Too many requests from this client. Wait and try again.',
+                ], 429, $headers));
+        });
     }
 
     /**

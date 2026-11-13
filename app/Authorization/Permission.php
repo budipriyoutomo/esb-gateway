@@ -249,6 +249,26 @@ enum Permission: string
      */
     case RetrySalesPushes = 'sales-pushes.retry';
 
+    /**
+     * See closing recaps sync-api Maharasa sent, held in the gateway, and
+     * their mappings to the ERP (ADR-032).
+     */
+    case ViewClosingRecaps = 'closing-recaps.view';
+
+    /**
+     * Change how closing recaps meet the ERP: outlet -> branch and location,
+     * menu / POS product -> ERP menu and bill of material, stock kind ->
+     * purpose and direction. They decide what is later written to the ERP.
+     */
+    case ManageClosingMappings = 'closing-mappings.manage';
+
+    /**
+     * Prepare a closing recap's documents and send them to the ERP: item
+     * journals now, Push Sales later (ADR-032). Also needs esb.invoke.
+     * Includes deleting the journals of an earlier send on a revision.
+     */
+    case ProcessClosingRecaps = 'closing-recaps.process';
+
     case ViewUsers = 'users.view';
     case ManageUsers = 'users.manage';
 

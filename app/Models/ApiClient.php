@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
  * @property int $id
  * @property string $name
  * @property string $token_hash
+ * @property list<string>|null $scopes
  * @property bool $is_active
  * @property Carbon|null $last_used_at
  * @property Carbon|null $created_at
@@ -19,13 +20,21 @@ use Illuminate\Support\Str;
  */
 class ApiClient extends Model
 {
+    /** POST /api/v1/sales-data (ADR-022). */
+    public const SCOPE_SALES_DATA = 'sales-data';
+
+    /** POST /api/v1/closing-totals (ADR-032). */
+    public const SCOPE_CLOSING_TOTALS = 'closing-totals';
+
+    public const SCOPES = [self::SCOPE_SALES_DATA, self::SCOPE_CLOSING_TOTALS];
+
     /**
      * Seconds between last_used_at writes, so a busy client does not turn
      * every request into an UPDATE.
      */
     private const LAST_USED_RESOLUTION_SECONDS = 60;
 
-    protected $fillable = ['name', 'token_hash', 'is_active', 'last_used_at'];
+    protected $fillable = ['name', 'token_hash', 'scopes', 'is_active', 'last_used_at'];
 
     protected $hidden = ['token_hash'];
 
@@ -35,6 +44,7 @@ class ApiClient extends Model
     protected function casts(): array
     {
         return [
+            'scopes' => 'array',
             'is_active' => 'boolean',
             'last_used_at' => 'datetime',
         ];
@@ -45,19 +55,43 @@ class ApiClient extends Model
      *
      * The token is returned here and nowhere else: only its hash is stored.
      *
+     * @param  list<string>  $scopes  Each one of self::SCOPES.
      * @return array{self, string}
      */
-    public static function issue(string $name): array
+    public static function issue(string $name, array $scopes = [self::SCOPE_SALES_DATA]): array
     {
+        $unknown = array_diff($scopes, self::SCOPES);
+
+        if ($scopes === [] || $unknown !== []) {
+            throw new \InvalidArgumentException('Unknown API client scope: '.implode(', ', $unknown));
+        }
+
         $token = 'egw_'.Str::random(48);
 
         $client = self::query()->create([
             'name' => $name,
             'token_hash' => self::hash($token),
+            'scopes' => array_values(array_unique($scopes)),
             'is_active' => true,
         ]);
 
         return [$client, $token];
+    }
+
+    /**
+     * The endpoints this client may call. A client issued before scopes
+     * existed is a POS and keeps sales data only.
+     *
+     * @return list<string>
+     */
+    public function scopes(): array
+    {
+        return $this->scopes ?? [self::SCOPE_SALES_DATA];
+    }
+
+    public function allows(string $scope): bool
+    {
+        return in_array($scope, $this->scopes(), true);
     }
 
     public static function findActiveByToken(string $token): ?self

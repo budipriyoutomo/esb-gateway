@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-10-22
+2026-11-10
 
 ## Current Phase
 
@@ -2236,3 +2236,127 @@ in the working tree together.
   "no /export route" were updated for ADR-031.
 - `php artisan test` — pass, 1670 passed, 26 skipped (1696). `vp test` — pass, 72 files,
   399 tests. `vp check`, `tsc --noEmit`, `pint --test` — pass. `phpstan` — 2 pre-existing.
+
+## Update 2026-11-10 — Closing recaps from sync-api Maharasa: design only (ADR-032)
+
+**Selesai (documentation only, no code)**
+
+- Reviewed the sender's documents: `docs/spesifikasi-penerima-kirim-closing.md` and
+  `docs/usulan-kontrak-kirim-closing.md` (revision 2).
+- Recorded the owner's decisions as **ADR-032**:
+  - The gateway holds each recap first.
+  - The operator prepares and sends one Push Sales transaction (`totalSold`) per recap.
+  - Waste, adjustment and compensation become one item journal per purpose. Their lines
+    are raw materials, from a BOM the operator picks per menu, expanded one level.
+  - A revision deletes the earlier item journals in the ESB, then creates new ones.
+  - Outlet, menu and purpose are mapped in the gateway. `pos_only` items are keyed by
+    `productCode`.
+- Drafted the reply to the sender, `docs/balasan-kontrak-kirim-closing.md`, which asks
+  for contract revision 3:
+  - prices, taxes and payment;
+  - two distinct `409` reasons;
+  - answers to questions about double counting, colorplate price and clearing a recap.
+
+**P26 done (TDD), same day:** the receiving side is built.
+- `POST /api/v1/closing-totals` → `ClosingTotalsController`, `ReceiveClosingTotalsRequest`,
+  `ReceiveClosingRecap` / `ClosingReceipt`.
+- Tables `closing_submissions`, `closing_recaps`, `closing_recap_items`.
+- API client scopes: an `api_clients.scopes` column, `api-client:create --scope`,
+  `api-client:<scope>` middleware.
+- A `closing-totals-api` limiter, whose `429` carries `Retry-After`.
+- Tests: `tests/Feature/ClosingRecaps/ClosingTotalsApiTest.php` (30) and
+  `ApiClientCommandTest` (+4).
+- Full suite: 1706 passed, 26 skipped. Pint passes. PHPStan shows only the 2 findings
+  that were already there.
+
+**Next (TDD, one phase at a time; P27–P29 in `TODO-modules.md`)**
+
+1. ~~The receiving endpoint and the holding tables.~~ Done (P26).
+2. ~~The recap screen, plus the outlet, menu/BOM and purpose mapping screens.~~ Done
+   (P27, see below).
+3. ~~Item journal preparation and send.~~ Done (P28, see below), with **TBD
+   assumptions**. Still to do on staging: read real BOMs to confirm the quantity basis,
+   and try deleting an authorized item journal.
+4. ~~Push Sales preparation.~~ Done (P29, see below), against **our own revision 3
+   proposal**, which the sender has not confirmed.
+
+**Open:** see ADR-032 **Open**.
+
+**P27 done (TDD), same day:** the recap and mapping screens.
+- `/closing-recaps` (list, detail) uses `ClosingRecapController`. Readiness comes from
+  `ClosingMappingSet::missingFor()`, which loads every mapping once.
+- `/closing-mappings/{outlets,items,purposes}` uses `ClosingMappingController` and the
+  `SaveClosingMapping` action. Audit actions: `closing-mapping.saved` / `.deleted`.
+- Tables: `closing_outlet_mappings`, `closing_item_mappings`, `closing_purpose_mappings`.
+- Permissions: `closing-recaps.view` (IT Admin, Integration Operator) and
+  `closing-mappings.manage` (Integration Operator).
+- A new lookup, `bills-of-material` (`GET /product/bom`, active, searched by name), for
+  the BOM picker.
+- Pages: `closing-recaps/{index,show}` and `closing-mappings/{outlets,items,purposes}`,
+  with sidebar entries under Sales.
+- Picker labels (branch, location, menu, BOM, purpose) are stored as the browser sent
+  them, for display only. P28 must read the ERP again before writing anything.
+- Tests: `ClosingRecapScreenTest` (9), `ClosingMappingTest` (16), `LookupTest` (+1), and
+  `pages/closing-recaps/closing.test.tsx` (8).
+- Checks:
+  - PHP suite: 1731 passed, 26 skipped. `vp test`: 73 files, 408 tests pass.
+  - `vp check` and `tsc` pass. Pint passes. PHPStan shows only the 2 findings that were
+    already there.
+
+**P28 done (TDD for the backend), same day:** item journals from closing recaps.
+- `PrepareClosingItemJournals`:
+  - It needs every mapping and no journal with an unknown outcome.
+  - It reads each BOM from the ERP and expands one level, one journal per kind.
+  - It sums lines per product detail, keeps a breakdown of the BOM as read, and
+    supersedes unsent drafts.
+  - It refuses a version that already has a journal in the ERP.
+- `SendClosingItemJournals`, one send per recap at a time:
+  - It first deletes the journals of earlier versions. An unknown delete is checked with
+    a GET. A refused or unknown delete stops before anything is created.
+  - It then creates each prepared or failed journal with one attempt. A refusal is
+    `failed`; an unknown outcome is `unconfirmed` and blocks the recap.
+- `ResolveClosingItemJournal`: the operator settles an unknown create or delete after
+  checking the ERP.
+- Routes `closing-recaps.prepare`, `closing-recaps.send` and
+  `closing-item-journals.resolve` need `throttle:esb`, `esb.invoke` and
+  `closing-recaps.process`.
+- New: table `closing_item_journals`, recap statuses `prepared` / `sent` / `attention` /
+  `revised`, and `App\Support\Decimal`.
+- UI: an "Item journals" section on the recap detail (`components/closing-item-journals.tsx`)
+  with Prepare, Send to ERP and Settle.
+- **TBD assumptions** (ADR-032 Open):
+  - A BOM line `qty` is per one menu unit, in the stock unit
+    (`PrepareClosingItemJournals::perUnit()`).
+  - Quantities are rounded to 4 decimals.
+  - Whether the ERP deletes an authorized journal is unknown.
+- Tests: `ClosingItemJournalTest` (17); the closing page tests, now 13. The page tests
+  were written after the component, not before.
+- Checks:
+  - PHP suite: 1748 passed, 26 skipped. `vp test`: 73 files, 413 tests pass.
+  - `vp check` and `tsc` pass. Pint passes. PHPStan shows only the 2 findings that were
+    already there.
+
+**P29 done (TDD for the backend), same day:** Push Sales from closing recaps, built
+against **our own contract revision 3 proposal** (TBD, not yet confirmed by sync-api).
+- Receiving: optional `sales`, `payments` and `items[].prices`.
+  - Sales and payments must come together.
+  - With sales data, every item sold has price lines that add up to `totalSold`.
+  - Revision 2 recaps are still accepted.
+- `PrepareClosingSalesPush` builds one Push Sales V2 body per recap.
+  - `salesNum` is `CL` + branch code + `YYYYMMDD`. Each price line becomes one menu line.
+  - The sender's totals and payments are forwarded as given.
+  - It needs only the outlet and menu mappings, and supersedes an unsent draft.
+- `SendClosingSalesPush` hands the body to `sales_pushes` with no API client and
+  queues `PushSalesData` (ADR-022). A revision is pushed again under the same `salesNum`.
+- New: table `closing_sales_pushes`, JSON columns `closing_recaps.sales` / `payments`
+  and `closing_recap_items.prices`, routes `closing-recaps.sales.prepare` / `.send`,
+  audit actions `closing-sales.prepared` / `.sent`, and a "Sales" section
+  (`components/closing-sales-push.tsx`).
+- **TBD constants** on `PrepareClosingSalesPush`: time `23:59:59`, `createdBy`
+  `CLOSING`, `statusID` 8 / 13, `billNum` = `salesNum`.
+- Tests: `ClosingSalesPushTest` (13), `ClosingTotalsApiTest` (+6), and the closing page
+  tests (now 16; the page tests were written after the component).
+- Checks:
+  - PHP suite: 1766 passed, 26 skipped. `vp test`: 73 files, 416 tests pass.
+  - `vp check` and `tsc` pass. Pint passes. PHPStan shows only the 2 findings that were
+    already there.

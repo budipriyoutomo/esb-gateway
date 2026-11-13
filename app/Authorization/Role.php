@@ -42,6 +42,7 @@ enum Role: string
                 Permission::ManageEndpointCatalog,
                 Permission::ViewIntegrationLogs,
                 Permission::ViewSalesPushes,
+                Permission::ViewClosingRecaps,
                 Permission::ViewUsers,
                 Permission::ManageUsers,
                 Permission::ViewRoles,
@@ -59,6 +60,9 @@ enum Role: string
                 Permission::InvokeEsbOperations,
                 Permission::ViewSalesPushes,
                 Permission::RetrySalesPushes,
+                Permission::ViewClosingRecaps,
+                Permission::ManageClosingMappings,
+                Permission::ProcessClosingRecaps,
             ],
 
             self::Viewer => [

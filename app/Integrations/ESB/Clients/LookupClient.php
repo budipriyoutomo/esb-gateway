@@ -58,6 +58,7 @@ class LookupClient implements LookupSource
      * @see https://developers.esb.co.id/esb-core/#/paths/common-currency-active/get
      * @see https://developers.esb.co.id/esb-core/#/paths/product-detail-browse/get
      * @see https://developers.esb.co.id/esb-core/#/paths/purpose/get
+     * @see https://developers.esb.co.id/esb-core/#/paths/product-bom/get
      * @see https://developers.esb.co.id/esb-oms/#api-Master_Menu_Category-get-menu-category
      * @see https://developers.esb.co.id/esb-oms/#api-Master_Menu-get-menu
      */
@@ -92,6 +93,11 @@ class LookupClient implements LookupSource
             // values, so every active purpose is offered.
             LookupKind::Purposes => $this->paged($kind, '/purpose', [
                 'purposeName' => $this->searchOrNull($query->search),
+                'flagActive' => 1,
+            ], $query),
+            // ADR-032: the operator picks each closing menu's recipe.
+            LookupKind::BillsOfMaterial => $this->paged($kind, '/product/bom', [
+                'bomName' => $this->searchOrNull($query->search),
                 'flagActive' => 1,
             ], $query),
             LookupKind::TransferProducts => $this->paged($kind, '/product/browse-transfer', [

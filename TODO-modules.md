@@ -96,6 +96,10 @@ memberi usulan pesan commit.
 | P23 | Sapu string UI ke Inggris — tidak ada perubahan kode (sudah Inggris) | `[x]` (tanpa commit) |
 | P24 | ADR-030 satu modul Menu (Core + OMS) | `[x]` siap commit |
 | P25 | ADR-031 export CSV dari gateway (12 list) | `[x]` siap commit |
+| P26 | ADR-032 closing recap fase 1: `POST /api/v1/closing-totals` + tabel penampung + scope API client | `[x]` siap commit |
+| P27 | ADR-032 fase 2: layar rekap + mapping outlet / menu-BOM / produk / purpose | `[x]` siap commit |
+| P28 | ADR-032 fase 3: susun & kirim Item Journal (BOM satu tingkat, revisi = delete lalu create) | `[x]` siap commit (asumsi TBD: qty BOM = `qty` per 1 menu dalam satuan stok, pembulatan 4 desimal; delete IJ authorized dicek di staging `[!]`) |
+| P29 | ADR-032 fase 4: susun & kirim Push Sales | `[x]` siap commit (dibangun atas usulan revisi 3 kita sendiri, belum dikonfirmasi pengirim `[!]`; nilai TBD: jam `23:59:59`, `createdBy` CLOSING, statusID 8/13) |
 
 Item `[!]` (butuh jawaban ESB/bisnis) dilewati dalam phase-nya dan tidak memblokir
 commit phase tersebut.

@@ -144,6 +144,18 @@ Rules that the implementation enforces:
   `sales-pushes.retry` queues a failed or rejected push again; only Integration Operator
   holds it. Neither shows payment card details. Retries are audited as
   `sales-push.retried`.
+- Closing recaps (2026-11-10, ADR-032). `closing-recaps.view` covers the recaps
+  sync-api Maharasa sent, which mappings each still needs, and the mapping pages; IT
+  Admin and Integration Operator hold it. `closing-mappings.manage` saves or removes an
+  outlet, item or purpose mapping. Only Integration Operator holds it, and the pickers
+  also need `esb.invoke`. Changes are audited as `closing-mapping.saved` / `.deleted`,
+  with the values before and after. `closing-recaps.process` (Integration Operator,
+  together with `esb.invoke`) covers preparing a recap's item journals, sending them
+  (which deletes an earlier version's journals in the ERP), settling one whose outcome
+  was unknown, and preparing and queuing the recap's Push Sales transaction
+  (`closing-sales.prepared` / `.sent`). That transaction then appears on the sales push
+  screen with no client. These are audited as `closing-recap.prepared` / `.sent`,
+  `closing-item-journal.resolved` and `item-journal.write-unconfirmed`.
 
 ### API clients
 
@@ -154,6 +166,18 @@ Rules that the implementation enforces:
 (`api-client.issued` / `.revoked`). A logged-in web session is not accepted on `/api`,
 and an API client token gives no access to the web UI. Requests are rate limited per
 client (`SALES_PUSH_RATE_LIMIT_PER_MINUTE`, default 120).
+
+Each client carries **scopes** (ADR-032): `sales-data` for `POST /api/v1/sales-data` and
+`closing-totals` for `POST /api/v1/closing-totals`. A token without the route's scope gets
+`403`. `api-client:create` defaults to `sales-data`. A client issued before scopes
+existed keeps `sales-data` only. The sync-api client is issued with:
+
+```
+php artisan api-client:create sync-api --scope=closing-totals
+```
+
+Closing requests have their own limit (`CLOSING_TOTALS_RATE_LIMIT_PER_MINUTE`, default
+60), and a `429` carries `Retry-After`.
 
 ### Bootstrapping the first administrator
 

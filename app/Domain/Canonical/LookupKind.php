@@ -25,6 +25,7 @@ enum LookupKind: string
     case Currencies = 'currencies';
     case ProductDetails = 'product-details';
     case Purposes = 'purposes';
+    case BillsOfMaterial = 'bills-of-material';
 
     /** ESB OMS, for promotions ([ESB-050]): paged by the ESB, searched per page. */
     case MenuCategories = 'menu-categories';

@@ -23,6 +23,7 @@ import {
     BadgeDollarSign,
     BadgePercent,
     LayoutList,
+    Link2,
     MonitorSmartphone,
     Banknote,
     BookOpenText,
@@ -44,6 +45,8 @@ import {
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as billsOfMaterialIndex } from '@/routes/bills-of-material';
+import { outlets as closingMappingsOutlets } from '@/routes/closing-mappings';
+import { index as closingRecapsIndex } from '@/routes/closing-recaps';
 import { index as coaAccountsIndex } from '@/routes/coa-accounts';
 import { index as documentTemplatesIndex } from '@/routes/document-templates';
 import { index as endpointsIndex } from '@/routes/endpoints';
@@ -344,6 +347,18 @@ export const mainNavigation: GatedNavEntry[] = [
                 href: salesPushesIndex(),
                 icon: Send,
                 permission: 'sales-pushes.view',
+            },
+            {
+                title: 'Closing recaps',
+                href: closingRecapsIndex(),
+                icon: ClipboardList,
+                permission: 'closing-recaps.view',
+            },
+            {
+                title: 'Closing mappings',
+                href: closingMappingsOutlets(),
+                icon: Link2,
+                permission: 'closing-recaps.view',
             },
         ],
     },

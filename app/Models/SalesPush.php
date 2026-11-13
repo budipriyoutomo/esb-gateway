@@ -114,6 +114,26 @@ class SalesPush extends Model
     }
 
     /**
+     * Store a transaction a closing recap became (ADR-032, P29). It has no
+     * API client: an operator sent it. Queuing it is the caller's job.
+     *
+     * @param  array{salesHead: array<string, mixed>}  $body
+     */
+    public static function fromClosingRecap(array $body): self
+    {
+        $head = $body['salesHead'];
+
+        return self::query()->create([
+            'api_client_id' => null,
+            'sales_num' => (string) $head['salesNum'],
+            'branch_code' => (string) $head['branchCode'],
+            'sales_date' => self::dateOrNull($head['salesDate'] ?? null),
+            'payload' => ['salesHead' => $head],
+            'status' => self::STATUS_QUEUED,
+        ]);
+    }
+
+    /**
      * @return BelongsTo<ApiClient, $this>
      */
     public function apiClient(): BelongsTo
