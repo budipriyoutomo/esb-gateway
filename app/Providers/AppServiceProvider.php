@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Integrations\Contracts\BillOfMaterialSource;
+use App\Integrations\Contracts\BranchSource;
 use App\Integrations\Contracts\CoaAccountSource;
 use App\Integrations\Contracts\DisbursementSource;
 use App\Integrations\Contracts\DocumentTemplateSource;
@@ -30,6 +31,7 @@ use App\Integrations\Contracts\SupplierCategorySource;
 use App\Integrations\Contracts\SupplierSource;
 use App\Integrations\Contracts\UnitOfMeasureSource;
 use App\Integrations\ESB\Clients\BillOfMaterialClient;
+use App\Integrations\ESB\Clients\BranchClient;
 use App\Integrations\ESB\Clients\CoaAccountClient;
 use App\Integrations\ESB\Clients\DisbursementClient;
 use App\Integrations\ESB\Clients\DocumentTemplateClient;
@@ -85,6 +87,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(MenuSource::class, MenuClient::class);
         $this->app->bind(MasterMenuSource::class, MasterMenuClient::class);
         $this->app->bind(BillOfMaterialSource::class, BillOfMaterialClient::class);
+        $this->app->bind(BranchSource::class, BranchClient::class);
         $this->app->bind(PurposeSource::class, PurposeClient::class);
         $this->app->bind(LookupSource::class, LookupClient::class);
         $this->app->bind(UnitOfMeasureSource::class, UnitOfMeasureClient::class);

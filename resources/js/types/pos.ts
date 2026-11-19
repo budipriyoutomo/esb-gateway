@@ -60,3 +60,19 @@ export const APPLY_DISCOUNT_TO = {
     menuCategoryDetail: 2,
     menu: 3,
 } as const;
+
+/** A visit purpose kept in the gateway ([ESB-052]). */
+export type VisitPurpose = {
+    id: number;
+    name: string;
+    notes: string | null;
+    active: boolean;
+    /** Closing recaps that name it. */
+    recaps: number;
+};
+
+/** A visit purpose closing recaps name that is not on the list. */
+export type UnregisteredVisitPurpose = {
+    name: string;
+    recaps: number;
+};

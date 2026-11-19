@@ -1,0 +1,45 @@
+# Secrets and local state -- never baked into an image.
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Rebuilt inside the image.
+node_modules
+vendor
+public/build
+public/hot
+bootstrap/ssr
+bootstrap/cache/*.php
+resources/js/actions
+resources/js/routes
+resources/js/wayfinder
+
+# Runtime state lives in the storage volume, not the image.
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/*
+storage/pail
+
+# Not needed at runtime.
+.git
+.github
+.claude
+.agents
+.cursor
+.junie
+.idea
+.vscode
+tests
+.phpunit.result.cache
+.phpunit.cache
+*.xlsx
+docker-compose*.yml
+Dockerfile
+
+# docs/ is prose, except docs/esb/: the DatabaseSeeder imports the endpoint
+# catalog from it (esb:import-catalog).
+docs/*
+!docs/esb

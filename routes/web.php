@@ -10,6 +10,7 @@ use App\Http\Controllers\Accounting\MemorialJournalController;
 use App\Http\Controllers\Accounting\MemorialJournalFormController;
 use App\Http\Controllers\Accounting\MemorialJournalWriteController;
 use App\Http\Controllers\BillsOfMaterial\BillOfMaterialController;
+use App\Http\Controllers\Branches\BranchController;
 use App\Http\Controllers\ClosingRecaps\ClosingMappingController;
 use App\Http\Controllers\ClosingRecaps\ClosingRecapController;
 use App\Http\Controllers\ClosingRecaps\ClosingRecapProcessController;
@@ -79,6 +80,7 @@ use App\Http\Controllers\Units\UnitOfMeasureController;
 use App\Http\Controllers\Units\UnitWriteController;
 use App\Http\Controllers\Users\UserController;
 use App\Http\Controllers\Users\UserRoleController;
+use App\Http\Controllers\VisitPurposes\VisitPurposeController;
 use App\Models\ClosingPurposeMapping;
 use App\Models\ClosingRecapItem;
 use Illuminate\Support\Facades\Route;
@@ -209,6 +211,16 @@ Route::middleware('auth')->group(function () {
             ->where('bomId', '[1-9][0-9]{0,9}')
             ->middleware('can:'.Permission::InvokeEsbOperations->value)
             ->name('bills-of-material.show');
+
+        // Read-only ESB Core branches ([ESB-051]). Authorization for the list
+        // is on its form request (esb.invoke). The id is interpolated into the
+        // upstream path, so it is held to a positive integer here.
+        Route::get('branches', [BranchController::class, 'index'])
+            ->name('branches.index');
+        Route::get('branches/{branchId}', [BranchController::class, 'show'])
+            ->where('branchId', '[1-9][0-9]{0,9}')
+            ->middleware('can:'.Permission::InvokeEsbOperations->value)
+            ->name('branches.show');
 
         // Read-only ESB Core purposes ([ESB-015]). Authorization for the list
         // is on its form request (esb.invoke). The id is interpolated into the
@@ -893,6 +905,29 @@ Route::middleware('auth')->group(function () {
             Route::put('purposes/{kind}', 'updatePurpose')
                 ->whereIn('kind', array_keys(ClosingPurposeMapping::KINDS))
                 ->name('purposes.update');
+
+            // Payment methods as the POS names them (spaces and all).
+            Route::get('payments', 'payments')->name('payments');
+            Route::put('payments/{paymentMethod}', 'updatePayment')
+                ->where('paymentMethod', '[^/]{1,100}')
+                ->name('payments.update');
+            Route::delete('payments/{paymentMethod}', 'destroyPayment')
+                ->where('paymentMethod', '[^/]{1,100}')
+                ->name('payments.destroy');
+        });
+
+    // Visit purposes kept in the gateway ([ESB-052]); no ESB call. Seeing
+    // takes closing-recaps.view; changing takes closing-mappings.manage (form
+    // request / controller).
+    Route::prefix('visit-purposes')
+        ->middleware('can:'.Permission::ViewClosingRecaps->value)
+        ->name('visit-purposes.')
+        ->controller(VisitPurposeController::class)
+        ->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('{visitPurpose}', 'update')->whereNumber('visitPurpose')->name('update');
+            Route::delete('{visitPurpose}', 'destroy')->whereNumber('visitPurpose')->name('destroy');
         });
 
     // Read-only: the catalog mirrors docs/esb/, so it has no write actions.

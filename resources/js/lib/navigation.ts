@@ -1,5 +1,6 @@
 import {
     Boxes,
+    Building2,
     CirclePlus,
     ClipboardCheck,
     ClipboardList,
@@ -37,6 +38,7 @@ import {
     ScrollText,
     Send,
     ShoppingCart,
+    Signpost,
     Store,
     Users,
     UtensilsCrossed,
@@ -45,6 +47,7 @@ import {
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as billsOfMaterialIndex } from '@/routes/bills-of-material';
+import { index as branchesIndex } from '@/routes/branches';
 import { outlets as closingMappingsOutlets } from '@/routes/closing-mappings';
 import { index as closingRecapsIndex } from '@/routes/closing-recaps';
 import { index as coaAccountsIndex } from '@/routes/coa-accounts';
@@ -74,6 +77,7 @@ import { index as menusIndex } from '@/routes/menus';
 import { index as pricelistsIndex } from '@/routes/pricelists';
 import { show as tempPricelistShow } from '@/routes/pricelists/temp';
 import { index as promotionsIndex } from '@/routes/promotions';
+import { index as visitPurposesIndex } from '@/routes/visit-purposes';
 import { index as productCategoriesIndex } from '@/routes/product-categories';
 import { index as productSubCategoriesIndex } from '@/routes/product-sub-categories';
 import { index as productsIndex } from '@/routes/products';
@@ -138,6 +142,12 @@ export const mainNavigation: GatedNavEntry[] = [
         title: 'Master data',
         icon: Database,
         items: [
+            {
+                title: 'Branches',
+                href: branchesIndex(),
+                icon: Building2,
+                permission: 'esb.invoke',
+            },
             {
                 title: 'Products',
                 href: productsIndex(),
@@ -335,6 +345,12 @@ export const mainNavigation: GatedNavEntry[] = [
                 href: promotionsIndex(),
                 icon: BadgePercent,
                 permission: 'esb.invoke',
+            },
+            {
+                title: 'Visit purposes',
+                href: visitPurposesIndex(),
+                icon: Signpost,
+                permission: 'closing-recaps.view',
             },
         ],
     },

@@ -1,8 +1,10 @@
+import { router } from '@inertiajs/react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import ClosingItemMappings from '@/pages/closing-mappings/items';
 import ClosingOutletMappings from '@/pages/closing-mappings/outlets';
+import ClosingPaymentMappings from '@/pages/closing-mappings/payments';
 import ClosingPurposeMappings from '@/pages/closing-mappings/purposes';
 import ClosingRecapsIndex from '@/pages/closing-recaps/index';
 import type { ClosingJournal } from '@/components/closing-item-journals';
@@ -501,15 +503,37 @@ describe('Closing recap item journals', () => {
 
 describe('Closing recap sales', () => {
     const draft = {
-        id: '01JSALES',
-        salesNum: 'CLSTTSM20261012',
+        id: '01JSALES1',
+        salesNum: 'CLSTTSM2610121',
+        visitPurposeName: 'DINE IN',
         sequence: 2,
         current: true,
         status: 'prepared' as const,
         menuLines: 2,
-        grandTotal: 242650,
+        grandTotal: 190900,
         sentAt: null,
         push: null,
+    };
+
+    const sales = {
+        hasData: true,
+        purposes: [
+            { visitPurposeName: 'DINE IN', grandTotal: 190900, payments: 1 },
+            { visitPurposeName: 'TAKE AWAY', grandTotal: 51750, payments: 1 },
+        ],
+        missing: [],
+        dropped: [],
+        drafts: [
+            draft,
+            {
+                ...draft,
+                id: '01JSALES2',
+                salesNum: 'CLSTTSM2610122',
+                visitPurposeName: 'TAKE AWAY',
+                menuLines: 1,
+                grandTotal: 51750,
+            },
+        ],
     };
 
     it('says when sync-api sent no sales data', () => {
@@ -521,15 +545,55 @@ describe('Closing recap sales', () => {
             />,
         );
 
-        expect(
-            screen.getByText(/sent no prices, taxes or payments/),
-        ).toBeVisible();
+        expect(screen.getByText(/sync-api sent no sales/)).toBeVisible();
         expect(
             screen.getByRole('button', { name: 'Prepare sales' }),
         ).toBeDisabled();
     });
 
-    it('shows a prepared transaction ready to send', () => {
+    it('lists what the sales still wait for, with a link to map a payment method', () => {
+        render(
+            <ClosingRecapShow
+                recap={recap}
+                canProcess
+                actions={{ prepare: false, send: false, prepareSales: false }}
+                sales={{
+                    ...sales,
+                    drafts: [],
+                    missing: [
+                        {
+                            type: 'sales-payments',
+                            key: 'DINE IN',
+                            label: 'DINE IN',
+                            message:
+                                'sync-api has not sent the payments of DINE IN yet.',
+                        },
+                        {
+                            type: 'payment-method',
+                            key: 'QRIS',
+                            label: 'QRIS',
+                            message: 'Payment method QRIS has no ERP account.',
+                        },
+                    ],
+                }}
+            />,
+        );
+
+        const gaps = screen.getByRole('region', {
+            name: 'Before the sales can be prepared',
+        });
+        const [payments, method] = within(gaps).getAllByRole('listitem');
+
+        expect(payments).toHaveTextContent(
+            'sync-api has not sent the payments of DINE IN yet.',
+        );
+        expect(within(payments).queryByRole('link')).not.toBeInTheDocument();
+        expect(
+            within(method).getByRole('link', { name: 'Map it' }),
+        ).toHaveAttribute('href', '/closing-mappings/payments');
+    });
+
+    it('shows one prepared transaction per visit purpose', () => {
         render(
             <ClosingRecapShow
                 recap={recap}
@@ -540,21 +604,43 @@ describe('Closing recap sales', () => {
                     prepareSales: true,
                     sendSales: true,
                 }}
+                sales={sales}
+            />,
+        );
+
+        const dineIn = screen.getByLabelText('Sales CLSTTSM2610121');
+        expect(dineIn).toHaveTextContent('DINE IN');
+        expect(dineIn).toHaveTextContent('Prepared');
+        expect(dineIn).toHaveTextContent('2 menu lines');
+
+        const takeAway = screen.getByLabelText('Sales CLSTTSM2610122');
+        expect(takeAway).toHaveTextContent('TAKE AWAY');
+        expect(takeAway).toHaveTextContent('1 menu line');
+
+        expect(
+            screen.getByRole('button', { name: 'Send sales' }),
+        ).toBeEnabled();
+    });
+
+    it('warns about a visit purpose whose earlier sale is still in the ERP', () => {
+        render(
+            <ClosingRecapShow
+                recap={recap}
                 sales={{
-                    hasData: true,
-                    grandTotal: 242650,
-                    payments: 1,
-                    draft,
+                    ...sales,
+                    dropped: [
+                        {
+                            visitPurposeName: 'DELIVERY',
+                            salesNum: 'CLSTTSM2610123',
+                        },
+                    ],
                 }}
             />,
         );
 
-        const card = screen.getByLabelText('Sales CLSTTSM20261012');
-        expect(card).toHaveTextContent('Prepared');
-        expect(card).toHaveTextContent('2 menu lines');
-        expect(
-            screen.getByRole('button', { name: 'Send sales' }),
-        ).toBeEnabled();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'DELIVERY (CLSTTSM2610123)',
+        );
     });
 
     it('links a sent transaction to its sales push and shows the ERP refusal', () => {
@@ -569,29 +655,29 @@ describe('Closing recap sales', () => {
                     sendSales: false,
                 }}
                 sales={{
-                    hasData: true,
-                    grandTotal: 242650,
-                    payments: 1,
-                    draft: {
-                        ...draft,
-                        status: 'sent',
-                        sentAt: '2026-10-13T04:00:00+00:00',
-                        push: {
-                            id: '01JPUSH',
-                            status: 'rejected',
-                            errors: [
-                                {
-                                    field: 'salesHead.menu.0.menuCode',
-                                    message: 'Menu not found',
-                                },
-                            ],
+                    ...sales,
+                    drafts: [
+                        {
+                            ...draft,
+                            status: 'sent',
+                            sentAt: '2026-10-13T04:00:00+00:00',
+                            push: {
+                                id: '01JPUSH',
+                                status: 'rejected',
+                                errors: [
+                                    {
+                                        field: 'salesHead.menu.0.menuCode',
+                                        message: 'Menu not found',
+                                    },
+                                ],
+                            },
                         },
-                    },
+                    ],
                 }}
             />,
         );
 
-        const card = screen.getByLabelText('Sales CLSTTSM20261012');
+        const card = screen.getByLabelText('Sales CLSTTSM2610121');
         expect(card).toHaveTextContent('Sent');
         expect(card).toHaveTextContent('rejected');
         expect(card).toHaveTextContent(
@@ -601,4 +687,120 @@ describe('Closing recap sales', () => {
             within(card).getByRole('link', { name: 'Open the sales push' }),
         ).toHaveAttribute('href', '/sales-pushes/01JPUSH');
     });
+});
+
+describe('Closing payment mappings', () => {
+    const payments = [
+        {
+            paymentMethod: 'Cash',
+            recaps: 2,
+            mapping: null,
+        },
+        {
+            paymentMethod: 'QRIS',
+            recaps: 1,
+            mapping: {
+                paymentMethod: 'QRIS',
+                coaNo: '1 1 02 05',
+                coaName: 'Bank QRIS',
+                merchantDiscountRate: '0.7',
+            },
+        },
+    ];
+
+    it('lists each payment method with its ERP account and rate', () => {
+        render(
+            <ClosingPaymentMappings canManage={false} payments={payments} />,
+        );
+
+        const table = screen.getByRole('table', { name: 'Payment mappings' });
+        const [, cash, qris] = within(table).getAllByRole('row');
+
+        expect(cash).toHaveTextContent('Not mapped');
+        expect(qris).toHaveTextContent('1 1 02 05 · Bank QRIS');
+        expect(qris).toHaveTextContent('0.7%');
+        expect(
+            screen.queryByRole('button', { name: /Map|Edit/ }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('maps a payment method to an account and a merchant discount rate', async () => {
+        const user = userEvent.setup();
+        render(<ClosingPaymentMappings canManage payments={payments} />);
+
+        await user.click(screen.getByRole('button', { name: 'Map Cash' }));
+
+        const dialog = screen.getByRole('dialog', {
+            name: 'Map payment method Cash',
+        });
+        expect(
+            within(dialog).getByRole('combobox', { name: 'ERP account' }),
+        ).toBeVisible();
+        expect(
+            within(dialog).getByLabelText('Merchant discount rate (%)'),
+        ).toHaveValue('0');
+    });
+
+    it('shows the errors the server sends back', async () => {
+        const put = vi
+            .spyOn(router, 'put')
+            .mockImplementation((_url, _data, options) => {
+                options?.onError?.({
+                    merchantDiscountRate:
+                        'The merchant discount rate field must be between 0 and 100.',
+                });
+            });
+        const user = userEvent.setup();
+        render(<ClosingPaymentMappings canManage payments={payments} />);
+
+        await user.click(screen.getByRole('button', { name: 'Map Cash' }));
+        const dialog = screen.getByRole('dialog');
+        const rate = within(dialog).getByLabelText(
+            'Merchant discount rate (%)',
+        );
+        await user.clear(rate);
+        await user.type(rate, '101');
+        await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+        expect(put).toHaveBeenCalledWith(
+            '/closing-mappings/payments/Cash',
+            expect.objectContaining({ merchantDiscountRate: '101' }),
+            expect.anything(),
+        );
+        expect(
+            within(dialog).getByText(
+                'The merchant discount rate field must be between 0 and 100.',
+            ),
+        ).toBeVisible();
+    });
+
+    it('removes a mapping only after confirming', async () => {
+        const destroy = vi.spyOn(router, 'delete').mockImplementation(() => {});
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const user = userEvent.setup();
+        render(<ClosingPaymentMappings canManage payments={payments} />);
+
+        expect(
+            screen.queryByRole('button', {
+                name: 'Remove the mapping of Cash',
+            }),
+        ).not.toBeInTheDocument();
+
+        const remove = screen.getByRole('button', {
+            name: 'Remove the mapping of QRIS',
+        });
+        await user.click(remove);
+        expect(destroy).not.toHaveBeenCalled();
+
+        confirm.mockReturnValue(true);
+        await user.click(remove);
+        expect(destroy).toHaveBeenCalledWith(
+            '/closing-mappings/payments/QRIS',
+            expect.anything(),
+        );
+    });
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
 });

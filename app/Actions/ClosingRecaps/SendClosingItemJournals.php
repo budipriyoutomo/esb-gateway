@@ -23,7 +23,8 @@ use Illuminate\Support\Facades\Cache;
  *    delete, or one whose outcome stays unknown, stops here: nothing new is
  *    created while the old journals may still be in the ERP.
  * 2. Each prepared (or failed) journal of the current version is created,
- *    one attempt each. A refusal is `failed` and can be sent again; an
+ *    one attempt each. A prepared version with no journals of its own (an
+ *    emptied recap) only deletes. A refusal is `failed` and can be sent again; an
  *    unknown outcome is `unconfirmed` and blocks the recap until settled.
  *
  * One send per recap at a time.
@@ -69,7 +70,7 @@ class SendClosingItemJournals
             ->orderBy('id')
             ->get();
 
-        if ($pending->isEmpty()) {
+        if ($pending->isEmpty() && ! $recap->hasJournalsToClear()) {
             throw new ClosingRecapNotReady($recap->status === ClosingRecap::STATUS_SENT
                 ? 'Every item journal of this recap is already in the ERP.'
                 : 'Nothing is prepared for the current version. Prepare the recap first.');

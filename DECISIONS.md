@@ -1388,16 +1388,25 @@ Facts that shaped the design:
     location item journals use);
   - closing `menuId` → ESB menu (for sales) and `bomID` (picked by hand);
   - `pos_only` `productCode` → ESB menu;
-  - kind (`waste` | `adjustment` | `compensation`) → `purposeID` and a direction (+1/−1).
+  - kind (`waste` | `adjustment` | `compensation`) → `purposeID` and a direction (+1/−1);
+  - POS payment method (P30) → ESB `coaNo` and `merchantDiscountRate`. sync-api sends
+    only the method's name, so the account is the gateway's to decide.
   - A recap with any missing mapping cannot be processed, and the screen lists what is
     missing.
 - **Prepare** (operator action). From the current version, the gateway builds:
-  - **One Push Sales body.**
-    - `salesNum` = `CL` + `branchCode` + `YYYYMMDD`, at most 20 characters, checked when
-      the outlet is mapped.
+  - **One Push Sales body per visit purpose** (P30; P29 built one per recap).
+    - sync-api splits a recap's sales by `visitPurposeName` (contract revision 3 as
+      sync-api proposed it). Each element is one ESB transaction.
+    - `salesNum` = `CL` + `branchCode` + `YYMMDD` + a slot digit, at most 19 characters.
+      The slot is fixed per recap and visit purpose: a revision reuses it, a new purpose
+      takes the next unused one, and a purpose gone from a revision keeps its slot.
     - `salesDate` = `productionDate`.
-    - Menu lines carry `totalSold` and the prices and taxes the sender gave. The header
-      totals and `payment[]` are the sender's, forwarded as given.
+    - Menu lines are the item price lines of that visit purpose, with the prices and
+      taxes the sender gave. The header totals and the payment amounts are the
+      sender's, forwarded as given; each payment's `coaNo` and `merchantDiscountRate`
+      come from the payment method mapping.
+    - Sales wait while any visit purpose has no payments (sync-api does not pull them
+      from the POS yet) or a payment method is unmapped.
   - **Up to three item journals**, one per kind that has a non-zero line.
     - Each menu qty is multiplied by the BOM's first-level material lines, then by the
       purpose direction.
@@ -1416,6 +1425,8 @@ Facts that shaped the design:
   - Push Sales is sent again under the same `salesNum`.
   - Every item journal of the earlier send is deleted in the ESB first, then the new ones
     are created. There is no `PUT` branch.
+  - A prepared revision with no journals of its own (an emptied recap, or no waste
+    left) still sends: it only deletes (P30).
   - Each step has its own status, so a failure resumes from the failed step. Possible
     states include *delete refused*, *old journals deleted, new not yet created*, and
     *created*.
@@ -1428,8 +1439,9 @@ Facts that shaped the design:
   operator sees mapping gaps before anything is written.
 - The two `409` reasons keep the sender from reading a refused older sequence as
   delivered.
-- One sales transaction per recap with a fixed `salesNum` makes revisions safe through
-  the vendor's own overwrite rule.
+- One sales transaction per visit purpose with a fixed `salesNum` makes revisions safe
+  through the vendor's own overwrite rule, and keeps the ESB's visit purpose reports
+  right.
 - One journal per purpose avoids a duplicate `productDetailID` in one journal, and keeps
   each purpose reversible on its own.
 - Delete-then-create is the owner's rule, and a single path is simpler to test than
@@ -1464,8 +1476,13 @@ Facts that shaped the design:
     Send.
   - A create that the ERP accepts without returning `itemJournalNum` is treated as
     unconfirmed. Without the number, a later revision could not delete it.
+- A visit purpose that was sent and is gone from a later revision stays in the ESB:
+  Push Sales has no delete. The recap screen warns about it, and the operator voids it
+  in the ERP.
+- An emptied recap (`items: []`, `sales: []`) is accepted. Its item journals are
+  deleted on send; its sales sent before are the case above.
 - Five new tables (submissions, recaps, recap items, plus the outlet, menu and purpose
-  mappings) and a prepared-documents table. These are feature tables, not ADR-017's
+  mappings), a payment method mapping table (P30) and a prepared-documents table. These are feature tables, not ADR-017's
   `sync_transactions`.
 
 **Rejected**
@@ -1484,11 +1501,20 @@ Facts that shaped the design:
 **Open**
 - Contract revision 3: the exact price, tax and payment fields, how one menu sold at more
   than one price is sent, and the price of colorplate sales.
-  - **Built in P29 against our own proposal** (`docs/balasan-kontrak-kirim-closing.md`
-    §2.1): optional `sales`, `payments` and `items[].prices`. A revision 2 recap is
+  - P29 was built against our own proposal (`docs/balasan-kontrak-kirim-closing.md`
+    §2.1).
+  - **P30 follows sync-api's answer** (`docs/usulan-kontrak-kirim-closing.md`
+    revision 3, 17 November 2026): `sales` is a list, one element per
+    `visitPurposeName`, each with its own `payments` (`[]` for now); every
+    `items[].prices[]` names its `visitPurposeName`; colorplate portions are priced at
+    the plate price inside the menu's `prices`. `coaNo` and `merchantDiscountRate` are
+    not taken from the sender. `items` may be empty. A revision 2 recap (no `sales`) is
     still accepted, but its sales cannot be prepared.
-  - If sync-api changes the shape, only `ReceiveClosingTotalsRequest` and
-    `PrepareClosingSalesPush` need to change.
+  - Still unconfirmed by sync-api: that the gateway accepts these as described, the
+    official `visitPurposeName` list (sync-api sends `SALEMODE n` until then; the ESB
+    may refuse them), and the field for POS `OtherIncome` (sent as `orderFee` for now).
+- Whether Push Sales accepts a transaction without payments. **Assumed not**: sales wait
+  for the payments.
 - Push Sales values the recap does not carry, **assumed** as constants on
   `PrepareClosingSalesPush`:
   - `salesDateIn` / `salesDateOut` = production date `23:59:59`;
@@ -1511,3 +1537,109 @@ Facts that shaped the design:
   mapping.
 - The `salesDateIn` time, the item journal date if the stock period is closed, and the
   retention of submissions.
+
+## ADR-033 — Production on One VPS: Two Containers, the App Under supervisord
+
+**Status:** Accepted
+
+**Context**
+`docs/13-deployment.md` listed the components the application needs (TLS-terminating
+proxy, PHP-FPM, queue workers, exactly one scheduler, PostgreSQL, Redis) and left the
+topology TBD. The owner decided on 2026-11-19:
+
+- one VPS, deployed with Docker Compose, images **built on the VPS** from the checkout;
+- PostgreSQL is the **existing** container `maharasa-postgres` on the Docker network
+  `posgresql_default`, shared with other applications;
+- there is no Redis on the VPS yet;
+- TLS is terminated by the **existing Nginx Proxy Manager** (NPM), domain
+  `esbgate.maharasa.id`;
+- `ESB_ENV=production` — there is no staging install;
+- **only two containers** (`app` and `redis`): the VPS already runs too many. A first
+  draft with six (migrate, app, worker, scheduler, web, redis) was turned down.
+
+Facts from the code that constrain the setup:
+
+- Redis must be shared by web and workers (ADR-005, ADR-009).
+- The document template import jobs set `$timeout = 1800`, while
+  `config/queue.php` defaults `retry_after` to 90 seconds. A job that runs longer than
+  `retry_after` is handed to a second worker while the first is still running.
+- `bootstrap/app.php` trusted no proxy, so behind NPM every request looked like plain
+  http from the proxy's address: no HSTS, and rate limits and audit rows keyed on the
+  proxy's IP.
+- NPM appends the address it saw to any `X-Forwarded-For` the client sent, and Symfony
+  reads the **left-most** entry — so trusting the header as-is lets a client choose its
+  own IP. NPM also passes a client-sent `X-Forwarded-Host` through.
+- PHP-FPM speaks FastCGI, not HTTP; NPM can only forward HTTP, so an HTTP server must
+  sit in front of FPM.
+- The Wayfinder Vite plugin runs `php artisan wayfinder:generate` during `vite build`,
+  so the asset build needs PHP and Node in one stage.
+- `DatabaseSeeder` imports the endpoint catalog from `docs/esb/` at runtime.
+
+**Decision**
+- `docker-compose.yml` runs two services: `app` and `redis` (new, password + AOF).
+- `app` is one PHP 8.3 FPM image (`Dockerfile`, target `app`) whose
+  `docker/supervisord.conf` runs **nginx, php-fpm, the queue worker
+  (`queue:work redis`) and the scheduler (`schedule:work`)**. supervisord and the
+  nginx/FPM masters run as root; every PHP process that touches the app runs as
+  `www-data`.
+- `docker/entrypoint.sh` builds the config, route, event and view caches (as
+  `www-data`), then — for the default `supervisord` command only — runs
+  `app:check-production-readiness` and `migrate --force` before starting supervisord.
+  A failed check exits the container. `RUN_MIGRATIONS=false` skips both.
+- No service publishes a host port. `app` joins NPM's network (external, name in
+  `PROXY_NETWORK`) with the alias `erp-gateway-app`, and `posgresql_default`
+  (external).
+- `bootstrap/app.php` trusts the immediate peer (`trustProxies(at: '*')`) for
+  `X-Forwarded-For` and `X-Forwarded-Proto` **only**. `docker/nginx/default.conf`
+  forwards only the right-most `X-Forwarded-For` entry to PHP and blanks
+  `X-Forwarded-Host` / `X-Forwarded-Port`. FPM listens on `127.0.0.1:9000` only.
+- Production sets `REDIS_QUEUE_RETRY_AFTER=1860`. supervisord gives the worker
+  `stopwaitsecs=1860`; Compose gives the container `stop_grace_period: 32m`.
+- One named volume `storage`. Logs go to stderr (`LOG_CHANNEL=stderr`, nginx logs
+  linked to stdout/stderr).
+
+**Reason**
+- The owner's constraint on container count. Everything except Redis runs from the same
+  code and configuration anyway, which ADR-009 depends on.
+- Trusting `*` is safe only because nothing but NPM can reach the app: no host port is
+  published, and FPM is bound to loopback.
+- Running the readiness check before migrations in the entrypoint makes the deploy
+  sequence in `docs/13-deployment.md` automatic rather than a step someone can skip.
+
+**Consequences**
+- **A redeploy is downtime.** Compose stops the old container fully before starting
+  the new one, and stopping waits for a running import (up to ~31 minutes). Check for
+  running imports before deploying.
+- `docker compose ps` shows one `app` state; a crashed worker or scheduler is visible
+  only through `docker compose exec app supervisorctl status` (supervisord restarts
+  them). All four processes log into one stream.
+- `app` must never be scaled: it carries the only scheduler, and migrations would race.
+- `docker compose exec` runs as root by default; artisan must be run with
+  `-u www-data` so nothing in `storage/` becomes root-owned.
+- Building on the VPS uses its CPU and disk; old images must be pruned. Rollback relies
+  on tagging images per release (`IMAGE_TAG`).
+- `APP_KEY` lives only in the VPS `.env`; it must be backed up separately from the
+  database because it encrypts the stored ESB credentials (ADR-018).
+- A production install writes to the real ERP from the first ESB call; there is no
+  staging to rehearse on.
+
+**Rejected**
+- Six containers (separate migrate, web, worker, scheduler) — better isolation and a
+  redeploy that does not wait on the worker, but turned down by the owner for container
+  count on the VPS.
+- FrankenPHP instead of nginx + FPM — would drop nginx from the image, but the
+  `X-Forwarded-For` sanitizing is already written and reviewed for nginx.
+- Publishing the app on a host port for NPM to reach via the host IP — Docker's port
+  publishing bypasses host firewalls such as `ufw`, which would expose the app without
+  TLS.
+- Trusting `X-Forwarded-Host` — would let a client pick the host that absolute URLs
+  (password reset links) are built on.
+- Building config caches into the image — they would capture the build environment,
+  not the VPS `.env`.
+
+**Open**
+- The image build has not been run yet (no Docker on the development machine). The
+  first build on the VPS is its test.
+- Backup schedule for `erp_gateway` and for `APP_KEY`, and a rehearsed restore.
+- Worker count (one process) until the ESB's rate limits are known.
+- Whether NPM's default upload limit needs raising for 20 MB imports.

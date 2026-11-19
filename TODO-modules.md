@@ -16,7 +16,7 @@ jawaban ESB/bisnis).
 
 1. **Dokumentasi kontrak dulu.** Baca operasi di `docs/esb/esb-core-endpoints.md` /
    `esb-oms-endpoints.md` + halaman vendor. Tulis entri `[ESB-0xx]` di
-   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-051]`**). Jangan mengarang
+   `docs/05-api-integration.md` (nomor berikutnya: **`[ESB-053]`**). Jangan mengarang
    field yang tidak terdokumentasi — tandai sebagai asumsi/TBD.
 2. **Fixture** `tests/Fixtures/Core<Module>.php` dari contoh respons vendor.
 3. **Tulis test yang gagal (RED)**, jalankan, pastikan gagal karena alasan yang benar:
@@ -100,6 +100,8 @@ memberi usulan pesan commit.
 | P27 | ADR-032 fase 2: layar rekap + mapping outlet / menu-BOM / produk / purpose | `[x]` siap commit |
 | P28 | ADR-032 fase 3: susun & kirim Item Journal (BOM satu tingkat, revisi = delete lalu create) | `[x]` siap commit (asumsi TBD: qty BOM = `qty` per 1 menu dalam satuan stok, pembulatan 4 desimal; delete IJ authorized dicek di staging `[!]`) |
 | P29 | ADR-032 fase 4: susun & kirim Push Sales | `[x]` siap commit (dibangun atas usulan revisi 3 kita sendiri, belum dikonfirmasi pengirim `[!]`; nilai TBD: jam `23:59:59`, `createdBy` CLOSING, statusID 8/13) |
+| P30 | ADR-032: kontrak revisi 3 versi sync-api (`sales` per `visitPurposeName` + `payments` di dalamnya, `prices[].visitPurposeName`, rekap kosong), Push Sales satu transaksi per tujuan kunjungan (slot `salesNum` tetap), mapping payment method → COA/MDR, rekap kosong menghapus IJ lama | `[x]` siap commit (Push Sales tanpa payment diasumsikan ditolak → sales menunggu `payments` `[!]`; daftar resmi `visitPurposeName` dan field `OtherIncome` menunggu jawaban `[!]`; penjualan tujuan kunjungan yang hilang dari revisi tidak bisa dihapus lewat Push Sales, hanya diberi peringatan `[!]`) |
+| P31 | §2.11 Branch S1 `[ESB-051]` (list + detail ESB Core) + §2.12 Visit Purpose master lokal `[ESB-052]` (CRUD + audit, nama dari recap yang belum terdaftar) | `[x]` siap commit (paging vendor `/branch/list`, `flagActive=0`, list ESB visit purpose `[!]`) |
 
 Item `[!]` (butuh jawaban ESB/bisnis) dilewati dalam phase-nya dan tidak memblokir
 commit phase tersebut.
@@ -790,6 +792,28 @@ Dikerjakan sebelum Inventory/Finance karena menyuplai picker.
       (`supplier-categories.manage`).
 - [x] S3 (2026-10-19, `[ESB-030]`): create (mengembalikan id → halaman record) / update;
       nama ASCII saja.
+
+### 2.11 Branch (`/branch`)
+
+- [x] S1 (2026-11-17, `[ESB-051]`, P31): list (`GET /branch` utuh, search nama/kode +
+      paging di gateway, filter status dikirim sebagai `flagActive`) + detail
+      `GET /branch/{id}` (tanpa URL gambar, ADR-006). Menu Master data → Branches.
+- [!] `/branch/list` (paging vendor) tidak dipakai: bentuk baris tidak didokumentasikan.
+- [!] `flagActive=0` perlu `flagIncludeNotActive=1` atau tidak: tidak terdokumentasi.
+- [!] Nama tipe branch / brand / timezone: hanya id (tidak ada endpoint yang terdokumentasi).
+- Tidak ada create/update/delete di katalog Core → modul tetap read-only.
+
+### 2.12 Visit Purpose (master lokal gateway)
+
+- [x] (2026-11-17, `[ESB-052]`, P31, keputusan user): tabel `visit_purposes` di gateway,
+      CRUD + audit (`visit-purpose.saved` / `.deleted`); lihat `closing-recaps.view`,
+      ubah `closing-mappings.manage`. Halaman menampilkan jumlah recap per purpose dan
+      nama dari recap yang belum terdaftar. Menu POS → Visit purposes.
+- [!] List ESB (OMS `get-visit-purpose`) tidak dibangun: kendala sama dengan Payment
+      Method `[ESB-028]` (Basic auth backend POS, respons non-envelope, tanpa host
+      staging-int).
+- [ ] Keputusan bisnis: apakah `POST /api/v1/closing-totals` menolak `visitPurposeName`
+      yang tidak terdaftar (mengubah kontrak sync-api).
 
 ---
 

@@ -1,15 +1,16 @@
 import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
-import { items, outlets, purposes } from '@/routes/closing-mappings';
+import { items, outlets, payments, purposes } from '@/routes/closing-mappings';
 
 const LINKS = [
     { key: 'outlets', label: 'Outlets', href: outlets().url },
     { key: 'items', label: 'Menus & products', href: items().url },
     { key: 'purposes', label: 'Purposes', href: purposes().url },
+    { key: 'payments', label: 'Payment methods', href: payments().url },
 ] as const;
 
 /**
- * Moves between the three closing mapping pages (ADR-032).
+ * Moves between the closing mapping pages (ADR-032).
  */
 export function ClosingMappingNav({
     current,

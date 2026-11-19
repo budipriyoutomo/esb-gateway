@@ -447,6 +447,14 @@ enum AuditAction: string
     case ClosingMappingDeleted = 'closing-mapping.deleted';
 
     /**
+     * A visit purpose kept in the gateway was added or changed ([ESB-052]).
+     * Metadata holds the values before and after.
+     */
+    case VisitPurposeSaved = 'visit-purpose.saved';
+
+    case VisitPurposeDeleted = 'visit-purpose.deleted';
+
+    /**
      * A closing recap's item journals were prepared from its current version
      * (ADR-032). The metadata names the sequence, the kinds and the line count.
      */

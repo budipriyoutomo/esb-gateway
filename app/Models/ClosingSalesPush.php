@@ -8,13 +8,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * The Push Sales Data V2 transaction one prepared version of a closing recap
- * becomes (ADR-032, P29). Sending hands it to a SalesPush (ADR-022).
+ * One Push Sales Data V2 transaction a prepared version of a closing recap
+ * becomes: one per visit purpose (ADR-032, P29-P30). Sending hands it to a
+ * SalesPush (ADR-022).
  *
  * @property int $id
  * @property string $public_id
  * @property int $closing_recap_id
  * @property int $recap_sequence
+ * @property string $visit_purpose_name
+ * @property int $slot The digit ending the salesNum, fixed per recap and visit purpose.
  * @property string $sales_num
  * @property array{salesHead: array<string, mixed>} $payload
  * @property string $status
@@ -46,6 +49,7 @@ class ClosingSalesPush extends Model
     {
         return [
             'recap_sequence' => 'integer',
+            'slot' => 'integer',
             'payload' => 'array',
             'sent_at' => 'datetime',
         ];

@@ -14,9 +14,10 @@ Production components:
 - PostgreSQL;
 - Redis.
 
-**Exact topology is still TBD** — instance counts, hosting, and network boundaries have
-not been decided. What follows is what the application requires of whatever topology is
-chosen.
+The chosen topology is **Docker Compose on one VPS** (ADR-033) — see
+[Docker Compose deployment](#docker-compose-deployment) below. The requirements that
+follow hold for any topology; the bare-metal recipes (supervisor, cron) are kept for
+reference.
 
 ## Requirements the application imposes
 
@@ -27,6 +28,8 @@ chosen.
 | TLS terminated in front, with `X-Forwarded-Proto` trusted | `URL::forceScheme('https')` is set in production; the app must know the request was secure |
 | Exactly one scheduler instance | `integration-logs:prune` is guarded with `onOneServer()`, which needs a shared cache to work |
 | Writable `storage/` | Logs, sessions if file-driven, framework caches |
+| `REDIS_QUEUE_RETRY_AFTER` above the longest job timeout | Document template imports run up to 1800 s; with the default 90 s a second worker picks the same job up mid-run. Production uses 1860. |
+| Proxy headers trusted for `For` and `Proto` only | `bootstrap/app.php`. The proxy in front must pass only the address it saw as `X-Forwarded-For` (the nginx inside the Docker `app` container keeps the right-most entry). |
 
 ### Redis is not optional
 
@@ -80,6 +83,61 @@ release. Running it locally is safe: checks that are environment-specific (crede
 degrade to warnings outside production, so a developer machine without ESB credentials
 still gets a useful answer.
 
+## Docker Compose deployment
+
+Decided in ADR-033. Files: `Dockerfile`, `docker-compose.yml`, `docker/`,
+`.env.production.example`. The step-by-step first deploy is in `TODO-deploy.md`.
+
+**Two containers** — the owner's limit for this VPS:
+
+```
+Internet --TLS--> Nginx Proxy Manager --(PROXY_NETWORK)--> app :80
+                                                            |
+      app = supervisord: nginx + php-fpm + queue worker + scheduler
+            (entrypoint: caches, readiness check, migrate --force, then supervisord)
+                    |                                    |
+  (posgresql_default) maharasa-postgres            redis (this compose)
+```
+
+| Container | Runs |
+| --- | --- |
+| `app` | `docker/entrypoint.sh` builds caches, runs `app:check-production-readiness` and `migrate --force` (a failure exits the container), then `docker/supervisord.conf` starts nginx, php-fpm (`127.0.0.1:9000`), `queue:work redis --sleep=3 --tries=3 --max-time=3600` and `schedule:work`. Healthcheck on `/up`. |
+| `redis` | Password + AOF, volume `redis`. Not published. |
+
+- **No host ports are published.** NPM reaches `app` over its own Docker network
+  (alias `erp-gateway-app`); the app reaches PostgreSQL over `posgresql_default`. Both
+  networks are `external`.
+- **Never scale `app`** — it carries the only scheduler, and the entrypoint migrates.
+- **Process state:** `docker compose exec app supervisorctl status`. `docker compose ps`
+  shows only the container; supervisord restarts a crashed worker or scheduler on its
+  own. All processes log into `docker compose logs app`.
+- **Artisan by hand:** `docker compose exec -u www-data app php artisan …` — without
+  `-u www-data` it runs as root and can leave root-owned files in `storage/`.
+- **Config caches are built at container start**, so they capture the VPS `.env`, not
+  the build environment. `RUN_MIGRATIONS=false` skips the readiness check and
+  migrations.
+- `.env` is both the container environment and Compose's interpolation source: a
+  literal `$` in a value must be written `$$`.
+
+Nginx Proxy Manager: Proxy Host `esbgate.maharasa.id` → `http://erp-gateway-app:80`,
+Let's Encrypt certificate, Force SSL. Raise its upload limit if 20 MB imports are
+refused.
+
+Deploy and redeploy:
+
+```
+git pull
+docker compose up -d --build     # rebuild, readiness check, migrate, restart everything
+curl -fsS https://esbgate.maharasa.id/health
+```
+
+Steps 1–6 of the [deploy sequence](#deploy-sequence) happen inside `up`; steps 7 and 8
+remain manual. Set `IMAGE_TAG` per release to keep the previous image for rollback.
+
+**A redeploy is downtime.** The old container must stop completely before the new one
+starts, and stopping waits (up to 31 minutes) for a running document template import to
+finish. Deploy when no import is running.
+
 ## Queue workers
 
 Workers must be supervised and restarted on deploy. A supervisor program, as a starting
@@ -125,8 +183,11 @@ See `.env.example` for the full list. Production must set, at minimum:
 - Redis connection
 - `ESB_ENV` and the credential for the configured `ESB_AUTH_MECHANISM`
 - `ESB_INTEGRATION_LOG_RETENTION_DAYS` once retention is decided
+- `REDIS_QUEUE_RETRY_AFTER=1860`
+- Docker only: `PROXY_NETWORK`, `POSTGRES_NETWORK`, `IMAGE_TAG`, `RUN_MIGRATIONS`, and
+  `LOG_CHANNEL=stderr`
 
-Never commit a production `.env`.
+`.env.production.example` is the template. Never commit a production `.env`.
 
 ## Database
 
@@ -203,7 +264,8 @@ versions of the code.
 
 ## Still TBD
 
-- Instance counts, hosting, and network topology.
+- ~~Instance counts, hosting, and network topology.~~ Decided: ADR-033.
+- The first Docker image build — not yet run (no Docker on the development machine).
 - Backup schedule, retention, and a verified restore.
 - A verified rollback rehearsal.
 - Integration log retention period (`docs/11-logging-monitoring.md`).

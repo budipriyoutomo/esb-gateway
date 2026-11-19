@@ -12,6 +12,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,6 +23,20 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        // TLS terminates at the reverse proxy (docs/13-deployment.md). "*"
+        // trusts only the immediate peer, which in the Docker topology is the
+        // proxy itself: the app is never published to the host, so nothing
+        // else can reach it to forge these headers. Without this, HSTS is
+        // never sent and rate limits and audit rows key on the proxy's IP.
+        //
+        // Only For and Proto: the proxy passes a client-sent X-Forwarded-Host
+        // through, and trusting it would let a client pick the host absolute
+        // URLs are built on.
+        $middleware->trustProxies(
+            at: '*',
+            headers: SymfonyRequest::HEADER_X_FORWARDED_FOR | SymfonyRequest::HEADER_X_FORWARDED_PROTO,
+        );
 
         $middleware->alias([
             'api-client' => AuthenticateApiClient::class,

@@ -382,9 +382,28 @@ class ClosingTotalsApiTest extends TestCase
     }
 
     #[Test]
-    public function an_empty_item_list_is_refused(): void
+    public function an_empty_recap_replaces_the_earlier_one(): void
     {
-        $this->send(ClosingTotals::payload(['items' => []]))
+        // Contract revision 3: a revision may empty the recap (wrong outlet).
+        $this->send(ClosingTotals::payload(['messageId' => $this->messageId(1), 'sequence' => 1]))->assertCreated();
+
+        $this->send(ClosingTotals::payload(['messageId' => $this->messageId(2), 'sequence' => 2, 'items' => [], 'sales' => []]))
+            ->assertCreated()
+            ->assertJsonPath('items', 0);
+
+        $recap = $this->recap();
+        $this->assertSame(2, $recap->sequence);
+        $this->assertSame(0, $recap->items()->count());
+        $this->assertSame([], $recap->sales);
+    }
+
+    #[Test]
+    public function the_item_list_must_be_there_even_when_empty(): void
+    {
+        $payload = ClosingTotals::payload();
+        unset($payload['items']);
+
+        $this->send($payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['items']);
     }
@@ -482,13 +501,26 @@ class ClosingTotalsApiTest extends TestCase
         $this->send(ClosingTotals::revision3())->assertCreated();
 
         $recap = $this->recap();
-        $this->assertSame(242650, $recap->sales['grandTotal']);
-        $this->assertSame('DINE IN', $recap->sales['visitPurposeName']);
-        $this->assertSame('Cash', $recap->payments[0]['paymentMethod']);
+        $this->assertCount(1, $recap->sales);
+        $this->assertSame(242650, $recap->sales[0]['grandTotal']);
+        $this->assertSame('DINE IN', $recap->sales[0]['visitPurposeName']);
+        $this->assertSame('Cash', $recap->sales[0]['payments'][0]['paymentMethod']);
+        $this->assertSame(242650, $recap->sales[0]['payments'][0]['paymentAmount']);
 
         $closing = $recap->items()->where('source', 'closing')->sole();
         $this->assertSame(13, $closing->prices[0]['qty']);
         $this->assertSame(15000, $closing->prices[0]['price']);
+        $this->assertSame('DINE IN', $closing->prices[0]['visitPurposeName']);
+    }
+
+    #[Test]
+    public function sales_come_as_one_element_per_visit_purpose(): void
+    {
+        $this->send(ClosingTotals::twoPurposes())->assertCreated();
+
+        $sales = $this->recap()->sales;
+        $this->assertSame(['DINE IN', 'TAKE AWAY'], array_column($sales, 'visitPurposeName'));
+        $this->assertSame('QRIS', $sales[1]['payments'][0]['paymentMethod']);
     }
 
     #[Test]
@@ -497,19 +529,60 @@ class ClosingTotalsApiTest extends TestCase
         $this->send(ClosingTotals::payload())->assertCreated();
 
         $this->assertNull($this->recap()->sales);
-        $this->assertNull($this->recap()->payments);
         $this->assertNull($this->recap()->items()->firstOrFail()->prices);
     }
 
     #[Test]
-    public function sales_and_payments_come_together(): void
+    public function sales_must_be_a_list_with_each_visit_purpose_once(): void
     {
-        $payload = ClosingTotals::revision3();
-        unset($payload['payments']);
-
-        $this->send($payload)
+        $this->send(ClosingTotals::revision3(['sales' => ClosingTotals::sales()]))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['payments']);
+            ->assertJsonValidationErrors(['sales']);
+
+        $this->send(ClosingTotals::revision3(['sales' => [ClosingTotals::sales(), ClosingTotals::sales(['visitPurposeName' => ' dine in '])]]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sales.1.visitPurposeName']);
+    }
+
+    #[Test]
+    public function payments_belong_to_each_sales_element_and_may_be_empty_for_now(): void
+    {
+        $sales = ClosingTotals::sales();
+        unset($sales['payments']);
+
+        $this->send(ClosingTotals::revision3(['sales' => [$sales]]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sales.0.payments']);
+
+        // sync-api does not pull payments from the POS yet.
+        $this->send(ClosingTotals::revision3(['sales' => [ClosingTotals::sales(['payments' => []])]]))->assertCreated();
+
+        $this->assertSame([], $this->recap()->sales[0]['payments']);
+    }
+
+    #[Test]
+    public function the_gateway_keeps_only_the_payment_fields_the_sender_owns(): void
+    {
+        // coaNo and merchantDiscountRate are mapped per paymentMethod here.
+        $this->send(ClosingTotals::revision3(['sales' => [ClosingTotals::sales([
+            'payments' => [ClosingTotals::payment(['coaNo' => '9 9 99', 'merchantDiscountRate' => 2])],
+        ])]]))->assertCreated();
+
+        $this->assertSame(
+            ['paymentMethod' => 'Cash', 'paymentAmount' => 242650, 'fullPaymentAmount' => 242650, 'notes' => ''],
+            $this->recap()->sales[0]['payments'][0],
+        );
+    }
+
+    #[Test]
+    public function an_empty_sales_list_is_accepted_for_a_day_with_only_waste(): void
+    {
+        $this->send(ClosingTotals::payload([
+            'sales' => [],
+            'items' => [ClosingTotals::closingItem(['colorplateSold' => 0, 'posQty' => 0, 'totalSold' => 0, 'prices' => []])],
+        ]))->assertCreated();
+
+        $this->assertSame([], $this->recap()->sales);
     }
 
     #[Test]
@@ -521,6 +594,20 @@ class ClosingTotalsApiTest extends TestCase
         ]]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['items.0.prices', 'items.1.prices']);
+    }
+
+    #[Test]
+    public function each_price_line_names_a_visit_purpose_of_the_sales(): void
+    {
+        $unnamed = ClosingTotals::price(13, 15000);
+        unset($unnamed['visitPurposeName']);
+
+        $this->send(ClosingTotals::revision3(['items' => [
+            ClosingTotals::closingItem(['prices' => [$unnamed]]),
+            ClosingTotals::posOnlyItem(['prices' => [ClosingTotals::price(2, 8000, 'DELIVERY')]]),
+        ]]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.prices.0.visitPurposeName', 'items.1.prices.0.visitPurposeName']);
     }
 
     #[Test]
@@ -538,15 +625,17 @@ class ClosingTotalsApiTest extends TestCase
     public function price_lines_and_payments_need_their_numbers(): void
     {
         $this->send(ClosingTotals::revision3([
-            'sales' => ClosingTotals::sales(['grandTotal' => 'a lot']),
-            'payments' => [ClosingTotals::payment(['paymentAmount' => null, 'paymentMethod' => ''])],
-            'items' => [ClosingTotals::closingItem(['prices' => [['qty' => 13]]])],
+            'sales' => [ClosingTotals::sales([
+                'grandTotal' => 'a lot',
+                'payments' => [ClosingTotals::payment(['paymentAmount' => null, 'paymentMethod' => ''])],
+            ])],
+            'items' => [ClosingTotals::closingItem(['prices' => [['visitPurposeName' => 'DINE IN', 'qty' => 13]]])],
         ]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
-                'sales.grandTotal',
-                'payments.0.paymentAmount',
-                'payments.0.paymentMethod',
+                'sales.0.grandTotal',
+                'sales.0.payments.0.paymentAmount',
+                'sales.0.payments.0.paymentMethod',
                 'items.0.prices.0.price',
                 'items.0.prices.0.total',
             ]);

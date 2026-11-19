@@ -50,7 +50,9 @@ class ReceiveClosingTotalsRequest extends FormRequest
             'outlet.code' => ['required', 'string', 'max:20'],
             'productionDate' => ['required', 'string', 'date_format:Y-m-d'],
 
-            'items' => ['required', 'array', 'list', 'min:1', 'max:'.max(1, (int) config('closing_totals.max_items', 2000))],
+            // Present but possibly empty: a revision may empty the recap
+            // (contract revision 3).
+            'items' => ['present', 'array', 'list', 'max:'.max(1, (int) config('closing_totals.max_items', 2000))],
             'items.*' => ['array'],
             'items.*.source' => ['required', 'string', Rule::in(ClosingRecapItem::SOURCES)],
 
@@ -69,10 +71,11 @@ class ReceiveClosingTotalsRequest extends FormRequest
             'items.*.adjustment' => $quantity,
             'items.*.compensation' => $quantity,
 
-            // Contract revision 3 (TBD, docs/balasan-kontrak-kirim-closing.md
-            // §2.1): optional, so revision 2 recaps stay valid. Sales and
-            // payments come together; the gateway forwards the figures as
-            // given and does not recompute tax.
+            // Contract revision 3 as sync-api proposed it
+            // (docs/usulan-kontrak-kirim-closing.md §2.2-§2.4): optional, so
+            // revision 2 recaps stay valid. One sales element per visit
+            // purpose, each with its payments; the gateway forwards the
+            // figures as given and does not recompute tax.
             ...$this->salesRules(),
         ];
     }
@@ -83,6 +86,9 @@ class ReceiveClosingTotalsRequest extends FormRequest
         'otherTaxValue', 'vat', 'vatValue', 'otherVat', 'otherVatValue', 'otherTaxOnVat', 'total',
     ];
 
+    /** Visit purposes per recap; POS sale modes are a handful. */
+    public const MAX_SALES = 20;
+
     /**
      * @return array<string, mixed>
      */
@@ -91,22 +97,23 @@ class ReceiveClosingTotalsRequest extends FormRequest
         $amount = ['required', 'numeric', 'between:-999999999999,999999999999'];
 
         $rules = [
-            'sales' => ['nullable', 'array', 'required_with:payments'],
-            'sales.visitPurposeName' => ['required_with:sales', 'string', 'max:100'],
-            'payments' => ['nullable', 'array', 'list', 'min:1', 'max:50', 'required_with:sales'],
-            'payments.*' => ['array'],
-            'payments.*.paymentMethod' => ['required', 'string', 'max:100'],
-            'payments.*.coaNo' => ['present', 'nullable', 'string', 'max:50'],
-            'payments.*.paymentAmount' => $amount,
-            'payments.*.fullPaymentAmount' => $amount,
-            'payments.*.merchantDiscountRate' => ['present', 'numeric'],
-            'payments.*.notes' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'sales' => ['nullable', 'array', 'list', 'max:'.self::MAX_SALES],
+            'sales.*' => ['array'],
+            'sales.*.visitPurposeName' => ['required', 'string', 'max:100'],
+            // Present but empty until sync-api pulls payments from the POS.
+            'sales.*.payments' => ['present', 'array', 'list', 'max:50'],
+            'sales.*.payments.*' => ['array'],
+            'sales.*.payments.*.paymentMethod' => ['required', 'string', 'max:100'],
+            'sales.*.payments.*.paymentAmount' => $amount,
+            'sales.*.payments.*.fullPaymentAmount' => $amount,
+            'sales.*.payments.*.notes' => ['sometimes', 'nullable', 'string', 'max:255'],
             'items.*.prices' => ['sometimes', 'nullable', 'array', 'list', 'max:50'],
             'items.*.prices.*' => ['array'],
+            'items.*.prices.*.visitPurposeName' => ['required', 'string', 'max:100'],
         ];
 
         foreach (ClosingRecap::SALES_TOTALS as $field) {
-            $rules["sales.{$field}"] = ['required_with:sales', 'numeric', 'between:-999999999999,999999999999'];
+            $rules["sales.*.{$field}"] = $amount;
         }
 
         foreach (self::PRICE_FIELDS as $field) {
@@ -125,6 +132,7 @@ class ReceiveClosingTotalsRequest extends FormRequest
             fn (Validator $validator) => $this->checkIdempotencyKey($validator),
             fn (Validator $validator) => $this->checkItems($validator),
             fn (Validator $validator) => $this->checkPrices($validator),
+            fn (Validator $validator) => $this->checkVisitPurposes($validator),
         ];
     }
 
@@ -248,6 +256,49 @@ class ReceiveClosingTotalsRequest extends FormRequest
 
             if (! $sum->isEqualTo($total)) {
                 $validator->errors()->add("items.{$i}.prices", 'The price line quantities must add up to totalSold.');
+            }
+        }
+    }
+
+    /**
+     * Each visit purpose appears once in sales, and every price line names
+     * one of them: a line of another purpose would be in no transaction.
+     */
+    private function checkVisitPurposes(Validator $validator): void
+    {
+        $sales = $this->input('sales');
+
+        if (! is_array($sales) || ! array_is_list($sales)) {
+            return;
+        }
+
+        $purposes = [];
+
+        foreach ($sales as $i => $element) {
+            $name = is_array($element) ? ($element['visitPurposeName'] ?? null) : null;
+
+            if (! is_string($name) || trim($name) === '') {
+                continue;
+            }
+
+            $key = ClosingRecap::purposeKey($name);
+
+            if (isset($purposes[$key])) {
+                $validator->errors()->add("sales.{$i}.visitPurposeName", 'The visitPurposeName appears more than once in sales.');
+            }
+
+            $purposes[$key] = true;
+        }
+
+        foreach ((array) $this->input('items') as $i => $item) {
+            $prices = is_array($item) ? ($item['prices'] ?? null) : null;
+
+            foreach (is_array($prices) ? $prices : [] as $j => $price) {
+                $name = is_array($price) ? ($price['visitPurposeName'] ?? null) : null;
+
+                if (is_string($name) && trim($name) !== '' && ! isset($purposes[ClosingRecap::purposeKey($name)])) {
+                    $validator->errors()->add("items.{$i}.prices.{$j}.visitPurposeName", 'The visitPurposeName is not one of the sales.');
+                }
             }
         }
     }

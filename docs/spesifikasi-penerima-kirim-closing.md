@@ -10,6 +10,14 @@ Semua perilaku pengirim di sini diambil dari implementasi sync-api
 `app/services/closing_export_client.py`). Latar belakang dan pertanyaan
 terbuka ada di `docs/usulan-kontrak-kirim-closing.md`.
 
+> **Catatan ERP Gateway (17 November 2026).** Dokumen ini masih revisi 2.
+> Gateway sudah menerima bentuk revisi 3 dari
+> `docs/usulan-kontrak-kirim-closing.md`: `sales` berupa array per
+> `visitPurposeName` dengan `payments` di dalamnya, `items[].prices[]` yang
+> menyebut `visitPurposeName`, serta `items` dan `sales` yang boleh kosong.
+> `coaNo` dan `merchantDiscountRate` tidak diambil dari pengirim. Bagian 3.1
+> (`items` minimal 1) dan bagian 4 (`items` kosong ditolak) tidak berlaku lagi.
+
 ---
 
 ## 1. Ringkasan

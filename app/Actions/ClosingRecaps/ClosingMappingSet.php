@@ -4,6 +4,7 @@ namespace App\Actions\ClosingRecaps;
 
 use App\Models\ClosingItemMapping;
 use App\Models\ClosingOutletMapping;
+use App\Models\ClosingPaymentMapping;
 use App\Models\ClosingPurposeMapping;
 use App\Models\ClosingRecap;
 use App\Models\ClosingRecapItem;
@@ -19,11 +20,13 @@ final class ClosingMappingSet
      * @param  array<string, ClosingOutletMapping>  $outlets  By outlet code.
      * @param  array<string, ClosingItemMapping>  $items  By "source|key".
      * @param  array<string, ClosingPurposeMapping>  $purposes  By kind.
+     * @param  array<string, ClosingPaymentMapping>  $payments  By ClosingPaymentMapping::keyOf().
      */
     private function __construct(
         private readonly array $outlets,
         private readonly array $items,
         private readonly array $purposes,
+        private readonly array $payments,
     ) {}
 
     public static function load(): self
@@ -34,6 +37,9 @@ final class ClosingMappingSet
                 ->keyBy(fn (ClosingItemMapping $m): string => $m->source.'|'.$m->item_key)
                 ->all(),
             ClosingPurposeMapping::query()->get()->keyBy('kind')->all(),
+            ClosingPaymentMapping::query()->get()
+                ->keyBy(fn (ClosingPaymentMapping $m): string => ClosingPaymentMapping::keyOf($m->payment_method))
+                ->all(),
         );
     }
 
@@ -50,6 +56,50 @@ final class ClosingMappingSet
     public function purpose(string $kind): ?ClosingPurposeMapping
     {
         return $this->purposes[$kind] ?? null;
+    }
+
+    public function payment(string $paymentMethod): ?ClosingPaymentMapping
+    {
+        return $this->payments[ClosingPaymentMapping::keyOf($paymentMethod)] ?? null;
+    }
+
+    /**
+     * What the recap's sales still need before Push Sales can be prepared:
+     * the outlet, each sold item's menu, then per visit purpose its payments
+     * (sync-api sends none yet) and each payment method's ERP account. The
+     * item journal mappings (BOMs, purposes) are not theirs to wait for.
+     *
+     * @return list<array{type: string, key: string, label: string, message: string}>
+     */
+    public function salesMissingFor(ClosingRecap $recap): array
+    {
+        $missing = array_values(array_filter(
+            $this->missingFor($recap),
+            fn (array $gap): bool => in_array($gap['type'], ['outlet', 'item-menu'], true),
+        ));
+
+        $methods = [];
+
+        foreach ($recap->sales ?? [] as $sales) {
+            $purpose = (string) ($sales['visitPurposeName'] ?? '');
+            $payments = $sales['payments'] ?? [];
+
+            if ($payments === []) {
+                $missing[] = self::gap('sales-payments', $purpose, $purpose, "sync-api has not sent the payments of {$purpose} yet.");
+            }
+
+            foreach ($payments as $payment) {
+                $method = (string) $payment['paymentMethod'];
+                $key = ClosingPaymentMapping::keyOf($method);
+
+                if ($this->payment($method) === null && ! isset($methods[$key])) {
+                    $methods[$key] = true;
+                    $missing[] = self::gap('payment-method', $method, $method, "Payment method {$method} has no ERP account.");
+                }
+            }
+        }
+
+        return $missing;
     }
 
     /**

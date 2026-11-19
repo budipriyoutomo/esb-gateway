@@ -4,7 +4,7 @@
 
 ## Last Updated
 
-2026-11-10
+2026-11-19
 
 ## Current Phase
 
@@ -43,7 +43,8 @@ canonical model rather than bolted onto ESB-specific code.
 - [ ] ESB credentials, environment, and auth mechanism confirmed with ESB team
 - [ ] Authentication flow finalized against ESB
 - [ ] Initial database schema finalized
-- [ ] Deployment topology finalized
+- [x] Deployment topology finalized — Docker Compose on one VPS behind Nginx Proxy
+      Manager (ADR-033, 2026-11-19); first image build not yet run
 - [x] Laravel 13 + Inertia 3 + React 19 + TypeScript scaffolded
 - [x] Tailwind 4 + shadcn/ui in place
 - [x] Formatting, linting, static analysis, and CI configured
@@ -1493,7 +1494,7 @@ Still open:
 - Base URLs for the operations where the vendor declares none (four Core "Flow" pages,
   some OMS `Push_Sales_Data` and `Report` entries)
 - Required ERP modules — which of the 401 operations are actually in scope
-- Production infrastructure topology
+- ~~Production infrastructure topology~~ — decided 2026-11-19, ADR-033
 - Retention period for integration logs
 
 ## Important Constraints
@@ -2360,3 +2361,142 @@ against **our own contract revision 3 proposal** (TBD, not yet confirmed by sync
   - PHP suite: 1766 passed, 26 skipped. `vp test`: 73 files, 416 tests pass.
   - `vp check` and `tsc` pass. Pint passes. PHPStan shows only the 2 findings that were
     already there.
+
+## Update 2026-11-17 — P30: closing contract revision 3 as sync-api proposed it (ADR-032)
+
+**Selesai** (TDD: backend tests run red first, then made green)
+- Receiving (`ReceiveClosingTotalsRequest`, `ReceiveClosingRecap`): `sales` is a list,
+  one element per `visitPurposeName` (unique after `UPPER(TRIM())`), each with its own
+  `payments` (present, may be `[]`). Every `items[].prices[]` names a visit purpose
+  that is in `sales`. `items` and `sales` may be empty (an emptied recap). Only
+  `paymentMethod`, `paymentAmount`, `fullPaymentAmount` and `notes` are kept; `coaNo`
+  and `merchantDiscountRate` from the sender are dropped.
+- Migration `2026_11_17_090000_move_closing_payments_into_sales`: drops
+  `closing_recaps.payments`; adds `closing_sales_pushes.visit_purpose_name` / `slot`;
+  creates `closing_payment_mappings`.
+- `PrepareClosingSalesPush` builds one Push Sales body per visit purpose. `salesNum` =
+  `CL` + branch + `YYMMDD` + slot digit (fixed per recap and purpose; max 9). Menu lines
+  are filtered by `prices[].visitPurposeName`. `coaNo` / MDR come from the payment
+  mapping. `SendClosingSalesPush` queues every prepared draft of the current version.
+- `ClosingMappingSet::salesMissingFor()`: outlet, item menus, `sales-payments` (sync-api
+  sent no payments yet), `payment-method` (no ERP account). Item journals ignore these.
+- Payment method mapping: `ClosingPaymentMapping`, `SaveClosingPaymentMappingRequest`,
+  routes `closing-mappings.payments` / `.update` / `.destroy`, page
+  `closing-mappings/payments.tsx` (COA picker + MDR), nav link.
+- Recap detail: `sales.purposes`, `sales.missing`, `sales.drafts[]`, `sales.dropped`
+  (purposes sent before, gone from the current version). Shared `closing-gap-list.tsx`.
+- Item journals: a prepared version with no journals of its own still sends and only
+  deletes the earlier ones (`ClosingRecap::hasJournalsToClear()`). Before, an emptied
+  revision could never remove them.
+- ADR-032 updated (Decision, Consequences, Open); note added to
+  `docs/spesifikasi-penerima-kirim-closing.md`; `TODO-modules.md` P30.
+
+**Tersisa**
+- A reply to sync-api answering their open points (status letter §3): empty recap and
+  `sales: []` are now accepted; `coaNo` / MDR are mapped in the gateway. The
+  `visitPurposeName` list, the `OtherIncome` field, `paymentAmount` vs
+  `fullPaymentAmount`, and cashier rounding need business/ESB answers.
+- Endpoint URL and token for sync-api's test environment.
+
+**Known issues**
+- A visit purpose sent to the ESB and gone from a later revision stays there: Push Sales
+  has no delete. The screen only warns (`sales.dropped`).
+
+**Assumptions / TBD**
+- Push Sales refuses a transaction without payments, so sales wait for payments —
+  `ClosingMappingSet::salesMissingFor()`, ADR-032 Open.
+- `SALEMODE n` visit purpose names from sync-api are forwarded as given until the
+  official list exists.
+
+**Checks dijalankan**
+- `php artisan test`: 1808 tests, 1782 passed, the rest skipped.
+- `vp test`: 73 files, 422 tests pass. The 9 new closing page tests were shown failing
+  against the P29 sales component and an empty payments page, then pass. Two more cover
+  removing a payment mapping and showing server validation errors.
+- `vp check` pass (after `--fix` formatting), `tsc --noEmit` pass, Pint pass,
+  `npm run build` pass.
+- PHPStan: 0 errors. The 2 earlier findings in `app/Services/EsbConnectionInspector.php`
+  (redundant `?->` before `??`) are fixed; `EsbConnection*` tests pass.
+- Not run: `php artisan migrate` on the local PostgreSQL. Every ADR-032 migration
+  (`2026_11_10_0900*`, `2026_11_17_090000`) is still pending there.
+
+## Update 2026-11-17 — P31: Branch (ESB Core, read-only) + Visit Purpose (gateway master)
+
+**Selesai**
+- Branch S1 `[ESB-051]`: `BranchSource` / `BranchClient` / `BranchMapper`, canonical
+  `BranchSummary` / `BranchDetail` / `BranchPage` / `BranchQuery` (the existing
+  `Domain\Canonical\Branch` for the PR picker is untouched). List reads `GET /branch`
+  whole (`flagIncludeNotActive=1`, or `flagActive` when filtered) and searches name/code
+  and pages in the gateway; detail `GET /branch/{id}` without image URLs. Routes
+  `branches.index` / `branches.show` (`esb.invoke`), pages `branches/index|show.tsx`,
+  nav Master data → Branches.
+- Visit Purpose `[ESB-052]` as a gateway master (user decision 2026-11-17: the ESB list
+  needs the POS backend Basic-auth credential, like `[ESB-028]`). Table
+  `visit_purposes` (migration `2026_11_17_100000`), `VisitPurpose` model (key =
+  `ClosingRecap::purposeKey`), `SaveVisitPurpose` action with audit
+  `visit-purpose.saved` / `.deleted`, `VisitPurposeController`, routes
+  `visit-purposes.*` (see `closing-recaps.view`, change `closing-mappings.manage`), page
+  `visit-purposes/index.tsx` (recaps per purpose + names from recaps not registered),
+  nav POS → Visit purposes.
+- Docs: `docs/05-api-integration.md` `[ESB-051]` / `[ESB-052]`, `TODO-modules.md` §2.11,
+  §2.12, P31, `docs/esb/open-questions.md` §5 + Branch.
+
+**Tersisa / TBD**
+- `POST /api/v1/closing-totals` does not yet check `visitPurposeName` against the list:
+  a business decision (it changes the sync-api contract).
+- Branch: `/branch/list` row shape, `flagActive=0` semantics, names for type / brand /
+  timezone ids — asked in `open-questions.md`.
+- Not run: `php artisan migrate` locally (`2026_11_17_100000` pending with the others).
+
+**Checks dijalankan**
+- New tests shown failing first (missing routes/classes), then pass: `BranchTest` (10),
+  `BranchMapperTest` (6), `VisitPurposeTest` (9), navigation test (1).
+- `php artisan test`: 1833 tests, 1807 passed, the rest skipped, 0 failures.
+- `vp test`: 423 pass. `vp check` pass (after `--fix`), `tsc --noEmit` pass, Pint pass,
+  PHPStan 0 errors, `npm run build` pass.
+
+## Update 2026-11-19 — Docker Compose deployment on the VPS (ADR-033, `TODO-deploy.md`)
+
+**Selesai**
+- Owner decisions recorded as **ADR-033**: Docker Compose on one VPS, images built on
+  the VPS; existing PostgreSQL container `maharasa-postgres` on network
+  `posgresql_default`; new Redis in this compose; TLS at the existing Nginx Proxy
+  Manager, domain `esbgate.maharasa.id`; `ESB_ENV=production` (no staging); **only two
+  containers** (a six-container first draft was turned down for container count).
+- `Dockerfile` (target `app`: PHP 8.3 FPM + nginx + supervisor), `docker-compose.yml`
+  (`app`, `redis`), `docker/supervisord.conf` (nginx, php-fpm, `queue:work`,
+  `schedule:work`), `docker/entrypoint.sh` (caches, readiness check, `migrate --force`,
+  then supervisord; artisan as `www-data`), `docker/php/`, `docker/nginx/default.conf`,
+  `.dockerignore` (keeps `docs/esb/` for the seeder), `.env.production.example`.
+- Trade-off recorded in ADR-033: a redeploy is downtime and waits up to ~31 minutes
+  for a running import; `app` must never be scaled; manual artisan needs
+  `docker compose exec -u www-data`.
+- `bootstrap/app.php`: `trustProxies(at: '*')` for `X-Forwarded-For` and
+  `X-Forwarded-Proto` only (Host not trusted). Test
+  `tests/Feature/Hardening/TrustedProxiesTest.php`. The Docker nginx forwards only the
+  right-most `X-Forwarded-For` entry, because Symfony reads the left-most.
+- Production env sets `REDIS_QUEUE_RETRY_AFTER=1860`: the default 90 s is shorter than
+  the 1800 s document template import jobs.
+- `docs/13-deployment.md`: new "Docker Compose deployment" section, requirements table,
+  env list, TBD list.
+
+**Tersisa / TBD**
+- The image build has never run (no Docker on the development machine). First build
+  on the VPS: `TODO-deploy.md` §2.7, §5, §6.
+- NPM network name (`PROXY_NETWORK`), DB user/database creation, ESB production
+  credential, `APP_KEY` backup, backup schedule (`TODO-deploy.md` §0, §4, §7).
+
+**Checks dijalankan**
+- `TrustedProxiesTest` shown failing first (4 red; then the Host test red on its own),
+  then passing.
+- `composer ci:check`: `vp check` pass (after `--fix` reformatted
+  `docker-compose.yml`; parsed YAML identical), `tsc --noEmit` pass, `vp test` 423
+  pass. **`app:check-production-readiness` FAILS locally**: the local database has an
+  `esb_connections` row pointing `core` at the production ESB
+  (`https://services.esb.co.id/core`) while `APP_ENV=local`. Data not changed — the
+  owner decides.
+- Remaining `@test` steps run by hand: Pint pass, PHPStan 0 errors, `php artisan
+  test` 1837 tests, 1811 passed, 26 skipped, 0 failures — but PHPUnit exits **1**
+  on a pre-existing warning: `MasterDataImportTest::kinds` data sets pass 5 arguments
+  to `it_needs_the_modules_own_manage_permission` (4 parameters), since `812ccbf`.
+  CI fails on it until fixed.

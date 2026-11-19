@@ -2993,6 +2993,93 @@ Decisions and open points:
 - **Not built (`[!]`)**: update and deactivate (not documented), and what "ESO" covers
   beyond "ESB Order" (§9).
 
+### [ESB-051] Branch, S1 (list, detail)
+
+```
+Purpose:         List the company's branches and show one (master data, read-only).
+Family:          Core (group "Master - Company - Branch")
+Method / Path:   list    GET {{base_url}}/branch
+                 detail  GET {{base_url}}/branch/{branchID}
+Query (list):    flagIncludeNotActive=1 when no status filter is asked for;
+                 flagActive=1|0 when one is. Nothing else: the list has no search or
+                 paging parameters.
+Response:        code "EC03100000".
+                 list: result = [{branchID, branchCode, branchName}] -- the whole list,
+                 not paginated (BrowseBranchResponse).
+                 detail: result = {branchID, branchName, branchCode, extBranchCode,
+                 branchNameESBOrder, branchTypeID, brandID, flagActive (1/0), address,
+                 phone, postalCode, latitude, longitude, openDate, closeDate, taxName,
+                 taxValue (number), additionalTaxName, additionalTaxValue (string),
+                 vatName, vatSubject, timezoneID, posVersion, cashierCount, orderCount,
+                 tabCount, serverOnlyCount, printingHeader, printingFooter, createdBy,
+                 createdDate, editedBy, editedDate, image/imageFooter/selfOrderBanner
+                 URLs, and other POS settings}
+Errors:          EC03100001 auth; EC03100004 not found -> 404
+Retry Policy:    reads -- the GET policy
+Laravel:         Integrations\Contracts\BranchSource; ESB\Clients\BranchClient;
+                 ESB\Mappers\BranchMapper; Domain\Canonical\{BranchSummary,
+                 BranchDetail, BranchPage, BranchQuery};
+                 Http\Controllers\Branches\BranchController
+Routes:          GET /branches, GET /branches/{branchId} (positive integer)
+Permissions:     esb.invoke
+Tests:           tests/Feature/Branches/BranchTest.php,
+                 tests/Unit/Integrations/ESB/BranchMapperTest.php
+Source:          vendor OpenAPI esb-core/openapi.json, downloaded 2026-11-17
+```
+
+Decisions and open points:
+
+- **`GET /branch`, not `GET /branch/list`.** `/branch/list` pages on the ESB
+  (`page`, `pageSize`, `sortBy`, `filterBy`), but its documented result is `null` and
+  its row shape is undocumented. `/branch` documents its rows, so the gateway reads the
+  whole list and searches (name or code, case-insensitive) and pages it itself, as the
+  branch lookup ([ESB-019]) already does. Switch when the ESB documents the rows.
+- **Status in the list is not shown**: `/branch` rows carry no `flagActive`. A status
+  filter is sent as `flagActive`; whether `flagActive=0` also needs
+  `flagIncludeNotActive=1` to return inactive branches is undocumented (`TBD`).
+- **Ids, not names**, for branch type, brand and timezone: no endpoint naming them for
+  this result is documented (`TBD`). Licence counts of 0 are shown as none.
+- **Image URLs are not carried** (ADR-006). No create / update / delete is documented,
+  so the module stays read-only. The OMS `Master_POS get-branch` is not used: it needs
+  the POS backend credential ([ESB-028]).
+- `Domain\Canonical\Branch` (the purchase request picker, [ESB-007]) is unchanged.
+
+### [ESB-052] Visit Purpose -- kept in the gateway, ESB list NOT built
+
+```
+Purpose:         The official list of visit purposes (dine in, take away, ...) that
+                 closing recaps name in sales[].visitPurposeName (ADR-032).
+ESB endpoint:    POST {{base_url}}/external/general/get-visit-purpose (OMS Master_POS,
+                 family pos) -- documented, NOT called
+Auth (ESB):      Authorization: Basic base64(backend_username:backend_password)
+Response (ESB):  NOT the ESB envelope: a bare array [{visitPurposeID, visitPurposeName,
+                 flagDineIn, flagQuickService, flagShowQueue, flagMaxOrder, flagActive,
+                 createdBy, createdDate, editedBy, editedDate}]
+Gateway table:   visit_purposes (name, name_key unique = trimmed + upper-cased, notes,
+                 is_active, updated_by)
+Laravel:         Models\VisitPurpose; Actions\VisitPurposes\SaveVisitPurpose;
+                 Http\Controllers\VisitPurposes\VisitPurposeController;
+                 Http\Requests\VisitPurposes\SaveVisitPurposeRequest
+Routes:          GET/POST /visit-purposes, PUT/DELETE /visit-purposes/{id}
+Permissions:     see: closing-recaps.view; change: closing-mappings.manage
+Audit:           visit-purpose.saved / visit-purpose.deleted (before / after)
+Tests:           tests/Feature/VisitPurposes/VisitPurposeTest.php
+```
+
+Why it is kept in the gateway (business decision 2026-11-17):
+
+- The ESB's only list has the same blockers as Payment Method ([ESB-028]): a POS
+  backend credential (HTTP Basic) the gateway does not hold, a non-envelope response,
+  and no staging-int host for the `pos` family. ESB Core `GET /purpose` is the
+  accounting purpose ([ESB-015]), not a visit purpose.
+- Names are matched as the closing recaps match them (`ClosingRecap::purposeKey`:
+  trimmed, upper-cased). The page lists, per purpose, the recaps that name it, and the
+  names recaps carry that are not registered.
+- **Not enforced yet**: `POST /api/v1/closing-totals` still accepts any
+  `visitPurposeName`; rejecting unregistered names would change the sync-api contract
+  and is a separate decision. No ESB visit purpose id is stored: Push Sales sends the
+  name (`visitPurposeName`).
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

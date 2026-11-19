@@ -7,6 +7,7 @@ use App\Authorization\Role;
 use App\Models\AuditLog;
 use App\Models\ClosingItemMapping;
 use App\Models\ClosingOutletMapping;
+use App\Models\ClosingPaymentMapping;
 use App\Models\ClosingPurposeMapping;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -60,6 +61,7 @@ class ClosingMappingTest extends TestCase
         $this->actingAs($viewer)->get(route('closing-mappings.outlets'))->assertForbidden();
         $this->actingAs($viewer)->get(route('closing-mappings.items'))->assertForbidden();
         $this->actingAs($viewer)->get(route('closing-mappings.purposes'))->assertForbidden();
+        $this->actingAs($viewer)->get(route('closing-mappings.payments'))->assertForbidden();
     }
 
     #[Test]
@@ -76,8 +78,12 @@ class ClosingMappingTest extends TestCase
         $this->actingAs($itAdmin)
             ->put(route('closing-mappings.purposes.update', 'waste'), ['purposeId' => 7, 'purposeName' => 'Waste', 'direction' => -1])
             ->assertForbidden();
+        $this->actingAs($itAdmin)
+            ->put(route('closing-mappings.payments.update', 'Cash'), ['coaNo' => '1 1 01 01', 'coaName' => 'Kas', 'merchantDiscountRate' => 0])
+            ->assertForbidden();
 
         $this->assertSame(0, ClosingOutletMapping::query()->count());
+        $this->assertSame(0, ClosingPaymentMapping::query()->count());
     }
 
     // ========================================================== outlets
@@ -349,5 +355,75 @@ class ClosingMappingTest extends TestCase
         $this->actingAs($operator)
             ->put(route('closing-mappings.purposes.update', 'giveaway'), ['purposeId' => 9, 'purposeName' => 'x', 'direction' => 1])
             ->assertNotFound();
+    }
+
+    // ========================================================= payments
+
+    #[Test]
+    public function payment_methods_seen_in_recaps_are_listed_with_their_mapping(): void
+    {
+        $this->holdRecap(ClosingTotals::twoPurposes());
+        $this->holdRecap(ClosingTotals::revision3(['productionDate' => '2026-10-13']));
+        ClosingPaymentMapping::query()->create(['payment_method' => 'QRIS', 'coa_no' => '1 1 02 05', 'coa_name' => 'Bank QRIS', 'merchant_discount_rate' => 0.7]);
+        ClosingPaymentMapping::query()->create(['payment_method' => 'Voucher', 'coa_no' => '2 1 05', 'coa_name' => null, 'merchant_discount_rate' => 0]);
+
+        $this->actingAs($this->userWithRole(Role::IntegrationOperator))
+            ->get(route('closing-mappings.payments'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('closing-mappings/payments')
+                ->where('canManage', true)
+                ->has('payments', 3)
+                ->where('payments.0.paymentMethod', 'Cash')
+                ->where('payments.0.recaps', 2)
+                ->where('payments.0.mapping', null)
+                ->where('payments.1.paymentMethod', 'QRIS')
+                ->where('payments.1.recaps', 1)
+                ->where('payments.1.mapping.coaNo', '1 1 02 05')
+                ->where('payments.1.mapping.merchantDiscountRate', '0.7')
+                // Mapped ahead of any recap that uses it.
+                ->where('payments.2.paymentMethod', 'Voucher')
+                ->where('payments.2.recaps', 0));
+    }
+
+    #[Test]
+    public function a_payment_method_is_mapped_to_an_erp_account_and_rate(): void
+    {
+        $operator = $this->userWithRole(Role::IntegrationOperator);
+
+        $this->actingAs($operator)
+            ->put(route('closing-mappings.payments.update', 'Credit Card BCA'), ['coaNo' => '1 1 02 01', 'coaName' => 'Bank BCA', 'merchantDiscountRate' => 1.8])
+            ->assertSessionHasNoErrors();
+
+        $mapping = ClosingPaymentMapping::query()->sole();
+        $this->assertSame('Credit Card BCA', $mapping->payment_method);
+        $this->assertSame('1 1 02 01', $mapping->coa_no);
+        $this->assertSame('1.8000', $mapping->merchant_discount_rate);
+        $this->assertSame($operator->id, $mapping->updated_by);
+        $this->assertDatabaseHas('audit_logs', ['action' => AuditAction::ClosingMappingSaved->value]);
+
+        // The same method, however the POS spells its case, is one mapping.
+        $this->actingAs($operator)
+            ->put(route('closing-mappings.payments.update', 'credit card bca'), ['coaNo' => '1 1 02 02', 'coaName' => 'Bank BCA 2', 'merchantDiscountRate' => 1.8])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('1 1 02 02', ClosingPaymentMapping::query()->sole()->coa_no);
+
+        $this->actingAs($operator)
+            ->put(route('closing-mappings.payments.update', 'Cash'), ['coaNo' => '', 'merchantDiscountRate' => 101])
+            ->assertSessionHasErrors(['coaNo', 'merchantDiscountRate']);
+    }
+
+    #[Test]
+    public function a_payment_mapping_can_be_removed(): void
+    {
+        $operator = $this->userWithRole(Role::IntegrationOperator);
+        ClosingPaymentMapping::query()->create(['payment_method' => 'QRIS', 'coa_no' => '1 1 02 05', 'merchant_discount_rate' => 0.7]);
+
+        $this->actingAs($operator)
+            ->delete(route('closing-mappings.payments.destroy', 'qris'))
+            ->assertRedirect();
+
+        $this->assertSame(0, ClosingPaymentMapping::query()->count());
+        $this->assertDatabaseHas('audit_logs', ['action' => AuditAction::ClosingMappingDeleted->value]);
     }
 }

@@ -57,7 +57,7 @@ class EsbConnectionInspector
                     'active' => false,
                     'probeAvailable' => false,
                     'source' => 'disabled',
-                    'authMechanism' => $row?->auth_mechanism ?? 'static_token',
+                    'authMechanism' => $row->auth_mechanism ?? 'static_token',
                     'hasCredential' => $row?->hasCredential() ?? false,
                     'note' => 'Disabled. The gateway refuses every call to this family until it is enabled again.',
                 ];
@@ -91,7 +91,7 @@ class EsbConnectionInspector
                 'source' => $this->resolver->source($family),
                 // The edit form starts from this, so an unrelated edit does not
                 // flip a login connection to static_token.
-                'authMechanism' => $row?->auth_mechanism ?? 'static_token',
+                'authMechanism' => $row->auth_mechanism ?? 'static_token',
                 'hasCredential' => $row?->hasCredential() ?? false,
                 'note' => $note ?? ($probe === null
                     ? 'The vendor documents no health endpoint for this family, so connectivity cannot be probed.'

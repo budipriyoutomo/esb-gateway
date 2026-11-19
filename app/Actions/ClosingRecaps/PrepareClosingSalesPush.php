@@ -11,11 +11,14 @@ use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Turn a closing recap into one ESB Push Sales Data V2 transaction (ADR-032,
- * P29). The prices, taxes and payments are sync-api's (contract revision 3,
- * TBD), forwarded as given: the gateway does not recompute tax. The salesNum
- * is fixed per outlet and date, so a revision overwrites the earlier one in
- * the ESB. Nothing is sent here.
+ * Turn a closing recap into ESB Push Sales Data V2 transactions (ADR-032,
+ * P29-P30): one per visit purpose, as sync-api splits its sales (contract
+ * revision 3, TBD). The figures are sync-api's, forwarded as given: the
+ * gateway does not recompute tax. Each payment's ERP account and merchant
+ * discount rate come from the gateway's payment method mapping.
+ *
+ * The salesNum is fixed per outlet, date and visit purpose, so a revision
+ * overwrites the earlier transaction in the ESB. Nothing is sent here.
  */
 class PrepareClosingSalesPush
 {
@@ -34,24 +37,26 @@ class PrepareClosingSalesPush
     public const MENU_STATUS_ID = 13;
 
     /**
+     * The salesNum ends in one digit per visit purpose: CL + branch code (at
+     * most 10) + YYMMDD + slot is at most 19 of the ESB's 20 characters.
+     */
+    public const MAX_SLOT = 9;
+
+    /**
+     * @return list<ClosingSalesPush> The new drafts, in the order of the sales.
+     *
      * @throws ClosingRecapNotReady
      */
-    public function handle(ClosingRecap $recap, ?int $userId): ClosingSalesPush
+    public function handle(ClosingRecap $recap, ?int $userId): array
     {
         $recap->load(['items' => fn ($query) => $query->orderBy('id')]);
 
         if (! $recap->hasSalesData()) {
-            throw new ClosingRecapNotReady('sync-api sent no prices, taxes or payments for this recap (contract revision 3).');
+            throw new ClosingRecapNotReady('sync-api sent no sales for this recap (contract revision 3).');
         }
 
         $mappings = ClosingMappingSet::load();
-
-        // Sales need the outlet and each sold item's menu; the item journal
-        // mappings (BOMs, purposes) are not theirs to wait for.
-        $gaps = array_values(array_filter(
-            $mappings->missingFor($recap),
-            fn (array $gap): bool => in_array($gap['type'], ['outlet', 'item-menu'], true),
-        ));
+        $gaps = $mappings->salesMissingFor($recap);
 
         if ($gaps !== []) {
             throw new ClosingRecapNotReady($gaps[0]['message'].(count($gaps) > 1 ? ' (and '.(count($gaps) - 1).' more)' : ''));
@@ -69,11 +74,104 @@ class PrepareClosingSalesPush
         $outlet = $mappings->outlet($recap->outlet_code);
         assert($outlet !== null); // checked above
 
-        $date = $recap->production_date->format('Y-m-d');
-        $salesNum = 'CL'.$outlet->branch_code.$recap->production_date->format('Ymd');
-        $at = $date.' '.self::SALES_TIME;
-        /** @var array<string, mixed> $sales */
+        /** @var list<array<string, mixed>> $sales */
         $sales = $recap->sales;
+        $slots = $this->slots($recap, $sales);
+
+        $drafts = [];
+
+        foreach ($sales as $element) {
+            $purpose = (string) $element['visitPurposeName'];
+            $slot = $slots[ClosingRecap::purposeKey($purpose)];
+            $salesNum = 'CL'.$outlet->branch_code.$recap->production_date->format('ymd').$slot;
+
+            $drafts[] = [
+                'visit_purpose_name' => $purpose,
+                'slot' => $slot,
+                'sales_num' => $salesNum,
+                'head' => $this->head($recap, $mappings, $outlet->branch_code, $salesNum, $element),
+            ];
+        }
+
+        return DB::transaction(function () use ($recap, $drafts, $userId): array {
+            $recap->salesPushes()
+                ->where('status', ClosingSalesPush::STATUS_PREPARED)
+                ->update(['status' => ClosingSalesPush::STATUS_SUPERSEDED]);
+
+            $created = array_map(fn (array $draft): ClosingSalesPush => ClosingSalesPush::query()->create([
+                'closing_recap_id' => $recap->id,
+                'recap_sequence' => $recap->sequence,
+                'visit_purpose_name' => $draft['visit_purpose_name'],
+                'slot' => $draft['slot'],
+                'sales_num' => $draft['sales_num'],
+                'payload' => ['salesHead' => $draft['head']],
+                'status' => ClosingSalesPush::STATUS_PREPARED,
+                'prepared_by' => $userId,
+            ]), $drafts);
+
+            AuditLog::record(
+                action: AuditAction::ClosingSalesPrepared,
+                auditable: $recap,
+                metadata: [
+                    'sequence' => $recap->sequence,
+                    'transactions' => array_map(fn (array $draft): array => [
+                        'visit_purpose' => $draft['visit_purpose_name'],
+                        'sales_num' => $draft['sales_num'],
+                        'menu_lines' => count($draft['head']['menu']),
+                        'grand_total' => $draft['head']['grandTotal'],
+                    ], $drafts),
+                ],
+            );
+
+            return $created;
+        });
+    }
+
+    /**
+     * Each visit purpose's slot: the one it had in an earlier preparation of
+     * this recap, or the next one no purpose has used. A purpose gone from a
+     * revision keeps its slot, because the ESB still holds its transaction.
+     *
+     * @param  list<array<string, mixed>>  $sales
+     * @return array<string, int> By ClosingRecap::purposeKey().
+     *
+     * @throws ClosingRecapNotReady
+     */
+    private function slots(ClosingRecap $recap, array $sales): array
+    {
+        $slots = [];
+
+        foreach ($recap->salesPushes()->orderBy('id')->get(['visit_purpose_name', 'slot']) as $earlier) {
+            $slots[ClosingRecap::purposeKey($earlier->visit_purpose_name)] ??= $earlier->slot;
+        }
+
+        foreach ($sales as $element) {
+            $key = ClosingRecap::purposeKey((string) $element['visitPurposeName']);
+
+            if (! isset($slots[$key])) {
+                $next = $slots === [] ? 1 : max($slots) + 1;
+
+                if ($next > self::MAX_SLOT) {
+                    throw new ClosingRecapNotReady(sprintf('This recap has had more than %d visit purposes; their sales numbers would not fit.', self::MAX_SLOT));
+                }
+
+                $slots[$key] = $next;
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sales  One visit purpose.
+     * @return array<string, mixed>
+     */
+    private function head(ClosingRecap $recap, ClosingMappingSet $mappings, string $branchCode, string $salesNum, array $sales): array
+    {
+        $date = $recap->production_date->format('Y-m-d');
+        $at = $date.' '.self::SALES_TIME;
+        $purpose = (string) $sales['visitPurposeName'];
+        $purposeKey = ClosingRecap::purposeKey($purpose);
 
         $menu = [];
 
@@ -85,6 +183,10 @@ class PrepareClosingSalesPush
             }
 
             foreach ($item->prices ?? [] as $price) {
+                if (ClosingRecap::purposeKey((string) ($price['visitPurposeName'] ?? '')) !== $purposeKey) {
+                    continue;
+                }
+
                 $menu[] = [
                     'menuID' => $mapping->esb_menu_id,
                     'menuCode' => (string) $mapping->esb_menu_code,
@@ -121,67 +223,44 @@ class PrepareClosingSalesPush
             'salesDate' => $date,
             'salesDateIn' => $at,
             'salesDateOut' => $at,
-            'branchCode' => $outlet->branch_code,
+            'branchCode' => $branchCode,
             'memberCode' => '',
             'customerName' => '',
-            'visitPurposeName' => (string) ($sales['visitPurposeName'] ?? ''),
+            'visitPurposeName' => $purpose,
         ];
 
         foreach (ClosingRecap::SALES_TOTALS as $field) {
             $head[$field] = $sales[$field] ?? 0;
         }
 
-        $head += [
+        return $head + [
             'billingPrintCount' => 0,
             'paymentPrintCount' => 0,
-            'additionalInfo' => sprintf('Closing %s %s, sequence %d', $recap->outlet_code, $date, $recap->sequence),
+            'additionalInfo' => sprintf('Closing %s %s %s, sequence %d', $recap->outlet_code, $date, $purpose, $recap->sequence),
             'promotionID' => '0',
             'statusID' => self::HEAD_STATUS_ID,
             'createdBy' => self::CREATED_BY,
             'editedBy' => self::CREATED_BY,
             'editedDate' => $at,
             'menu' => $menu,
-            'payment' => array_map(fn (array $payment): array => [
-                'paymentMethod' => (string) $payment['paymentMethod'],
-                'coaNo' => (string) ($payment['coaNo'] ?? ''),
-                'voucherCode' => '',
-                'notes' => (string) ($payment['notes'] ?? ''),
-                'cardNumber' => '',
-                'bankName' => '',
-                'accountName' => '',
-                'verificationCode' => '',
-                'merchantDiscountRate' => $payment['merchantDiscountRate'] ?? 0,
-                'paymentAmount' => $payment['paymentAmount'],
-                'fullPaymentAmount' => $payment['fullPaymentAmount'],
-            ], $recap->payments ?? []),
+            'payment' => array_map(function (array $payment) use ($mappings): array {
+                $account = $mappings->payment((string) $payment['paymentMethod']);
+                assert($account !== null); // salesMissingFor() checked it.
+
+                return [
+                    'paymentMethod' => (string) $payment['paymentMethod'],
+                    'coaNo' => $account->coa_no,
+                    'voucherCode' => '',
+                    'notes' => (string) ($payment['notes'] ?? ''),
+                    'cardNumber' => '',
+                    'bankName' => '',
+                    'accountName' => '',
+                    'verificationCode' => '',
+                    'merchantDiscountRate' => Decimal::toNumber(Decimal::trim($account->merchant_discount_rate)),
+                    'paymentAmount' => $payment['paymentAmount'],
+                    'fullPaymentAmount' => $payment['fullPaymentAmount'],
+                ];
+            }, $sales['payments'] ?? []),
         ];
-
-        return DB::transaction(function () use ($recap, $salesNum, $head, $userId): ClosingSalesPush {
-            $recap->salesPushes()
-                ->where('status', ClosingSalesPush::STATUS_PREPARED)
-                ->update(['status' => ClosingSalesPush::STATUS_SUPERSEDED]);
-
-            $draft = ClosingSalesPush::query()->create([
-                'closing_recap_id' => $recap->id,
-                'recap_sequence' => $recap->sequence,
-                'sales_num' => $salesNum,
-                'payload' => ['salesHead' => $head],
-                'status' => ClosingSalesPush::STATUS_PREPARED,
-                'prepared_by' => $userId,
-            ]);
-
-            AuditLog::record(
-                action: AuditAction::ClosingSalesPrepared,
-                auditable: $recap,
-                metadata: [
-                    'sequence' => $recap->sequence,
-                    'sales_num' => $salesNum,
-                    'menu_lines' => count($head['menu']),
-                    'grand_total' => $head['grandTotal'],
-                ],
-            );
-
-            return $draft;
-        });
     }
 }

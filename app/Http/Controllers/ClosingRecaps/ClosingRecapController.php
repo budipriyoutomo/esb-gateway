@@ -15,6 +15,7 @@ use App\Models\ClosingSalesPush;
 use App\Models\ClosingSubmission;
 use App\Support\Decimal;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -70,18 +71,18 @@ class ClosingRecapController extends Controller
             && $user->can(Permission::InvokeEsbOperations->value);
         $unsettled = $closingRecap->hasUnsettledJournal();
 
-        // The newest draft that is not superseded: the one to send, or the
-        // one sent.
-        $salesDraft = $closingRecap->salesPushes()
+        // The newest version's transactions that are not superseded: the
+        // ones to send, or the ones sent.
+        $salesDrafts = $closingRecap->salesPushes()
             ->with('salesPush')
             ->where('status', '!=', ClosingSalesPush::STATUS_SUPERSEDED)
-            ->latest('id')
-            ->first();
-        $salesSent = $salesDraft?->status === ClosingSalesPush::STATUS_SENT && $salesDraft->recap_sequence === $closingRecap->sequence;
-        $salesGaps = array_values(array_filter(
-            $missing,
-            fn (array $gap): bool => in_array($gap['type'], ['outlet', 'item-menu'], true),
-        ));
+            ->orderBy('id')
+            ->get();
+        $shownSequence = $salesDrafts->max('recap_sequence');
+        $shownDrafts = $salesDrafts->where('recap_sequence', $shownSequence)->values();
+        $currentDrafts = $shownDrafts->where('recap_sequence', $closingRecap->sequence);
+        $salesSent = $currentDrafts->contains('status', ClosingSalesPush::STATUS_SENT);
+        $salesGaps = $closingRecap->hasSalesData() ? $mappings->salesMissingFor($closingRecap) : [];
 
         $journals = $closingRecap->itemJournals()
             ->where('status', '!=', ClosingItemJournal::STATUS_SUPERSEDED)
@@ -131,27 +132,33 @@ class ClosingRecapController extends Controller
                 'prepare' => $canProcess && $missing === [] && ! $unsettled && ! $closingRecap->hasCreatedJournalForCurrentVersion(),
                 'send' => $canProcess && ! $unsettled && $closingRecap->hasJournalsToSend(),
                 'prepareSales' => $canProcess && $closingRecap->hasSalesData() && $salesGaps === [] && ! $salesSent,
-                'sendSales' => $canProcess && $salesDraft?->status === ClosingSalesPush::STATUS_PREPARED && $salesDraft->recap_sequence === $closingRecap->sequence,
+                'sendSales' => $canProcess && $currentDrafts->contains('status', ClosingSalesPush::STATUS_PREPARED),
             ],
             'sales' => [
                 'hasData' => $closingRecap->hasSalesData(),
-                'grandTotal' => $closingRecap->sales['grandTotal'] ?? null,
-                'payments' => count($closingRecap->payments ?? []),
-                'draft' => $salesDraft === null ? null : [
-                    'id' => $salesDraft->public_id,
-                    'salesNum' => $salesDraft->sales_num,
-                    'sequence' => $salesDraft->recap_sequence,
-                    'current' => $salesDraft->recap_sequence === $closingRecap->sequence,
-                    'status' => $salesDraft->status,
-                    'menuLines' => count($salesDraft->payload['salesHead']['menu'] ?? []),
-                    'grandTotal' => $salesDraft->payload['salesHead']['grandTotal'] ?? null,
-                    'sentAt' => $salesDraft->sent_at?->toIso8601String(),
-                    'push' => $salesDraft->salesPush === null ? null : [
-                        'id' => $salesDraft->salesPush->public_id,
-                        'status' => $salesDraft->salesPush->status,
-                        'errors' => $salesDraft->salesPush->errors,
+                'purposes' => array_map(fn (array $sales): array => [
+                    'visitPurposeName' => (string) $sales['visitPurposeName'],
+                    'grandTotal' => $sales['grandTotal'] ?? null,
+                    'payments' => count($sales['payments'] ?? []),
+                ], $closingRecap->sales ?? []),
+                'missing' => $salesGaps,
+                'dropped' => $this->droppedPurposes($closingRecap, $salesDrafts),
+                'drafts' => $shownDrafts->map(fn (ClosingSalesPush $draft): array => [
+                    'id' => $draft->public_id,
+                    'salesNum' => $draft->sales_num,
+                    'visitPurposeName' => $draft->visit_purpose_name,
+                    'sequence' => $draft->recap_sequence,
+                    'current' => $draft->recap_sequence === $closingRecap->sequence,
+                    'status' => $draft->status,
+                    'menuLines' => count($draft->payload['salesHead']['menu'] ?? []),
+                    'grandTotal' => $draft->payload['salesHead']['grandTotal'] ?? null,
+                    'sentAt' => $draft->sent_at?->toIso8601String(),
+                    'push' => $draft->salesPush === null ? null : [
+                        'id' => $draft->salesPush->public_id,
+                        'status' => $draft->salesPush->status,
+                        'errors' => $draft->salesPush->errors,
                     ],
-                ],
+                ])->all(),
             ],
             'journals' => $journals->map(fn (ClosingItemJournal $journal): array => [
                 'id' => $journal->public_id,
@@ -188,5 +195,33 @@ class ClosingRecapController extends Controller
             'status' => $recap->status,
             'lastReceivedAt' => $recap->last_received_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Visit purposes whose sales went to the ERP in an earlier version but
+     * are not in the current one. The ESB keeps those transactions; the
+     * gateway cannot remove them through Push Sales (ADR-032 Open).
+     *
+     * @param  Collection<int, ClosingSalesPush>  $drafts  Not superseded, oldest first.
+     * @return list<array{visitPurposeName: string, salesNum: string}>
+     */
+    private function droppedPurposes(ClosingRecap $recap, Collection $drafts): array
+    {
+        $current = array_map(
+            fn (array $sales): string => ClosingRecap::purposeKey((string) $sales['visitPurposeName']),
+            $recap->sales ?? [],
+        );
+
+        $dropped = [];
+
+        foreach ($drafts as $draft) {
+            $key = ClosingRecap::purposeKey($draft->visit_purpose_name);
+
+            if ($draft->status === ClosingSalesPush::STATUS_SENT && ! in_array($key, $current, true)) {
+                $dropped[$key] = ['visitPurposeName' => $draft->visit_purpose_name, 'salesNum' => $draft->sales_num];
+            }
+        }
+
+        return array_values($dropped);
     }
 }

@@ -53,6 +53,23 @@ describe('mainNavigation', () => {
         ]);
     });
 
+    it('lists branches under Master data and visit purposes under POS', () => {
+        const links = flattenNavigation(
+            visibleNavigation(mainNavigation, allowAll),
+        );
+
+        expect(links).toContainEqual({
+            title: 'Branches',
+            group: 'Master data',
+            href: '/branches',
+        });
+        expect(links).toContainEqual({
+            title: 'Visit purposes',
+            group: 'POS',
+            href: '/visit-purposes',
+        });
+    });
+
     it('gives every group an icon', () => {
         for (const entry of mainNavigation) {
             expect(entry.icon, entry.title).toBeTruthy();

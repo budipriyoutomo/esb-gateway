@@ -79,11 +79,10 @@ final class ClosingTotals
     }
 
     /**
-     * The same recap with the sales data the gateway asked for in contract
-     * revision 3 (docs/balasan-kontrak-kirim-closing.md §2.1): header totals,
-     * payments, and per-item prices whose quantities add up to totalSold.
-     *
-     * TBD: revision 3 is our proposal; the sender has not confirmed it.
+     * The same recap with the sales data of contract revision 3 as sync-api
+     * proposed it (docs/usulan-kontrak-kirim-closing.md §2.2-§2.4): one sales
+     * element per visit purpose, each with its own payments, and per-item
+     * prices that name their visit purpose and add up to totalSold.
      *
      * @param  array<string, mixed>  $overrides  Top-level fields to replace.
      * @return array<string, mixed>
@@ -91,10 +90,40 @@ final class ClosingTotals
     public static function revision3(array $overrides = []): array
     {
         return self::payload([
-            'sales' => self::sales(),
-            'payments' => [self::payment()],
+            'sales' => [self::sales()],
             'items' => [
                 self::closingItem(['prices' => [self::price(13, 15000)]]),
+                self::posOnlyItem(['prices' => [self::price(2, 8000)]]),
+            ],
+            ...$overrides,
+        ]);
+    }
+
+    /**
+     * Two visit purposes: the menu sold 10 dine in and 3 take away, the drink
+     * 2 dine in.
+     *
+     * @param  array<string, mixed>  $overrides  Top-level fields to replace.
+     * @return array<string, mixed>
+     */
+    public static function twoPurposes(array $overrides = []): array
+    {
+        return self::payload([
+            'sales' => [
+                self::sales([
+                    'subtotal' => 166000, 'otherTaxTotal' => 8300, 'vatTotal' => 16600,
+                    'grandTotal' => 190900, 'paymentTotal' => 190900,
+                    'payments' => [self::payment(['paymentAmount' => 190900, 'fullPaymentAmount' => 190900])],
+                ]),
+                self::sales([
+                    'visitPurposeName' => 'TAKE AWAY',
+                    'subtotal' => 45000, 'otherTaxTotal' => 2250, 'vatTotal' => 4500,
+                    'grandTotal' => 51750, 'paymentTotal' => 51750,
+                    'payments' => [self::payment(['paymentMethod' => 'QRIS', 'paymentAmount' => 51750, 'fullPaymentAmount' => 51750])],
+                ]),
+            ],
+            'items' => [
+                self::closingItem(['prices' => [self::price(10, 15000), self::price(3, 15000, 'TAKE AWAY')]]),
                 self::posOnlyItem(['prices' => [self::price(2, 8000)]]),
             ],
             ...$overrides,
@@ -124,11 +153,15 @@ final class ClosingTotals
             'roundingTotal' => 0,
             'grandTotal' => 242650,
             'paymentTotal' => 242650,
+            'payments' => [self::payment()],
             ...$overrides,
         ];
     }
 
     /**
+     * A payment as sync-api sends it: no coaNo or merchantDiscountRate, which
+     * the gateway maps per paymentMethod.
+     *
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
      */
@@ -136,10 +169,8 @@ final class ClosingTotals
     {
         return [
             'paymentMethod' => 'Cash',
-            'coaNo' => '1 1 01 01',
             'paymentAmount' => 242650,
             'fullPaymentAmount' => 242650,
-            'merchantDiscountRate' => 0,
             'notes' => '',
             ...$overrides,
         ];
@@ -150,11 +181,12 @@ final class ClosingTotals
      *
      * @return array<string, mixed>
      */
-    public static function price(int|float $qty, int $price): array
+    public static function price(int|float $qty, int $price, string $visitPurposeName = 'DINE IN'): array
     {
         $base = $qty * $price;
 
         return [
+            'visitPurposeName' => $visitPurposeName,
             'qty' => $qty,
             'originalPrice' => $price,
             'price' => $price,

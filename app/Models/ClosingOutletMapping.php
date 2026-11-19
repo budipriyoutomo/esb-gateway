@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  */
 class ClosingOutletMapping extends Model
 {
-    /** CL + branch code + YYYYMMDD must fit the ESB's 20-character salesNum. */
+    /** CL + branch code + YYMMDD + slot must fit the ESB's 20-character salesNum. */
     public const MAX_BRANCH_CODE = 10;
 
     protected $guarded = ['id'];

@@ -476,6 +476,49 @@ class ClosingItemJournalTest extends TestCase
     }
 
     #[Test]
+    public function an_emptied_recap_still_deletes_the_journals_sent_before(): void
+    {
+        // Contract revision 3: a revision may empty the recap (wrong outlet).
+        $recap = $this->sentRecap();
+        $this->holdRecap(['sequence' => 2, 'items' => [], 'sales' => []]);
+
+        $this->fakeErp();
+        $this->prepare($recap)->assertSessionHasNoErrors();
+        $this->assertSame(0, ClosingItemJournal::query()->where('recap_sequence', 2)->count());
+
+        $this->actingAs($this->processor())
+            ->get(route('closing-recaps.show', $recap))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('actions.send', true));
+
+        $this->sent = [];
+        $this->send($recap)->assertSessionHasNoErrors();
+
+        $calls = array_map(fn (array $c): string => $c['method'].' '.str_replace(self::ESB, '', $c['url']), $this->journalCalls());
+        $this->assertSame([
+            'DELETE /inventory/item-journal/IJ-NEW-1',
+            'DELETE /inventory/item-journal/IJ-NEW-2',
+        ], $calls);
+        $this->assertSame(ClosingRecap::STATUS_SENT, $recap->fresh()?->status);
+
+        // Nothing is left to send.
+        $this->sent = [];
+        $this->send($recap)->assertSessionHasErrors('recap');
+        $this->assertSame([], $this->journalCalls());
+    }
+
+    #[Test]
+    public function an_unprepared_revision_does_not_delete_the_journals_sent_before(): void
+    {
+        $recap = $this->sentRecap();
+        $this->holdRecap(['sequence' => 2, 'items' => []]);
+
+        $this->sent = [];
+        $this->send($recap)->assertSessionHasErrors('recap');
+
+        $this->assertSame([], $this->journalCalls());
+    }
+
+    #[Test]
     public function a_refused_delete_stops_the_revision_before_anything_is_created(): void
     {
         $recap = $this->sentRecap();

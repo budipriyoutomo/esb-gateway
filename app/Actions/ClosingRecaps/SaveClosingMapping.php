@@ -6,6 +6,7 @@ use App\Audit\AuditAction;
 use App\Models\AuditLog;
 use App\Models\ClosingItemMapping;
 use App\Models\ClosingOutletMapping;
+use App\Models\ClosingPaymentMapping;
 use App\Models\ClosingPurposeMapping;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -75,7 +76,27 @@ class SaveClosingMapping
         );
     }
 
-    public function delete(ClosingOutletMapping|ClosingItemMapping|ClosingPurposeMapping $mapping, string $type, string $key): void
+    /**
+     * @param  array{coaNo: string, coaName: string|null, merchantDiscountRate: string}  $values
+     */
+    public function payment(string $paymentMethod, array $values, ?int $userId): ClosingPaymentMapping
+    {
+        $mapping = ClosingPaymentMapping::findFor($paymentMethod) ?? new ClosingPaymentMapping(['payment_method' => $paymentMethod]);
+
+        return $this->save(
+            $mapping,
+            'payment',
+            ClosingPaymentMapping::keyOf($paymentMethod),
+            [
+                'coa_no' => $values['coaNo'],
+                'coa_name' => $values['coaName'],
+                'merchant_discount_rate' => $values['merchantDiscountRate'],
+                'updated_by' => $userId,
+            ],
+        );
+    }
+
+    public function delete(ClosingOutletMapping|ClosingItemMapping|ClosingPurposeMapping|ClosingPaymentMapping $mapping, string $type, string $key): void
     {
         DB::transaction(function () use ($mapping, $type, $key): void {
             $before = $mapping->toView();
@@ -90,7 +111,7 @@ class SaveClosingMapping
     }
 
     /**
-     * @template TMapping of ClosingOutletMapping|ClosingItemMapping|ClosingPurposeMapping
+     * @template TMapping of ClosingOutletMapping|ClosingItemMapping|ClosingPurposeMapping|ClosingPaymentMapping
      *
      * @param  TMapping  $mapping
      * @param  array<string, mixed>  $attributes

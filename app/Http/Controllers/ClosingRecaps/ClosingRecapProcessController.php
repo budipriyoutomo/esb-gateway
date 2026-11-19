@@ -60,12 +60,16 @@ class ClosingRecapProcessController extends Controller
     public function prepareSales(Request $request, ClosingRecap $closingRecap, PrepareClosingSalesPush $prepare): RedirectResponse
     {
         try {
-            $draft = $prepare->handle($closingRecap, $request->user()?->id);
+            $drafts = $prepare->handle($closingRecap, $request->user()?->id);
         } catch (ClosingRecapNotReady $exception) {
             return back()->withErrors(['sales' => $exception->getMessage()]);
         }
 
-        $this->toast('success', sprintf('Prepared sales %s. Check it, then send.', $draft->sales_num));
+        $this->toast('success', sprintf(
+            'Prepared sales %s. Check %s, then send.',
+            implode(', ', array_map(fn ($draft): string => $draft->sales_num, $drafts)),
+            count($drafts) === 1 ? 'it' : 'them',
+        ));
 
         return back();
     }
@@ -73,12 +77,15 @@ class ClosingRecapProcessController extends Controller
     public function sendSales(ClosingRecap $closingRecap, SendClosingSalesPush $send): RedirectResponse
     {
         try {
-            $push = $send->handle($closingRecap);
+            $pushes = $send->handle($closingRecap);
         } catch (ClosingRecapNotReady $exception) {
             return back()->withErrors(['sales' => $exception->getMessage()]);
         }
 
-        $this->toast('success', sprintf('Sales %s queued for the ERP.', $push->sales_num));
+        $this->toast('success', sprintf(
+            'Sales %s queued for the ERP.',
+            implode(', ', array_map(fn ($push): string => $push->sales_num, $pushes)),
+        ));
 
         return back();
     }

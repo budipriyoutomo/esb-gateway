@@ -1,4 +1,5 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
+import { ClosingGapList } from '@/components/closing-gap-list';
 import { ClosingItemJournals } from '@/components/closing-item-journals';
 import type { ClosingJournal } from '@/components/closing-item-journals';
 import { ClosingReadinessBadge } from '@/components/closing-readiness-badge';
@@ -10,7 +11,6 @@ import { DetailSummary } from '@/components/detail-fields';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { items, outlets, purposes } from '@/routes/closing-mappings';
 import { index as closingRecapsIndex } from '@/routes/closing-recaps';
 import type {
     ClosingGap,
@@ -69,14 +69,6 @@ type Props = {
     journals?: ClosingJournal[];
     sales?: ClosingSales;
 };
-
-/** Where each kind of gap is fixed. */
-function gapHref(gap: ClosingGap): string {
-    if (gap.type === 'outlet') return outlets().url;
-    if (gap.type === 'purpose') return purposes().url;
-
-    return items({ query: { search: gap.label } }).url;
-}
 
 const quantity = (value: string) => (value === '0' ? '—' : value);
 
@@ -188,7 +180,13 @@ export default function ClosingRecapShow({
     canProcess = false,
     actions = { prepare: false, send: false },
     journals = [],
-    sales = { hasData: false, grandTotal: null, payments: 0, draft: null },
+    sales = {
+        hasData: false,
+        purposes: [],
+        missing: [],
+        dropped: [],
+        drafts: [],
+    },
 }: Props) {
     const title = `${recap.outletCode} · ${formatDate(recap.productionDate)}`;
 
@@ -243,30 +241,11 @@ export default function ClosingRecapShow({
                 />
 
                 {recap.missing.length > 0 && (
-                    <section
-                        aria-labelledby="closing-gaps"
-                        className="grid gap-2 rounded-xl border border-dashed p-4"
-                    >
-                        <h2 id="closing-gaps" className="text-sm font-medium">
-                            Before this recap can be prepared
-                        </h2>
-                        <ul className="grid gap-1 text-sm">
-                            {recap.missing.map((gap) => (
-                                <li
-                                    key={`${gap.type}:${gap.key}`}
-                                    className="flex flex-wrap items-center gap-2"
-                                >
-                                    <span>{gap.message}</span>
-                                    <Link
-                                        href={gapHref(gap)}
-                                        className="text-xs underline underline-offset-4"
-                                    >
-                                        Map it
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
-                    </section>
+                    <ClosingGapList
+                        id="closing-gaps"
+                        title="Before this recap can be prepared"
+                        gaps={recap.missing}
+                    />
                 )}
 
                 <ClosingSalesPush

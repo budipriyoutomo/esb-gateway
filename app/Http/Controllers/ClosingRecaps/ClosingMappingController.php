@@ -7,9 +7,11 @@ use App\Authorization\Permission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ClosingRecaps\SaveClosingItemMappingRequest;
 use App\Http\Requests\ClosingRecaps\SaveClosingOutletMappingRequest;
+use App\Http\Requests\ClosingRecaps\SaveClosingPaymentMappingRequest;
 use App\Http\Requests\ClosingRecaps\SaveClosingPurposeMappingRequest;
 use App\Models\ClosingItemMapping;
 use App\Models\ClosingOutletMapping;
+use App\Models\ClosingPaymentMapping;
 use App\Models\ClosingPurposeMapping;
 use App\Models\ClosingRecap;
 use App\Models\ClosingRecapItem;
@@ -22,7 +24,8 @@ use Inertia\Response;
 use stdClass;
 
 /**
- * The closing mappings (ADR-032): outlets, items and purposes. Seeing them
+ * The closing mappings (ADR-032): outlets, items, purposes and payment
+ * methods. Seeing them
  * takes closing-recaps.view (route middleware); changing them takes
  * closing-mappings.manage (the form requests, and here for deletes).
  */
@@ -193,6 +196,77 @@ class ClosingMappingController extends Controller
         $this->save->purpose($kind, $request->values(), $request->user()?->id);
 
         $this->toast('success', 'Purpose mapping saved.');
+
+        return back();
+    }
+
+    // =========================================================== payments
+
+    /**
+     * Payment methods seen in the recaps' sales, and those mapped ahead of
+     * any recap. The recaps are few per outlet and day, and only their sales
+     * column is read.
+     */
+    public function payments(Request $request): Response
+    {
+        /** @var array<string, array{paymentMethod: string, recaps: int}> $seen */
+        $seen = [];
+
+        foreach (ClosingRecap::query()->whereNotNull('sales')->select(['id', 'sales'])->lazyById(200) as $recap) {
+            $inRecap = [];
+
+            foreach ($recap->sales ?? [] as $sales) {
+                foreach ($sales['payments'] ?? [] as $payment) {
+                    $method = trim((string) ($payment['paymentMethod'] ?? ''));
+                    $key = ClosingPaymentMapping::keyOf($method);
+
+                    if ($method === '' || isset($inRecap[$key])) {
+                        continue;
+                    }
+
+                    $inRecap[$key] = true;
+                    $seen[$key] ??= ['paymentMethod' => $method, 'recaps' => 0];
+                    $seen[$key]['recaps']++;
+                }
+            }
+        }
+
+        $mapped = ClosingPaymentMapping::query()->get()
+            ->keyBy(fn (ClosingPaymentMapping $m): string => ClosingPaymentMapping::keyOf($m->payment_method));
+
+        foreach ($mapped as $key => $mapping) {
+            $seen[$key] ??= ['paymentMethod' => $mapping->payment_method, 'recaps' => 0];
+        }
+
+        ksort($seen);
+
+        return Inertia::render('closing-mappings/payments', [
+            'canManage' => $this->canManage($request),
+            'payments' => array_values(array_map(fn (array $row): array => [
+                ...$row,
+                'mapping' => $mapped->get(ClosingPaymentMapping::keyOf($row['paymentMethod']))?->toView(),
+            ], $seen)),
+        ]);
+    }
+
+    public function updatePayment(SaveClosingPaymentMappingRequest $request, string $paymentMethod): RedirectResponse
+    {
+        $this->save->payment(trim($paymentMethod), $request->values(), $request->user()?->id);
+
+        $this->toast('success', 'Payment mapping saved.');
+
+        return back();
+    }
+
+    public function destroyPayment(Request $request, string $paymentMethod): RedirectResponse
+    {
+        $this->authorizeManage($request);
+        $mapping = ClosingPaymentMapping::findFor($paymentMethod);
+        abort_if($mapping === null, 404);
+
+        $this->save->delete($mapping, 'payment', ClosingPaymentMapping::keyOf($paymentMethod));
+
+        $this->toast('success', 'Payment mapping removed.');
 
         return back();
     }

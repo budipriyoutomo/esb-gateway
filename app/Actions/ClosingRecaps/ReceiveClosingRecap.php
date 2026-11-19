@@ -104,8 +104,9 @@ class ReceiveClosingRecap
             'closing_submission_id' => $submission->id,
             'last_received_at' => now(),
             // Contract revision 3 (TBD): replaced with the version, like the items.
-            'sales' => is_array($payload['sales'] ?? null) ? $payload['sales'] : null,
-            'payments' => is_array($payload['payments'] ?? null) ? array_values($payload['payments']) : null,
+            'sales' => is_array($payload['sales'] ?? null)
+                ? array_map($this->salesRow(...), array_values($payload['sales']))
+                : null,
         ])->save();
 
         /** @var list<array<string, mixed>> $items */
@@ -115,6 +116,32 @@ class ReceiveClosingRecap
         $recap->items()->createMany(array_map($this->itemRow(...), $items));
 
         return ClosingReceipt::accepted($submission, $recap, count($items));
+    }
+
+    /**
+     * One visit purpose's totals and payments, as sync-api owns them. A
+     * payment's coaNo and merchant discount rate are the gateway's, mapped
+     * per paymentMethod, so whatever the sender adds is not kept.
+     *
+     * @param  array<string, mixed>  $sales
+     * @return array<string, mixed>
+     */
+    private function salesRow(array $sales): array
+    {
+        $row = ['visitPurposeName' => trim((string) $sales['visitPurposeName'])];
+
+        foreach (ClosingRecap::SALES_TOTALS as $field) {
+            $row[$field] = $sales[$field];
+        }
+
+        $row['payments'] = array_map(fn (array $payment): array => [
+            'paymentMethod' => (string) $payment['paymentMethod'],
+            'paymentAmount' => $payment['paymentAmount'],
+            'fullPaymentAmount' => $payment['fullPaymentAmount'],
+            'notes' => (string) ($payment['notes'] ?? ''),
+        ], array_values($sales['payments'] ?? []));
+
+        return $row;
     }
 
     /**

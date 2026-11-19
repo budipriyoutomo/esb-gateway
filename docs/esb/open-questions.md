@@ -164,6 +164,16 @@ dikirim saat `update-menu` akan dihapus.
   ini perilaku tetap?
 - Apakah ada endpoint list untuk payment method ESB Order, visit purpose, employee group, dan
   BIN (saat ini diketik manual)?
+- Visit purpose `[ESB-052]`: satu-satunya list (OMS `get-visit-purpose`) memakai Basic auth
+  backend POS. Apakah ada versi ESB Core (bearer token)? Sementara itu, gateway menyimpan
+  daftar visit purpose sendiri.
+
+**Branch `[ESB-051]`.**
+- `GET /branch/list`: bentuk baris `data[]` tidak didokumentasikan (contoh `result: null`).
+  Mohon skema barisnya agar paging bisa dilakukan di ESB.
+- `GET /branch?flagActive=0`: apakah sudah mengembalikan branch nonaktif, atau perlu
+  `flagIncludeNotActive=1` juga?
+- Apakah ada endpoint nama untuk `branchTypeID`, `brandID`, dan `timezoneID`?
 
 ## 6. Purchase — laporan PR Outstanding
 

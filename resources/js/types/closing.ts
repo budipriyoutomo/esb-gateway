@@ -11,9 +11,19 @@ export type ClosingRecapStatus =
     | 'attention'
     | 'revised';
 
-/** What a recap still needs before it can be prepared (ClosingMappingSet). */
+/**
+ * What a recap still needs before it can be prepared (ClosingMappingSet).
+ * The last two hold back only its sales: payments sync-api has not sent,
+ * and payment methods with no ERP account.
+ */
 export type ClosingGap = {
-    type: 'outlet' | 'item-menu' | 'item-bom' | 'purpose';
+    type:
+        | 'outlet'
+        | 'item-menu'
+        | 'item-bom'
+        | 'purpose'
+        | 'sales-payments'
+        | 'payment-method';
     key: string;
     label: string;
     message: string;
@@ -39,6 +49,13 @@ export type ClosingPurposeMapping = {
     purposeId: number;
     purposeName: string;
     direction: -1 | 1;
+};
+
+export type ClosingPaymentMapping = {
+    paymentMethod: string;
+    coaNo: string;
+    coaName: string | null;
+    merchantDiscountRate: string;
 };
 
 export const SOURCE_LABELS: Record<ClosingItemSource, string> = {

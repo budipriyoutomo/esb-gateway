@@ -1,0 +1,93 @@
+# Production deployment on the VPS. See docs/13-deployment.md, ADR-033 and
+# TODO-deploy.md.
+#
+#   Internet --TLS--> Nginx Proxy Manager --(proxy network)--> app :80
+#                                                               |
+#     app = supervisord: nginx + php-fpm + queue worker + scheduler
+#           (readiness check + migrations run before supervisord starts)
+#                     |                                  |
+#   (posgresql_default) maharasa-postgres          redis (this file)
+#
+# Usage on the VPS (from the repo checkout, with .env filled in):
+#   docker compose up -d --build
+#
+# .env is both the container environment (env_file) and the source for the
+# ${...} values below. A literal "$" in any value there must be written "$$".
+
+name: erp-gateway
+
+x-logging: &logging
+    driver: json-file
+    options:
+        max-size: '10m'
+        max-file: '5'
+
+services:
+    # One container for the whole application -- never scale it: it carries
+    # the only scheduler.
+    app:
+        build:
+            context: .
+            target: app
+            args:
+                VITE_APP_NAME: ${APP_NAME:-ERP Gateway}
+        image: erp-gateway-app:${IMAGE_TAG:-latest}
+        env_file: .env
+        restart: unless-stopped
+        # Above supervisord's worker stopwaitsecs (1860s), so a redeploy lets a
+        # running document template import (1800s) finish. The site is down
+        # for as long as that takes -- check for running imports first.
+        stop_grace_period: 32m
+        depends_on:
+            redis:
+                condition: service_healthy
+        volumes:
+            - storage:/var/www/html/storage
+        networks:
+            internal:
+            postgres:
+            proxy:
+                # Forward Hostname in Nginx Proxy Manager: erp-gateway-app, port 80.
+                aliases:
+                    - erp-gateway-app
+        logging: *logging
+
+    # Backs the queue, the cache, and the ESB token lock (ADR-005, ADR-009).
+    # Not published to the host.
+    redis:
+        image: redis:7.4-alpine
+        restart: unless-stopped
+        command:
+            - redis-server
+            - --requirepass
+            - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+            - --appendonly
+            - 'yes'
+        environment:
+            REDISCLI_AUTH: ${REDIS_PASSWORD}
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 10s
+            timeout: 3s
+            retries: 5
+        volumes:
+            - redis:/data
+        networks:
+            - internal
+        logging: *logging
+
+networks:
+    internal: {}
+    # The existing PostgreSQL container (maharasa-postgres) lives here.
+    postgres:
+        external: true
+        name: ${POSTGRES_NETWORK:-posgresql_default}
+    # Nginx Proxy Manager's network. Find it with:
+    #   docker inspect <npm-container> --format '{{json .NetworkSettings.Networks}}'
+    proxy:
+        external: true
+        name: ${PROXY_NETWORK:?PROXY_NETWORK must be set in .env}
+
+volumes:
+    storage: {}
+    redis: {}
