@@ -4,7 +4,9 @@
 # the queue worker and the scheduler (ADR-033). Migrations run in the
 # entrypoint before supervisord starts. See docs/13-deployment.md.
 
-ARG PHP_VERSION=8.3
+# 8.4: composer.lock resolves Symfony 8.1, which requires PHP >= 8.4.1. Keep in
+# step with the PHP the lock file is generated on.
+ARG PHP_VERSION=8.4.27
 ARG NODE_VERSION=22
 
 # ---------------------------------------------------------------------------

@@ -2463,7 +2463,8 @@ against **our own contract revision 3 proposal** (TBD, not yet confirmed by sync
   `posgresql_default`; new Redis in this compose; TLS at the existing Nginx Proxy
   Manager, domain `esbgate.maharasa.id`; `ESB_ENV=production` (no staging); **only two
   containers** (a six-container first draft was turned down for container count).
-- `Dockerfile` (target `app`: PHP 8.3 FPM + nginx + supervisor), `docker-compose.yml`
+- `Dockerfile` (target `app`: PHP 8.4 FPM + nginx + supervisor; the first VPS build
+  on 8.3 failed — `composer.lock` has Symfony 8.1, PHP >= 8.4.1), `docker-compose.yml`
   (`app`, `redis`), `docker/supervisord.conf` (nginx, php-fpm, `queue:work`,
   `schedule:work`), `docker/entrypoint.sh` (caches, readiness check, `migrate --force`,
   then supervisord; artisan as `www-data`), `docker/php/`, `docker/nginx/default.conf`,

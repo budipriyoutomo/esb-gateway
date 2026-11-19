@@ -58,7 +58,7 @@ Internet --TLS--> Nginx Proxy Manager --(network NPM)--> app :80
 
 ## 2. Dockerfile
 
-- [x] **2.1–2.3** Multi-stage: `base` (PHP 8.3 FPM + ext), `build` (Composer + Node 22;
+- [x] **2.1–2.3** Multi-stage: `base` (PHP 8.4 FPM + ext — lock file butuh ≥ 8.4.1), `build` (Composer + Node 22;
       Wayfinder butuh PHP saat `vite build`), `app` (runtime + nginx + supervisor).
 - [x] **2.4** `docker/php/conf.d/zz-production.ini` (opcache, upload 20M/25M);
       `docker/php/fpm/zz-pool.conf` (FPM hanya di `127.0.0.1:9000`).

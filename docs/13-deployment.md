@@ -23,7 +23,7 @@ reference.
 
 | Requirement | Why |
 | --- | --- |
-| PHP 8.3+ with `pdo_pgsql` | `composer.json`; CI pins 8.3 as the floor |
+| PHP 8.4.1+ with `pdo_pgsql` | `composer.json` allows `^8.3`, but `composer.lock` resolves Symfony 8.1, which requires PHP >= 8.4.1. The Docker image uses 8.4. |
 | Redis reachable from web **and** worker processes | The ESB token cache and its lock are shared across both (ADR-009). A worker with its own cache would log in separately and invalidate the web token. |
 | TLS terminated in front, with `X-Forwarded-Proto` trusted | `URL::forceScheme('https')` is set in production; the app must know the request was secure |
 | Exactly one scheduler instance | `integration-logs:prune` is guarded with `onOneServer()`, which needs a shared cache to work |

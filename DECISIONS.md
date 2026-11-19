@@ -1577,7 +1577,8 @@ Facts from the code that constrain the setup:
 
 **Decision**
 - `docker-compose.yml` runs two services: `app` and `redis` (new, password + AOF).
-- `app` is one PHP 8.3 FPM image (`Dockerfile`, target `app`) whose
+- `app` is one PHP 8.4 FPM image (`Dockerfile`, target `app`; 8.4 because
+  `composer.lock` resolves Symfony 8.1, which requires PHP >= 8.4.1) whose
   `docker/supervisord.conf` runs **nginx, php-fpm, the queue worker
   (`queue:work redis`) and the scheduler (`schedule:work`)**. supervisord and the
   nginx/FPM masters run as root; every PHP process that touches the app runs as
