@@ -53,6 +53,25 @@ describe('mainNavigation', () => {
         ]);
     });
 
+    it('lists the PR outstanding report under Purchase, after the requests', () => {
+        const purchase = group(
+            visibleNavigation(mainNavigation, allowAll),
+            'Purchase',
+        ).items;
+        const titles = purchase.map((item) => item.title);
+
+        expect(titles.indexOf('PR outstanding')).toBe(
+            titles.indexOf('Purchase requests') + 1,
+        );
+        expect(
+            flattenNavigation(visibleNavigation(mainNavigation, allowAll)),
+        ).toContainEqual({
+            title: 'PR outstanding',
+            group: 'Purchase',
+            href: '/pr-outstanding',
+        });
+    });
+
     it('lists branches under Master data and visit purposes under POS', () => {
         const links = flattenNavigation(
             visibleNavigation(mainNavigation, allowAll),

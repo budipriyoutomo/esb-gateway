@@ -2501,3 +2501,50 @@ against **our own contract revision 3 proposal** (TBD, not yet confirmed by sync
   on a pre-existing warning: `MasterDataImportTest::kinds` data sets pass 5 arguments
   to `it_needs_the_modules_own_manage_permission` (4 parameters), since `812ccbf`.
   CI fails on it until fixed.
+
+## Update 2026-11-19 — P32: PR Outstanding report (ADR-034, `[ESB-053]`)
+
+**Selesai**
+- `GET /pr-outstanding` (menu Purchase → "PR outstanding", `esb.invoke`) and
+  `GET /pr-outstanding/export` (CSV, ADR-031). Four stages: not ordered (request
+  monitoring), not received / partially received (open PO lines), not as requested
+  (received in full, ≠ `requestQty`); age and overdue days; stage tabs with counts.
+- New: `RequestMonitoringSource` / `RequestMonitoringClient` / `RequestMonitoringMapper`,
+  `Actions\PurchaseRequests\BuildOutstandingRequestReport` (+ `TooManyOrdersForReport`),
+  canonical `UnorderedRequest*`, `Outstanding*`, `OutstandingRequestController`,
+  `ListOutstandingRequestsRequest`, page `purchase-requests/outstanding.tsx`.
+- Changed: `PurchaseOrderLine` carries `fullyReceived` (`fullReceipt`);
+  `PurchaseOrderQuery` takes `statusId` and `purchaseRequestNumber`. Received quantity
+  comes from the orders' goods receipts (`InventoryDocumentSource`): a staging run
+  showed the PO's `detailQty` equals `convertionQty`, not what was received.
+- Earlier in the same session (already committed as `0791f20`): GR/GD lists keep the
+  vendor's "Pending" (33) rows without a number.
+
+**Tersisa**
+- ESB confirmation of `docs/esb/open-questions.md` §6 (see TBD below).
+- Not built: supplier / category filters, ageing buckets beyond the overdue count.
+
+**Known issues**
+- Slow: the busiest staging branch over 30 days took ~29 s (≈50 orders, sequential ESB
+  calls), close to PHP's 30 s default. Options for the owner: lower `MAX_ORDERS`,
+  require a branch, skip the receipts' stock check, or build the report in a job.
+- `requestQty` can be in another unit than the order (`qty` 300 / `requestQty` 9000
+  seen): "not as requested" may then flag a unit difference.
+
+**Assumptions / TBD**
+- `sumQty` = quantity not yet ordered — `UnorderedRequestItem` docblock.
+- `requestProcessID` 3 = Transfer (left out) — `UnorderedRequestItem::TRANSFER_PROCESS`.
+- Open PO statuses 3, 4 — `BuildOutstandingRequestReport::OPEN_ORDER_STATUSES`.
+- Receipts New (1) / Rejected (2) not counted — `UNCOUNTED_RECEIPT_STATUSES`.
+
+**Checks dijalankan**
+- TDD: mapper, action, feature and page tests shown red first, then green.
+- `php artisan test`: 1862 tests, 1836 passed, 26 skipped, 0 failures (PHPUnit still
+  exits 1 on the pre-existing `MasterDataImportTest::kinds` warning). Pint pass.
+  PHPStan (`--memory-limit=2G`) 0 errors.
+- Live read-only run on ESB staging: without a branch, 30 days → refused (114 open
+  orders); branch 1 → 259 items in ~29 s; branch 9 → 121 items in ~15 s.
+- `vp test` 74 files / 428 tests pass; `tsc --noEmit` pass; `vp check` pass on the
+  changed files; `npm run build` pass (feature tests read `public/build/manifest.json`).
+- Environment note: Vitest must run from `D:\...` (upper-case drive); from `d:\...` it
+  loads modules twice and every suite fails with "failed to find the current suite".

@@ -25,6 +25,7 @@ use App\Integrations\Contracts\PurchaseInvoiceSource;
 use App\Integrations\Contracts\PurchaseOrderSource;
 use App\Integrations\Contracts\PurchaseRequestSource;
 use App\Integrations\Contracts\PurposeSource;
+use App\Integrations\Contracts\RequestMonitoringSource;
 use App\Integrations\Contracts\SalesDataSink;
 use App\Integrations\Contracts\SimplePurchaseSource;
 use App\Integrations\Contracts\SupplierCategorySource;
@@ -53,6 +54,7 @@ use App\Integrations\ESB\Clients\PurchaseInvoiceClient;
 use App\Integrations\ESB\Clients\PurchaseOrderClient;
 use App\Integrations\ESB\Clients\PurchaseRequestClient;
 use App\Integrations\ESB\Clients\PurposeClient;
+use App\Integrations\ESB\Clients\RequestMonitoringClient;
 use App\Integrations\ESB\Clients\SalesDataClient;
 use App\Integrations\ESB\Clients\SimplePurchaseClient;
 use App\Integrations\ESB\Clients\SupplierCategoryClient;
@@ -101,6 +103,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PurchaseRequestSource::class, PurchaseRequestClient::class);
         $this->app->bind(PurchaseInvoiceSource::class, PurchaseInvoiceClient::class);
         $this->app->bind(PurchaseOrderSource::class, PurchaseOrderClient::class);
+        $this->app->bind(RequestMonitoringSource::class, RequestMonitoringClient::class);
         $this->app->bind(SimplePurchaseSource::class, SimplePurchaseClient::class);
         $this->app->bind(SalesDataSink::class, SalesDataClient::class);
     }

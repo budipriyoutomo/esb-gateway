@@ -4,6 +4,7 @@ import {
     CirclePlus,
     ClipboardCheck,
     ClipboardList,
+    Hourglass,
     ArrowLeftRight,
     PackageCheck,
     PackageOpen,
@@ -93,6 +94,7 @@ import {
     index as purchaseRequestsIndex,
     show as purchaseRequestShow,
 } from '@/routes/purchase-requests';
+import { index as prOutstandingIndex } from '@/routes/pr-outstanding';
 import { index as purposesIndex } from '@/routes/purposes';
 import { index as salesPushesIndex } from '@/routes/sales-pushes';
 import {
@@ -236,6 +238,12 @@ export const mainNavigation: GatedNavEntry[] = [
                 title: 'Purchase requests',
                 href: purchaseRequestsIndex(),
                 icon: ClipboardList,
+                permission: 'esb.invoke',
+            },
+            {
+                title: 'PR outstanding',
+                href: prOutstandingIndex(),
+                icon: Hourglass,
                 permission: 'esb.invoke',
             },
             {

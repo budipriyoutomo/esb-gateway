@@ -182,6 +182,31 @@ class PurchaseOrderMapperTest extends TestCase
         $this->assertSame(2.5, $line->discountPercent);
         $this->assertSame(999000.0, $line->total);
         $this->assertSame('Cold storage', $line->notes);
+        $this->assertFalse($line->fullyReceived);
+    }
+
+    #[Test]
+    public function the_full_receipt_flag_is_read_as_sent(): void
+    {
+        $detail = CorePurchaseOrder::detail();
+        $detail['purchaseDetails'][0] = [...$detail['purchaseDetails'][0], 'fullReceipt' => 1];
+        $detail['purchaseDetails'][] = [...$detail['purchaseDetails'][0], 'fullReceipt' => null];
+
+        $lines = $this->mapper()->fromDetail($detail)->lines;
+
+        $this->assertTrue($lines[0]->fullyReceived);
+        $this->assertNull($lines[1]->fullyReceived);
+    }
+
+    #[Test]
+    public function detail_qty_is_not_read_as_a_received_quantity(): void
+    {
+        // Documented as "Qty already received"; on staging (2026-11-19) it
+        // equals convertionQty on every line, received or not (ADR-034).
+        $line = $this->mapper()->fromDetail(CorePurchaseOrder::detail())->lines[0];
+
+        $this->assertArrayNotHasKey('receivedQty', $line->jsonSerialize());
+        $this->assertArrayNotHasKey('detailQty', $line->jsonSerialize());
     }
 
     #[Test]

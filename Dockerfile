@@ -84,7 +84,12 @@ COPY --from=build --chown=www-data:www-data /var/www/html /var/www/html
 RUN chmod +x /usr/local/bin/entrypoint \
     && mkdir -p storage/framework/cache/data storage/framework/sessions \
         storage/framework/views storage/logs storage/app/private bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && mkdir -p /var/www/.config \
+    && chown www-data:www-data /var/www/.config
+# ^ www-data's HOME is /var/www (root-owned). Without a writable ~/.config,
+# psysh's "Writing to directory ... is not allowed" notice is turned into an
+# exception by Laravel and `artisan tinker --execute` silently does nothing.
 
 # supervisord and the nginx / php-fpm masters run as root (port 80, dropping
 # to www-data for their workers); every PHP process that touches the app --

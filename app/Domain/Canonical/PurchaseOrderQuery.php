@@ -10,13 +10,14 @@ namespace App\Domain\Canonical;
  *
  * Deliberately absent, though the ESB accepts them:
  *
- * - `statusID`: the vendor names only three ids by example and points to
- *   GET /common/status for the rest, which the gateway does not read yet. TBD.
+ * - `statusID` on the list screen: the vendor names only three ids by
+ *   example and points to GET /common/status for the rest. TBD. The PR
+ *   outstanding report (ADR-034) sends the open ones seen on staging.
  * - `sort`: the accepted columns are not documented. TBD.
  * - `supplierID(s)`: the gateway has no supplier lookup to pick one from yet.
  * - `branchID`: `branchIDs` covers it.
- * - `purchaseRequestNums`, `purchaseTotal`, `printedBy`, `sendEmail`,
- *   `flagPOSO`, `additionalInfo`: no screen needs them.
+ * - `purchaseTotal`, `printedBy`, `sendEmail`, `flagPOSO`, `additionalInfo`:
+ *   no screen needs them.
  */
 readonly class PurchaseOrderQuery
 {
@@ -40,5 +41,7 @@ readonly class PurchaseOrderQuery
         public ?string $requiredDateTo = null,
         public array $branchIds = [],
         public ?string $search = null,
+        public ?int $statusId = null,
+        public ?string $purchaseRequestNumber = null,
     ) {}
 }

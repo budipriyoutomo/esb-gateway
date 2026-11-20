@@ -8,6 +8,7 @@ use App\Domain\Canonical\GeneralJournalEntry;
 use App\Domain\Canonical\LedgerEntry;
 use App\Domain\Canonical\LedgerSummaryRow;
 use App\Domain\Canonical\MemorialJournalSummary;
+use App\Domain\Canonical\OutstandingRequestItem;
 use App\Domain\Canonical\PricelistEntry;
 use App\Domain\Canonical\Product;
 use App\Domain\Canonical\ProductCategorySummary;
@@ -162,6 +163,31 @@ final class ListColumns
             'Status' => fn (MemorialJournalSummary $j) => $j->statusName,
             'Created by' => fn (MemorialJournalSummary $j) => $j->createdBy,
             'Notes' => fn (MemorialJournalSummary $j) => $j->notes,
+        ];
+    }
+
+    /** @return array<string, Closure(OutstandingRequestItem): (string|int|float|bool|null)> */
+    public static function outstandingRequests(): array
+    {
+        return [
+            'Stage' => fn (OutstandingRequestItem $i) => $i->stage->label(),
+            'PR' => fn (OutstandingRequestItem $i) => $i->purchaseRequestNumbers,
+            'PR date' => fn (OutstandingRequestItem $i) => $i->purchaseRequestDate,
+            'PO' => fn (OutstandingRequestItem $i) => $i->purchaseOrderNumber,
+            'PO date' => fn (OutstandingRequestItem $i) => $i->purchaseOrderDate,
+            'Required' => fn (OutstandingRequestItem $i) => $i->requiredDate,
+            'Branch' => fn (OutstandingRequestItem $i) => $i->branchName,
+            'Supplier' => fn (OutstandingRequestItem $i) => $i->supplierName,
+            'Product code' => fn (OutstandingRequestItem $i) => $i->productCode,
+            'Product' => fn (OutstandingRequestItem $i) => $i->productName,
+            'Unit' => fn (OutstandingRequestItem $i) => $i->uomName,
+            'Requested' => fn (OutstandingRequestItem $i) => $i->requestedQty,
+            'Ordered' => fn (OutstandingRequestItem $i) => $i->orderedQty,
+            'Received' => fn (OutstandingRequestItem $i) => $i->receivedQty,
+            'Outstanding' => fn (OutstandingRequestItem $i) => $i->outstandingQty,
+            'Age (days)' => fn (OutstandingRequestItem $i) => $i->ageDays,
+            'Overdue (days)' => fn (OutstandingRequestItem $i) => $i->overdueDays,
+            'PO status' => fn (OutstandingRequestItem $i) => $i->purchaseOrderStatus,
         ];
     }
 

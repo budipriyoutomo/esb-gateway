@@ -3080,6 +3080,74 @@ Why it is kept in the gateway (business decision 2026-11-17):
   and is a separate decision. No ESB visit purpose id is stored: Push Sales sends the
   name (`visitPurposeName`).
 
+### [ESB-053] PR Outstanding report -- request monitoring + purchase orders (read)
+
+```
+Purpose:         Purchase request items not finished along PR -> PO -> goods receipt,
+                 and for how long (ADR-034). Read-only.
+Family:          Core
+Method / Path:   unordered  POST {{base_url}}/purchase/request-monitoring
+                 orders     GET  {{base_url}}/purchase/purchase-order
+                 order      GET  {{base_url}}/purchase/purchase-order/{purchaseNum}
+                 receipt    GET  {{base_url}}/inventory/goods-receipt/{goodsReceiptNum}
+                            (each of the order's goodsReceiptHead; [ESB-033], with its
+                            stock check)
+                 branches   GET  {{base_url}}/branch  (only when no branch is chosen)
+Body (unordered): {branchIDs: [int, min 1], requiredDateFrom, requiredDateTo,
+                 purchaseRequestNum?}. No requestProcessID: every process is read and
+                 Transfer (3) is dropped by the gateway.
+Query (orders):  statusID (3, then 4), requiredDateFrom, requiredDateTo, branchIDs?,
+                 purchaseRequestNums?, page=1, limit=100.
+Response:        code "EC03100000".
+                 unordered: result = {page: 0, limit: 0, count, data: [{purchaseRequestNum,
+                 purchaseRequestDate, requiredDate, branchID, branchName, productDetailID,
+                 productCode, productName, uomName, sumQty, requestProcessID,
+                 requestProcessName, supplierName, ...}]} -- every row; page/limit ignored.
+                 order: purchaseDetails[] {productDetailID, qty, fullReceipt (1/0),
+                 requestQty}, goodsReceiptHead[] {goodsReceiptNum}, purchaseRequestNums
+                 (comma separated), purchaseDate, requiredDate, statusName.
+                 receipt: statusID, goodsReceiptDetail[] {productDetailID, qty}.
+Errors:          EC03100001 auth; others -> the usual error page
+Retry Policy:    request monitoring is a documented read: postRead (ADR-025); the GETs
+                 use the GET policy
+Laravel:         Integrations\Contracts\RequestMonitoringSource;
+                 ESB\Clients\RequestMonitoringClient; ESB\Mappers\RequestMonitoringMapper;
+                 Domain\Canonical\{UnorderedRequestItem, UnorderedRequestQuery,
+                 OutstandingStage, OutstandingRequestItem, OutstandingRequestQuery,
+                 OutstandingRequestReport}; Actions\PurchaseRequests                 {BuildOutstandingRequestReport, TooManyOrdersForReport};
+                 Http\Controllers\PurchaseRequests\OutstandingRequestController
+Routes:          GET /pr-outstanding, GET /pr-outstanding/export
+Permissions:     esb.invoke
+Tests:           tests/Feature/PurchaseRequests/OutstandingRequestTest.php,
+                 tests/Unit/Actions/BuildOutstandingRequestReportTest.php,
+                 tests/Unit/Integrations/ESB/RequestMonitoringMapperTest.php
+Source:          vendor OpenAPI esb-core/openapi.json, downloaded 2026-10-27; staging
+                 observations 2026-10-28
+```
+
+Decisions and open points:
+
+- **`sumQty` is read as the quantity not yet ordered** (`TBD`): documented as "Total
+  requested quantity", but on staging 10 of 11 partly ordered items had
+  `sumQty = PR qty - PO qty` (the other was an order raised from several requests).
+- **`requestProcessID`** 1 "- ALL -", 2 Purchase, 3 Transfer: observed, not documented
+  (`TBD`). Only 3 is left out (`UnorderedRequestItem::TRANSFER_PROCESS`).
+- **Open orders are statuses 3 and 4** (`BuildOutstandingRequestReport::OPEN_ORDER_STATUSES`,
+  `TBD`): 8 Finished and 25 Closed are done; a closed order is not outstanding even when
+  short (owner decision 2026-10-28). Orders without `purchaseRequestNums` are left out.
+- **`detailQty` is NOT a received quantity**, whatever the vendor documents: on staging
+  (2026-11-19) it equals `convertionQty` on every line, with or without a receipt.
+  Received = the order's goods receipt lines (same unit as the order), except receipts
+  New (1) / Rejected (2) (`UNCOUNTED_RECEIPT_STATUSES`, `TBD`); counts once authorized
+  (business confirmation 2026-10-28).
+- `requestQty` 0 marks a product not asked for: never "not as requested". `requestQty`
+  is usually in the order's unit, but `qty` 300 / `requestQty` 9000 was seen.
+- An order raised from several requests cannot be split per request: its lines show all
+  the order's request numbers.
+- Bounds: required-date period at most 92 days; at most 100 open orders per report (one
+  page per status at the largest page size), refused before any detail is read. The
+  assembled report is cached 5 minutes per filter set.
+
 ## Integration Principles
 
 - Laravel is the only component that communicates with the ESB (ADR-006).

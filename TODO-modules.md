@@ -102,6 +102,7 @@ memberi usulan pesan commit.
 | P29 | ADR-032 fase 4: susun & kirim Push Sales | `[x]` siap commit (dibangun atas usulan revisi 3 kita sendiri, belum dikonfirmasi pengirim `[!]`; nilai TBD: jam `23:59:59`, `createdBy` CLOSING, statusID 8/13) |
 | P30 | ADR-032: kontrak revisi 3 versi sync-api (`sales` per `visitPurposeName` + `payments` di dalamnya, `prices[].visitPurposeName`, rekap kosong), Push Sales satu transaksi per tujuan kunjungan (slot `salesNum` tetap), mapping payment method → COA/MDR, rekap kosong menghapus IJ lama | `[x]` siap commit (Push Sales tanpa payment diasumsikan ditolak → sales menunggu `payments` `[!]`; daftar resmi `visitPurposeName` dan field `OtherIncome` menunggu jawaban `[!]`; penjualan tujuan kunjungan yang hilang dari revisi tidak bisa dihapus lewat Push Sales, hanya diberi peringatan `[!]`) |
 | P31 | §2.11 Branch S1 `[ESB-051]` (list + detail ESB Core) + §2.12 Visit Purpose master lokal `[ESB-052]` (CRUD + audit, nama dari recap yang belum terdaftar) | `[x]` siap commit (paging vendor `/branch/list`, `flagActive=0`, list ESB visit purpose `[!]`) |
+| P32 | Laporan PR Outstanding `[ESB-053]`, ADR-034: item PR belum di-PO (request monitoring), PO terbuka belum / sebagian diterima, diterima tidak sesuai permintaan; umur & overdue; export CSV | `[x]` siap commit (arti `sumQty` = sisa belum di-PO, `requestProcessID` 1/2/3, status PO terbuka 3/4 — diamati di staging, konfirmasi ESB `[!]`) |
 
 Item `[!]` (butuh jawaban ESB/bisnis) dilewati dalam phase-nya dan tidak memblokir
 commit phase tersebut.
@@ -604,6 +605,31 @@ vendor paths share the detail segment.
 
 phpunit.xml raises memory_limit to 1G: the suite outgrew 128M in one
 process.
+```
+
+
+Usulan pesan commit P32:
+
+```
+feat: PR outstanding report
+
+[ESB-053], ADR-034. One report of purchase request items not finished
+along PR -> PO -> goods receipt, read live and assembled by the gateway:
+
+- not ordered: POST /purchase/request-monitoring (sumQty, observed as
+  the quantity not yet ordered; Transfer items left out);
+- not received / partially received / not as requested: lines of open
+  (Authorized, Receiving) purchase orders raised from a request; received
+  is summed from the orders' goods receipts (not New / Rejected), since
+  the order's detailQty is the unit conversion on staging, not a
+  received quantity.
+
+A required-date period (at most 92 days) is needed before anything is
+read; more than 100 open orders is refused with "narrow the filters".
+The assembled items are cached 5 minutes per filter set; paging, stage
+and overdue filters and ordering (most overdue first) are the gateway's.
+CSV export per ADR-031. Purchase order lines now carry fullyReceived;
+PurchaseOrderQuery takes statusId and a PR number.
 ```
 
 ---

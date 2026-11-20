@@ -147,6 +147,7 @@ class PurchaseOrderMapper
                 discountPercent: $this->nullableFloat($row['discountPercent'] ?? null),
                 total: $this->nullableFloat($row['total'] ?? null),
                 notes: $this->nullableString($row['notes'] ?? null),
+                fullyReceived: $this->flag($row['fullReceipt'] ?? null),
             );
         }
 
@@ -188,6 +189,18 @@ class PurchaseOrderMapper
     private function nullableBool(mixed $value): ?bool
     {
         return is_bool($value) ? $value : null;
+    }
+
+    /**
+     * A 1 / 0 flag such as `fullReceipt`; anything else is unknown.
+     */
+    private function flag(mixed $value): ?bool
+    {
+        return match ($value) {
+            true, 1, '1' => true,
+            false, 0, '0' => false,
+            default => null,
+        };
     }
 
     private function nullableInt(mixed $value): ?int

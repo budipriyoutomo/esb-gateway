@@ -60,6 +60,7 @@ use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseInvoices\PurchaseInvoiceDecisionController;
 use App\Http\Controllers\PurchaseOrders\PurchaseOrderController;
 use App\Http\Controllers\PurchaseOrders\PurchaseOrderDecisionController;
+use App\Http\Controllers\PurchaseRequests\OutstandingRequestController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestDecisionController;
 use App\Http\Controllers\PurchaseRequests\PurchaseRequestFormController;
@@ -120,6 +121,7 @@ Route::middleware('auth')->group(function () {
         Route::get('memorial-journals/export', [ListExportController::class, 'memorialJournals'])->name('memorial-journals.export');
         Route::get('general-ledger/export', [ListExportController::class, 'ledgerEntries'])->name('general-ledger.export');
         Route::get('general-ledger/summary/export', [ListExportController::class, 'ledgerSummary'])->name('general-ledger.summary.export');
+        Route::get('pr-outstanding/export', [ListExportController::class, 'outstandingRequests'])->name('pr-outstanding.export');
 
         Route::get('products', [ProductController::class, 'index'])->name('products.index');
         // [ESB-026]. The id is interpolated upstream next to literal paths
@@ -712,6 +714,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('purchase-requests', [PurchaseRequestController::class, 'index'])
             ->name('purchase-requests.index');
+
+        // PR outstanding (ADR-034): esb.invoke, checked by the form request.
+        Route::get('pr-outstanding', [OutstandingRequestController::class, 'index'])
+            ->name('pr-outstanding.index');
 
         // Creating, changing, deleting and importing purchasing documents is
         // a business action, so esb.invoke alone does not grant it. These are

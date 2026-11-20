@@ -133,6 +133,8 @@ class PurchaseOrderClient implements PurchaseOrderSource
             // Documented as "comma-separated".
             'branchIDs' => $query->branchIds === [] ? null : implode(',', $query->branchIds),
             'indexSearch' => $query->search,
+            'statusID' => $query->statusId,
+            'purchaseRequestNums' => $query->purchaseRequestNumber,
         ], static fn (mixed $value): bool => $value !== null);
     }
 }

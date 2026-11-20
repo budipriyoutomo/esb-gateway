@@ -1644,3 +1644,81 @@ Facts from the code that constrain the setup:
 - Backup schedule for `erp_gateway` and for `APP_KEY`, and a rehearsed restore.
 - Worker count (one process) until the ESB's rate limits are known.
 - Whether NPM's default upload limit needs raising for 20 MB imports.
+
+---
+
+## ADR-034 — PR Outstanding Report: Assembled Live From Request Monitoring and Purchase Orders
+
+**Status:** Accepted (2026-11-19)
+
+**Context**
+- Business request 2026-10-28: a report of purchase request items not finished along
+  PR → PO → Goods Receipt — what was asked for but not ordered, ordered but not
+  (fully) received, or received differently from the request — and for how long.
+- The ESB has no such report. Its pieces, observed on staging 2026-10-28
+  (`docs/esb/open-questions.md` §6):
+  - `POST /purchase/request-monitoring` lists PR items not yet processed, one call, not
+    paginated (`page`/`limit` ignored). `sumQty` is the quantity **not yet ordered**
+    (10 of 11 partly ordered items: `sumQty = PR qty − PO qty`). `requestProcessID`
+    1 "- ALL -", 2 Purchase, 3 Transfer.
+  - `GET /purchase/purchase-order` lists POs (status 3 Authorized, 4 Receiving, 8
+    Finished, 25 Closed seen), with the PR numbers comma separated; its rows carry no
+    lines. `GET /purchase/purchase-order/{purchaseNum}` carries per line `qty`,
+    `fullReceipt` (1 when received in full) and `requestQty`, and the order's goods
+    receipts (`goodsReceiptHead`). Its `detailQty`, documented as "Qty already
+    received", equals `convertionQty` on every line seen on staging (2026-11-19),
+    received or not: it is not used.
+  - `GET /inventory/goods-receipt/{goodsReceiptNum}` lines carry `qty` in the order's
+    unit. Received quantity counts once a receipt is authorized (business
+    confirmation 2026-10-28).
+- Owner decisions 2026-10-28: only POs raised from a PR; a closed PO is not outstanding;
+  read live from the ESB (no local copy).
+
+**Decision**
+- One report, `GET /pr-outstanding` (`esb.invoke`), with four stages per item:
+  1. **not ordered** — request-monitoring rows of process 1 or 2 (Transfer is left
+     out: it never becomes a PO); outstanding = `sumQty`; age from the PR date;
+  2. **not received** — a line of a status 3/4 PO with a PR, nothing received;
+  3. **partially received** — `0 < received < qty` and not `fullReceipt`;
+  4. **not as requested** — received in full but `received ≠ requestQty` (a
+     `requestQty` of 0 — a product not asked for — is never this stage).
+  "Received" is the sum of the order's goods receipt lines for the product, except
+  receipts still New (1) or Rejected (2); a product on several lines fills them in
+  order.
+  Age of stages 2–4 from the PO date; overdue days from the required date.
+- Nothing is read until a required-date period (at most
+  `OutstandingRequestQuery::MAX_DAYS`, 92) is given; both sources filter by required
+  date. Branch and PR number are optional filters sent to both.
+- At most `BuildOutstandingRequestReport::MAX_ORDERS` (100) POs are read in detail per
+  report; more is refused with "narrow the filters" before any detail is read.
+- The assembled report is cached for 5 minutes per filter set (not per page), so paging
+  and the CSV export do not repeat the reads. The ESB credential is shared (ADR-009),
+  so the cache is not per user.
+- Paging, stage and overdue filters, sorting (most overdue first) and the stage counts
+  are the gateway's.
+- The CSV export follows ADR-031.
+
+**Reason**
+- Every figure is the ERP's own; the gateway only joins and classifies them.
+- Bounding the period and the PO count bounds one report: two order lists, up to 100
+  order details, request monitoring, and two reads per goods receipt of those orders
+  (detail and the stock check `InventoryDocumentSource` makes).
+
+**Consequences**
+- A PO raised from several PRs cannot be split per PR: the line shows all its PR
+  numbers, and "not as requested" uses the ERP's `requestQty` as is.
+- Data can be up to 5 minutes old.
+- The report depends on undocumented semantics (`sumQty` as "not yet ordered",
+  `requestProcessID` values, open order and counted receipt statuses); each is a
+  constant or docblock marked `TBD` until the ESB team confirms.
+- On staging one report for the busiest branch over 30 days took ~29 s (≈50 orders),
+  close to PHP's default 30 s limit; the 5-minute cache only spares repeat reads.
+- `requestQty` is usually in the order's unit, but a line was seen with `qty` 300 and
+  `requestQty` 9000 (likely a request in another unit), so "not as requested" can be a
+  unit difference.
+
+**Rejected**
+- A scheduled snapshot in a local table — faster for large ranges, but turned down by
+  the owner (approach A, live).
+- Reading every authorized PR's detail for stage 1 — N+1 calls and no way to see a
+  partly ordered item; request monitoring already answers it.

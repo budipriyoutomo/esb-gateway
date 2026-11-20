@@ -194,7 +194,12 @@ Diamati di staging (2026-10-28), mohon dikonfirmasi:
   lain untuk PO yang sudah di-authorize?
 - `purchaseRequestNums` berisi nomor PR dipisah koma. Untuk PO gabungan, apakah ada cara
   mengetahui baris PO berasal dari PR yang mana?
-- `purchaseDetails[].detailQty` (qty diterima) bertambah saat GR di-authorize (konfirmasi
+- `purchaseDetails[].detailQty` didokumentasikan sebagai "Qty already received", tetapi di
+  staging (2026-11-19) nilainya selalu sama dengan `convertionQty`, baik sudah ada GR
+  maupun belum. Apa arti sebenarnya? Gateway menghitung qty diterima dari baris GR.
+- Apakah `requestQty` selalu dalam satuan PO? Terlihat satu baris `qty` 300,
+  `requestQty` 9000.
+- Qty diterima dihitung saat GR di-authorize (konfirmasi
   bisnis 2026-10-28).
 
 ---

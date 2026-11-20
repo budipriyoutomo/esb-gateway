@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Exports;
 
+use App\Actions\PurchaseRequests\BuildOutstandingRequestReport;
+use App\Actions\PurchaseRequests\TooManyOrdersForReport;
 use App\Audit\AuditAction;
 use App\Domain\Canonical\Pagination;
 use App\Exports\CsvExport;
@@ -19,6 +21,7 @@ use App\Http\Requests\Pricelists\ListPricelistsRequest;
 use App\Http\Requests\ProductCategories\ListProductCategoriesRequest;
 use App\Http\Requests\Products\ListProductsRequest;
 use App\Http\Requests\ProductSubCategories\ListProductSubCategoriesRequest;
+use App\Http\Requests\PurchaseRequests\ListOutstandingRequestsRequest;
 use App\Http\Requests\Suppliers\ListSuppliersRequest;
 use App\Http\Requests\Units\ListUnitsRequest;
 use App\Integrations\Contracts\CoaAccountSource;
@@ -33,6 +36,7 @@ use App\Integrations\Contracts\ProductSubCategorySource;
 use App\Integrations\Contracts\SupplierSource;
 use App\Integrations\Contracts\UnitOfMeasureSource;
 use App\Models\AuditLog;
+use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
@@ -169,6 +173,26 @@ class ListExportController extends Controller
 
             return [$result->rows, $result->pagination];
         });
+    }
+
+    public function outstandingRequests(ListOutstandingRequestsRequest $request, BuildOutstandingRequestReport $build): Response|RedirectResponse
+    {
+        $query = $request->toQuery();
+
+        if ($query === null) {
+            return $this->refuse('pr-outstanding.index', 'Choose a required-date period before exporting the report.');
+        }
+
+        try {
+            return $this->export('pr-outstanding', 'pr-outstanding.index', $request->validatedFilters(), ListColumns::outstandingRequests(), function () use ($query, $build): array {
+                // The report is paged by the gateway from one read: read it once.
+                $report = $build($query->at(1, CsvExport::MAX_ROWS), CarbonImmutable::now());
+
+                return [$report->items, $report->pagination];
+            });
+        } catch (TooManyOrdersForReport $exception) {
+            return $this->refuse('pr-outstanding.index', $exception->getMessage());
+        }
     }
 
     /**
