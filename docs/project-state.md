@@ -2546,5 +2546,10 @@ against **our own contract revision 3 proposal** (TBD, not yet confirmed by sync
   orders); branch 1 → 259 items in ~29 s; branch 9 → 121 items in ~15 s.
 - `vp test` 74 files / 428 tests pass; `tsc --noEmit` pass; `vp check` pass on the
   changed files; `npm run build` pass (feature tests read `public/build/manifest.json`).
+- 2026-11-20 fix: clicking a stage tab gave a 500 — the cached report held objects,
+  and `config/cache.php` sets `serializable_classes => false`, so a cache hit came back
+  as `__PHP_Incomplete_Class`. The report is now cached as plain arrays
+  (`OutstandingRequestItem::fromArray`), under a new key prefix `pr-outstanding:v2:` so
+  old entries are never read. The unit test's cache now serializes like the real stores.
 - Environment note: Vitest must run from `D:\...` (upper-case drive); from `d:\...` it
   loads modules twice and every suite fails with "failed to find the current suite".

@@ -45,4 +45,15 @@ readonly class OutstandingRequestItem implements JsonSerializable
     {
         return [...get_object_vars($this), 'stage' => $this->stage->value];
     }
+
+    /**
+     * Back from jsonSerialize(). The report is cached as plain arrays:
+     * config/cache.php allows no classes to be unserialized.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        return new self(...[...$data, 'stage' => OutstandingStage::from($data['stage'])]);
+    }
 }

@@ -74,7 +74,9 @@ class BuildOutstandingRequestReportTest extends TestCase
     {
         parent::setUp();
 
-        $this->cache = new Repository(new ArrayStore);
+        // Serialized with no classes allowed, as config/cache.php sets
+        // serializable_classes for the real stores.
+        $this->cache = new Repository(new ArrayStore(serializesValues: true, serializableClasses: false));
     }
 
     private function today(): CarbonImmutable

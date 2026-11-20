@@ -75,12 +75,16 @@ class BuildOutstandingRequestReport
      */
     public function __invoke(OutstandingRequestQuery $query, CarbonImmutable $today): OutstandingRequestReport
     {
-        /** @var list<OutstandingRequestItem> $items */
-        $items = $this->cache->remember(
+        // Cached as plain arrays: the cache unserializes no classes.
+        $cached = $this->cache->remember(
             $this->cacheKey($query, $today),
             self::CACHE_SECONDS,
-            fn (): array => $this->read($query, $today),
+            fn (): array => array_map(
+                static fn (OutstandingRequestItem $item): array => $item->jsonSerialize(),
+                $this->read($query, $today),
+            ),
         );
+        $items = array_map(OutstandingRequestItem::fromArray(...), $cached);
 
         $counts = array_fill_keys(array_map(static fn (OutstandingStage $stage): string => $stage->value, OutstandingStage::cases()), 0);
         $overdue = 0;
@@ -370,7 +374,7 @@ class BuildOutstandingRequestReport
     private function cacheKey(OutstandingRequestQuery $query, CarbonImmutable $today): string
     {
         // Ages change with the day, so the day is part of the key.
-        return 'pr-outstanding:'.sha1((string) json_encode([
+        return 'pr-outstanding:v2:'.sha1((string) json_encode([
             $query->requiredDateFrom,
             $query->requiredDateTo,
             $query->branchId,
